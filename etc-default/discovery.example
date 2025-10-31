@@ -1,0 +1,11 @@
+# discovery.example — шаблон env для discovery (без пиров!)
+# Значения профиля/слушающих адресов/флагов задаём тут,
+# а списки пиров — ТОЛЬКО в discovery.peers*.example
+
+PROFILE="anon"                   # по умолчанию; для fast смотри discovery.fast
+LISTEN="/ip4/0.0.0.0/tcp/4005,/ip6/::/tcp/4005"
+MDNS="false"
+DHT="off"
+HTTP=":18081"
+TOR_PREFIX=""
+# ВАЖНО: тут НЕ задаём PEERS. Пиры — в discovery.peers*.example

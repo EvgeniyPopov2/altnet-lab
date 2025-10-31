@@ -1,0 +1,25 @@
+[Unit]
+Description=AltNet libp2p discovery (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=vagrant
+WorkingDirectory=/home/vagrant/go-p2p-discovery
+EnvironmentFile=-/etc/default/discovery.common
+EnvironmentFile=-/etc/default/discovery.%i
+# Передаём профиль, адреса прослушки, пиры и ДОП. ФЛАГИ из env
+ExecStart=/usr/bin/env bash -lc 'exec ${TOR_PREFIX:-} /usr/local/bin/discovery \
+  -profile="${PROFILE}" \
+  -listen="${LISTEN}" \
+  -mdns="${MDNS}" \
+  -dht="${DHT}" \
+  ${KEYFILE:+-keyfile="${KEYFILE}"} \
+  ${HTTP:+-http="${HTTP}"} \
+  ${PEERS:+-peers="${PEERS}"}'
+Restart=on-failure
+RestartSec=3s
+Environment=GODEBUG=netdns=cgo
+
+[Install]
+WantedBy=multi-user.target

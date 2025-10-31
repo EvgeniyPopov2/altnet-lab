@@ -1,0 +1,16 @@
+[Unit]
+Description=IPFS Daemon (Kubo)
+After=network-online.target yggdrasil.service
+Wants=network-online.target
+
+[Service]
+User=vagrant
+Environment=IPFS_PATH=/home/vagrant/.ipfs
+# Минимально безопасный запуск. Без устаревших флагов. PubSub включён через config.
+ExecStart=/usr/local/bin/ipfs daemon --enable-gc
+Restart=always
+RestartSec=3s
+LimitNOFILE=10240
+
+[Install]
+WantedBy=multi-user.target

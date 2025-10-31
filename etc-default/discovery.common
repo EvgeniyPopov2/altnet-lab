@@ -1,0 +1,6 @@
+LISTEN="/ip4/0.0.0.0/tcp/4005,/ip6/::/tcp/4005"
+PEERS="/ip4/192.168.56.11/tcp/4005/p2p/12D3KooWR6q63ypgB187QAT8tRga1ngE1RvXKWpfwsWTBfrjGt4B,/ip4/192.168.56.12/tcp/4005/p2p/12D3KooWL1ezKvxvkyGxv3UWYuWQmeLAsaJj9qdZsd79WsopynQx"
+MDNS="false"
+DHT="off"
+KEYFILE="/var/lib/altnet/discovery/peerkey"
+HTTP=":18080"

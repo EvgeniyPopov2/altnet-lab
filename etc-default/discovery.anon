@@ -1,0 +1,6 @@
+PROFILE="anon"
+LISTEN="/ip4/127.0.0.1/tcp/4005,/ip6/::1/tcp/4005"
+MDNS="false"
+DHT="off"
+TOR_PREFIX=""
+HTTP=":18081"   # на node2, node3 - свои (у тебя уже :18082 и т.д.)

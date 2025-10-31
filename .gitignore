@@ -1,0 +1,23 @@
+# === не коммитим живые списки пиров и чувствительное ===
+etc-default/discovery
+!etc-default/discovery.example
+etc-default/discovery.peers
+!etc-default/discovery.peers.example
+etc-default/discovery.peers.fast
+!etc-default/discovery.peers.fast.example
+etc-default/discovery.peers.anon
+!etc-default/discovery.peers.anon.example
+srv/altnet-peers/peers.txt
+var/lib/tor/
+*.secret
+# ipfs.service
+systemd/ipfs.service.d/override.conf
+!systemd/ipfs.service.d/override.conf.example
+
+# per-node onion overrides (живые адреса не коммитим)
+systemd/onion-fwd@*/override.conf
+!systemd/onion-fwd@*/override.conf.example
+
+# real Tor bridges (в репо только example)
+tor/torrc.d/bridges.conf
+!tor/torrc.d/bridges.conf.example

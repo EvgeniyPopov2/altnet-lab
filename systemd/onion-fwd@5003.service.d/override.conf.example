@@ -1,0 +1,5 @@
+[Service]
+# Пример. Живой .onion сюда НЕ коммитим.
+Environment=ONION=<PUT_ONION_V3_HOSTNAME_HERE>
+ExecStart=
+ExecStart=/usr/bin/socat TCP-LISTEN:5003,bind=127.0.0.1,fork,reuseaddr SOCKS4A:127.0.0.1:${ONION}:4006,socksport=9050

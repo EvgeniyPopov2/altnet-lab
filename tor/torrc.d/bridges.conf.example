@@ -1,0 +1,9 @@
+# bridges.conf.example — шаблон, НЕ реальный конфиг
+# Реальные строки Bridge сюда не коммитим.
+#
+UseBridges 1
+ClientTransportPlugin obfs4 exec /usr/bin/obfs4proxy
+
+# Примеры (удали после заполнения реальными мостами на НОДЕ):
+# Bridge obfs4 <FINGERPRINT_A> <IP_A>:<PORT_A> cert=<CERT_A> iat-mode=0
+# Bridge obfs4 <FINGERPRINT_B> <IP_B>:<PORT_B> cert=<CERT_B> iat-mode=0

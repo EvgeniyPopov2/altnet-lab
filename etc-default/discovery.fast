@@ -1,0 +1,10 @@
+# === discovery.fast (node1) ===
+PROFILE="fast"
+# Берём LISTEN из common (0.0.0.0/::), включаем mDNS в LAN, DHT оставляем off
+LISTEN="/ip4/0.0.0.0/tcp/4005,/ip6/::/tcp/4005"
+MDNS="true"
+DHT="off"
+KEYFILE="/var/lib/altnet/discovery/peerkey"
+HTTP="127.0.0.1:18080"
+# НИКАКОГО Tor для fast
+TOR_PREFIX=""

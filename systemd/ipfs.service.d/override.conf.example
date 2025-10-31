@@ -1,0 +1,5 @@
+[Service]
+# Пример: запускать IPFS под отдельным пользователем ipfs
+User=ipfs
+Environment=IPFS_PATH=/home/ipfs/.ipfs
+LimitNOFILE=8192

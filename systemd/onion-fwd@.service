@@ -1,0 +1,12 @@
+[Unit]
+Description=Onion forward %i -> ${ONION}:4006 via SOCKS5 127.0.0.1:9050
+After=tor@default.service
+Wants=tor@default.service
+
+[Service]
+Environment=ONION=
+ExecStart=
+ExecStart=/usr/bin/socat TCP-LISTEN:%i,bind=127.0.0.1,fork,reuseaddr SOCKS4A:127.0.0.1:${ONION}:4006,socksport=9050
+
+[Install]
+WantedBy=multi-user.target
