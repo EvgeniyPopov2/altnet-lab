@@ -29,4 +29,16 @@ copy_unit "$SRC/systemd/ipfs.service" "/etc/systemd/system/ipfs.service"
 log "daemon-reload..."
 systemctl daemon-reload
 
+echo "[deploy] reserve 5001 for IPFS: mask onion-fwd@5001"
+systemctl disable --now onion-fwd@5001 2>/dev/null || true
+systemctl mask onion-fwd@5001 2>/dev/null || true
+
+echo "[deploy] enable & start ipfs"
+systemctl enable --now ipfs
+sleep 1
+
+echo "[deploy] check ipfs (systemd + port 5001)"
+systemctl is-active --quiet ipfs && echo "[deploy] ipfs is active" || (echo "[deploy] ipfs inactive"; journalctl -u ipfs -n 40 --no-pager)
+ss -lntp | grep 127.0.0.1:5001 || echo "[deploy] WARN: 5001 not listening"
+
 log "done."
