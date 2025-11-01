@@ -1,0 +1,142 @@
+# TESTS — чек-листы стенда AltNet (lab)
+
+Цель — быстро подтвердить, что профили **fast** и **anon** работают на всех трёх нодах (node1/2/3), Tor-форварды живы, а IPFS не ломает сеть.
+
+> Примечание: реальные списки пиров и мосты Tor — **не в репозитории**. На нодах лежат живые файлы:
+> - `/etc/default/discovery.peers*`
+> - `systemd/onion-fwd@*/override.conf`
+> - `/etc/tor/torrc.d/bridges.conf`
+> В репо — только `.example`.
+
+---
+
+## 0) Предварительные проверки (на каждой ноде)
+
+hostname
+ip -6 addr show
+systemctl --version
+tor --version
+
+
+Службы должны быть установлены:
+systemctl list-unit-files | grep -E 'discovery@|onion-fwd@|tor@default|ipfs'
+
+
+---
+
+## 1) Профиль FAST (локальная сеть, без Tor)
+
+### 1.1 Включить fast и убедиться, что слушает 4005 на всех интерфейсах
+sudo systemctl stop discovery@anon || true
+sudo systemctl restart discovery@fast
+systemctl status --no-pager discovery@fast
+ss -ltnp | grep ':4005'
+
+Ожидаем: LISTEN на `0.0.0.0:4005` и `[::]:4005`.
+
+### 1.2 Проверить параметры env и аргументы процесса
+cat /etc/default/discovery.fast
+cat /etc/default/discovery.common || true
+ps -ef | grep '[d]iscovery'
+
+Ожидаем: `-profile=fast`, `-mdns=true`, `-dht=off`, `-http=127.0.0.1:18080` (если задан).
+
+### 1.3 Проверить пиры fast
+cat /etc/default/discovery.peers.fast
+journalctl -u discovery@fast -n 100 --no-pager
+
+Ожидаем соединения с LAN-пирами (192.168.56.x / ваши адреса).
+
+---
+
+## 2) Профиль ANON (через Tor + форварды socat)
+
+### 2.1 Форварды к onion-пирами должны быть активны
+systemctl status --no-pager onion-fwd@5002
+systemctl status --no-pager onion-fwd@5003
+nc -vz 127.0.0.1 5002
+nc -vz 127.0.0.1 5003
+
+Ожидаем `succeeded` от `nc` и активные юниты `onion-fwd@...`.
+
+### 2.2 Включить anon и проверить, что порт 4005 слушает только loopback
+sudo systemctl stop discovery@fast || true
+sudo systemctl restart discovery@anon
+systemctl status --no-pager discovery@anon
+ss -ltnp | grep ':4005'
+
+Ожидаем: LISTEN **только** на `127.0.0.1:4005` и `::1:4005`.
+
+### 2.3 Проверить env и логи соединений к onion-пирами
+cat /etc/default/discovery.anon
+cat /etc/default/discovery.peers.anon
+journalctl -u discovery@anon -n 150 --no-pager
+
+Ожидаем: `-mdns=false`, `-dht=off`, соединения вида `/onion3/...`.
+
+### 2.4 Проверить адрес скрытого сервиса (если на ноде поднят HiddenService)
+sudo cat /var/lib/tor/altnet-discovery/hostname
+
+Ожидаем: строка вида `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.onion`.
+
+---
+
+## 3) Переключение профилей (идемпотентность)
+
+sudo systemctl restart discovery@fast
+sudo systemctl restart discovery@anon
+sudo systemctl stop discovery@fast
+sudo systemctl restart discovery@anon
+
+Ожидаем: без ошибок; в каждый момент времени активен тот профиль, который нужен.
+
+---
+
+## 4) Быстрые проверки IPFS (опционально)
+
+Статус сервиса:
+systemctl status --no-pager ipfs
+
+
+Базовая функциональность (под тем пользователем, под которым запущен сервис):
+su - vagrant -c 'ipfs id -f="<id>\n"'
+su - vagrant -c 'echo hi > /tmp/hi.txt && ipfs add -q /tmp/hi.txt'
+
+Ожидаем: корректный PeerID и CID.
+
+> Если в проде используем отдельного пользователя `ipfs`, то актуален override: `systemd/ipfs.service.d/override.conf` (в репо — `.example`).
+
+---
+
+## 5) Диагностика (частые кейсы)
+
+Нет соединений в fast:
+cat /etc/default/discovery.peers.fast
+ping -c1 <LAN-peer>
+journalctl -u discovery@fast -n 200 --no-pager
+
+
+Нет соединений в anon:
+systemctl status onion-fwd@5002
+journalctl -u onion-fwd@5002 -n 50 --no-pager
+journalctl -u discovery@anon -n 200 --no-pager
+tor --version
+
+
+Порт 4005 виден снаружи в anon → ошибка LISTEN:
+ss -ltnp | grep ':4005'
+cat /etc/default/discovery.anon
+
+
+---
+
+## 6) Матрица «что проверить» по нодам
+
+| Тест                          | node1 | node2 | node3 |
+|-------------------------------|:-----:|:-----:|:-----:|
+| 1.1 LISTEN 0.0.0.0:4005 (fast)|   ☐   |   ☐   |   ☐   |
+| 2.1 onion-fwd@5002/5003       |   ☐   |   ☐   |   ☐   |
+| 2.2 LISTEN только loopback    |   ☐   |   ☐   |   ☐   |
+| 4 IPFS id/Add                 |   ☐   |   ☐   |   ☐   |
+
+Заполняем галочки при прогоне.
