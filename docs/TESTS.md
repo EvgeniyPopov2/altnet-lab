@@ -140,3 +140,33 @@ cat /etc/default/discovery.anon
 | 4 IPFS id/Add                 |   ☐   |   ☐   |   ☐   |
 
 Заполняем галочки при прогоне.
+
+## IPFS: авто-бут и резерв порта 5001
+
+**Важно:** порт 5001 занят RPC API IPFS. Его нельзя занимать под onion-fwd.  
+Если после ребута IPFS не стартует и в журнале ошибка `bind: 127.0.0.1:5001 already in use`, проверь, не висит ли `onion-fwd@5001`.
+
+Проверка:
+  ss -lntp | grep 5001 || echo "free"
+  journalctl -u ipfs -b -n 30 --no-pager
+
+Если слушает `socat` (onion-fwd@5001) — отключаем навсегда и перезапускаем IPFS:
+  sudo systemctl disable --now onion-fwd@5001
+  sudo systemctl mask onion-fwd@5001
+  sudo systemctl restart ipfs
+
+Автозапуск IPFS:
+  sudo systemctl enable --now ipfs
+  sudo systemctl is-enabled ipfs
+
+Мини-настройка автобута в изолированной лабе (пример, подставить свои ID/адреса):
+  ipfs config --json Peering.Peers '[{"ID":"<PEER_ID_NODE1>","Addrs":["/ip4/192.168.56.10/tcp/4001"]},{"ID":"<PEER_ID_NODE2>","Addrs":["/ip4/192.168.56.11/tcp/4001"]},{"ID":"<PEER_ID_NODE3>","Addrs":["/ip4/192.168.56.12/tcp/4001"]}]'
+  ipfs config --json Bootstrap '["/ip4/192.168.56.10/tcp/4001/p2p/<PEER_ID_NODE1>","/ip4/192.168.56.11/tcp/4001/p2p/<PEER_ID_NODE2>","/ip4/192.168.56.12/tcp/4001/p2p/<PEER_ID_NODE3>"]'
+  ipfs config Routing.Type none
+  ipfs config --json Discovery.MDNS.Enabled true
+  sudo systemctl restart ipfs
+
+Проверка после ребута (каждая нода):
+  systemctl is-active ipfs
+  ipfs swarm peers
+  (по желанию) ipfs pubsub sub altnet-chat → с другой ноды: echo 'ping' | ipfs pubsub pub altnet-chat
