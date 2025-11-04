@@ -1,16 +1,64 @@
 # Node1 inventory (service/env/tor/ipfs/altnet)
-# Дата/время:
-$(date -Is)
-# systemd units (наши):
-$(systemctl list-unit-files | grep -E "^(discovery@|onion-fwd@|ipfs|tor@default|altnet-)" || true)
-# активные сокеты по нашим портам:
-$(ss -lntp | egrep ":4005|:5001|:5002|:5003" || true)
-# конфиги /etc/default:
-$(ls -1 /etc/default | egrep "^discovery|^altnet-peers|^ipfs" || true)
-# шаблоны и overrides:
-$(ls -1 /etc/systemd/system | egrep "^discovery@\.service$|^ipfs\.service$|^onion-fwd@\.service$|^altnet-.*\.service$" || true)
-$(find /etc/systemd/system -maxdepth 2 -type f -path "*/discovery@.service.d/*" -o -path "*/onion-fwd@*.service.d/*" 2>/dev/null)
+# Date/time:
+2025-11-04T13:33:08+03:00
+
+# systemd units (ours):
+altnet-apply.service                   static          -
+altnet-peers-http.service              enabled         enabled
+altnet-peers-refresh-fast.service      static          -
+altnet-peers-refresh.service           static          -
+altnet-watcher.service                 enabled         enabled
+discovery@.service                     indirect        enabled
+ipfs.service                           enabled         enabled
+onion-fwd@.service                     indirect        enabled
+onion-fwd@5001.service                 masked          enabled
+tor@default.service                    enabled-runtime enabled
+altnet-profile-anon.target             static          -
+altnet-profile-fast.target             static          -
+altnet-apply.timer                     enabled         enabled
+altnet-peers-refresh-fast.timer        enabled         enabled
+altnet-peers-refresh.timer             enabled         enabled
+
+# listeners :4005/:5001/:5002/:5003:
+LISTEN 0      4096                           127.0.0.1:4005       0.0.0.0:*    users:(("discovery",pid=62647,fd=3))     
+LISTEN 0      5                              127.0.0.1:5003       0.0.0.0:*    users:(("socat",pid=62636,fd=5))         
+LISTEN 0      5                              127.0.0.1:5002       0.0.0.0:*    users:(("socat",pid=62597,fd=5))         
+LISTEN 0      4096                           127.0.0.1:5001       0.0.0.0:*    users:(("ipfs",pid=1049,fd=22))          
+LISTEN 0      4096                               [::1]:4005          [::]:*    users:(("discovery",pid=62647,fd=6))     
+
+# /etc/default:
+altnet-peers-fast.sources
+altnet-peers.sources
+discovery
+discovery.anon
+discovery.common
+discovery.fast
+discovery.peers
+discovery.peers.anon
+discovery.peers.fast
+
+# systemd units and overrides:
+altnet-apply.service
+altnet-peers-http.service
+altnet-peers-refresh-fast.service
+altnet-peers-refresh.service
+altnet-watcher.service
+discovery@.service
+ipfs.service
+onion-fwd@.service
+/etc/systemd/system/onion-fwd@5003.service.d/override.conf
+/etc/systemd/system/discovery@.service.d/override.conf
+/etc/systemd/system/onion-fwd@5002.service.d/override.conf
+
 # tor configs:
-$(ls -1 /etc/tor/torrc /etc/tor/torrc.d 2>/dev/null | sed "s/$/:/"; ls -1 /etc/tor/torrc.d 2>/dev/null || true)
-# peers runtime (если есть):
-$(ls -1 /srv/altnet-peers 2>/dev/null || true)
+/etc/tor/torrc:
+:
+/etc/tor/torrc.d::
+50-altnet.conf:
+bridges.conf:
+50-altnet.conf
+bridges.conf
+
+# /srv/altnet-peers:
+README
+peers.txt
