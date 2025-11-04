@@ -1,0 +1,9 @@
+[Unit]
+Description=Altnet Apply Modules
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -lc '/opt/altnet/bin/altnet-apply.sh'
+TimeoutStartSec=300
