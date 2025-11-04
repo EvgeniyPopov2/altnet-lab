@@ -162,3 +162,35 @@ ipfs swarm peers
 ipfs pubsub sub altnet-chat   # на другой ноде:
 
 echo 'ping' | ipfs pubsub pub altnet-chat
+---
+
+## 7) Переключатель профилей (altnet-profile.sh)
+
+### 7.1 FAST → слушает 0.0.0.0/:: на 4005
+sudo /vagrant/altnet/scripts/altnet-profile.sh fast
+ss -lntp | grep ':4005'
+
+Ожидаем: строки LISTEN на `0.0.0.0:4005` и `[::]:4005`.  
+Полезно: `journalctl -u discovery@fast -n 50 --no-pager`
+
+### 7.2 ANON → слушает только loopback, форварды активны
+sudo /vagrant/altnet/scripts/altnet-profile.sh anon
+ss -lntp | grep ':4005'
+systemctl is-active onion-fwd@5002
+systemctl is-active onion-fwd@5003
+
+Ожидаем: LISTEN **только** на `127.0.0.1:4005` и `::1:4005`, оба форварда — `active`.  
+Полезно: `journalctl -u discovery@anon -n 50 --no-pager`
+
+### 7.3 (опц.) Проверка после ребута
+sudo reboot
+# после входа:
+systemctl is-active discovery@anon
+ss -lntp | grep ':4005'
+
+Ожидаем: профиль и слушатели соответствуют последнему переключению.
+
+### Матрица — добавить строку:
+| Тест                               | node1 | node2 | node3 |
+|------------------------------------|:-----:|:-----:|:-----:|
+| 7 Переключение FAST↔ANON ок        |   ☐  |   ☐  |   ☐   |
