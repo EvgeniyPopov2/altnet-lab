@@ -1,0 +1,8 @@
+$(date -Is)
+$(systemctl list-unit-files | grep -E "^(discovery@|onion-fwd@|ipfs|tor@default|altnet-)" || true)
+$(ss -lntp | egrep ":4005|:5001|:5002|:5003" || true)
+$(ls -1 /etc/default | egrep "^discovery|^altnet-peers|^ipfs" || true)
+$(ls -1 /etc/systemd/system | egrep "^discovery@\.service$|^ipfs\.service$|^onion-fwd@\.service$|^altnet-.*\.service$" || true)
+$(find /etc/systemd/system -maxdepth 2 -type f -path "*/discovery@.service.d/*" -o -path "*/onion-fwd@*.service.d/*" 2>/dev/null)
+$(ls -1 /etc/tor/torrc /etc/tor/torrc.d 2>/dev/null | sed "s/$/:/"; ls -1 /etc/tor/torrc.d 2>/dev/null || true)
+$(ls -1 /srv/altnet-peers 2>/dev/null || true)

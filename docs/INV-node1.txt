@@ -1,0 +1,16 @@
+# Node1 inventory (service/env/tor/ipfs/altnet)
+# Дата/время:
+$(date -Is)
+# systemd units (наши):
+$(systemctl list-unit-files | grep -E "^(discovery@|onion-fwd@|ipfs|tor@default|altnet-)" || true)
+# активные сокеты по нашим портам:
+$(ss -lntp | egrep ":4005|:5001|:5002|:5003" || true)
+# конфиги /etc/default:
+$(ls -1 /etc/default | egrep "^discovery|^altnet-peers|^ipfs" || true)
+# шаблоны и overrides:
+$(ls -1 /etc/systemd/system | egrep "^discovery@\.service$|^ipfs\.service$|^onion-fwd@\.service$|^altnet-.*\.service$" || true)
+$(find /etc/systemd/system -maxdepth 2 -type f -path "*/discovery@.service.d/*" -o -path "*/onion-fwd@*.service.d/*" 2>/dev/null)
+# tor configs:
+$(ls -1 /etc/tor/torrc /etc/tor/torrc.d 2>/dev/null | sed "s/$/:/"; ls -1 /etc/tor/torrc.d 2>/dev/null || true)
+# peers runtime (если есть):
+$(ls -1 /srv/altnet-peers 2>/dev/null || true)
