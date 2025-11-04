@@ -1,0 +1,8 @@
+[Unit]
+Description=Fetch AltNet peers.txt over Tor and update Environment
+After=network-online.target tor.service
+Wants=tor.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/altnet-peers-refresh.sh

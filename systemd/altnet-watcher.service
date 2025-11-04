@@ -1,0 +1,16 @@
+[Unit]
+Description=Altnet Module Watcher (IPFS PubSub)
+After=ipfs.service network-online.target
+Requires=ipfs.service
+
+[Service]
+ExecStartPre=/bin/bash -lc 'for i in {1..60}; do sudo -u vagrant -H bash -lc "ipfs id >/dev/null 2>&1" && break; sleep 1; done'
+ExecStart=/opt/altnet/bin/altnet-watcher.sh
+Restart=always
+RestartSec=3s
+# лог прямо в journal
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

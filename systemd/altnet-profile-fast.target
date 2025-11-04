@@ -1,0 +1,5 @@
+[Unit]
+Description=AltNet FAST profile (Yggdrasil/LAN)
+Conflicts=altnet-profile-anon.target
+AllowIsolate=yes
+Wants=discovery@fast.service

@@ -1,0 +1,11 @@
+[Unit]
+Description=AltNet peers.txt HTTP (localhost:8087 behind Tor HS)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c '/bin/busybox httpd -f -p 127.0.0.1:8087 -h /srv/altnet-peers'
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
