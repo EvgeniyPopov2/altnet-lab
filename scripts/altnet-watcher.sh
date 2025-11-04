@@ -23,6 +23,12 @@ while IFS= read -r msg; do
   [[ -n "$msg" ]] || continue
   log "got message: $msg"
 
+# если пришёл не-JSON — просто логируем и пропускаем
+  if ! jq -e . >/dev/null 2>&1 <<<"$msg"; then
+    log "non-json payload (skip)"
+    continue
+  fi
+
   name=$(jq -r '.name // empty' <<<"$msg")
   ver=$(jq -r '.version // empty' <<<"$msg")
   cid=$(jq -r '.cid // empty' <<<"$msg")
