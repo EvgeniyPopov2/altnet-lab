@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import SafePreview from "../components/SafePreview";
+import { exportSiteZip, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
 
 /* =========================
  * Типы документа и блоков
@@ -71,7 +72,7 @@ function renderDocToHTML(doc: Doc): string {
         )}</a>`
       : ""
   }
-</section>`;
+</section>`.trim();
         case "h1":
           return `<h1 style="font-size:32px; line-height:1.2; margin:24px 0;">${escapeHtml(b.text)}</h1>`;
         case "p":
@@ -86,20 +87,25 @@ function renderDocToHTML(doc: Doc): string {
     })
     .join("\n");
 
+  const siteTitle = doc.title
+    ? `<header style="max-width:960px;margin:0 auto;padding:24px;">
+         <h1 style="font-size:28px; line-height:1.2; margin:16px 0 12px; opacity:.85;">${escapeHtml(doc.title)}</h1>
+       </header>`
+    : "";
+
   return `<!doctype html>
 <html lang="ru"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(doc.title || "Сайт")}</title>
 <body style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0f1a; color:#e6e9f4; padding:24px;">
-<div style="max-width:960px; margin:0 auto;">
-<div style="max-width:960px; margin:0 auto;">
-${doc.title ? `<h1 style="font-size:28px; line-height:1.2; margin:16px 0 12px; opacity:.85;">${escapeHtml(doc.title)}</h1>` : ""}
-${blocks}
-</div>
-${blocks}
-</div>
+  ${siteTitle}
+  <main style="max-width:960px; margin:0 auto;">
+    ${blocks}
+  </main>
 </body></html>`;
 }
+
+
 
 function escapeHtml(s: string) {
   return s
@@ -438,6 +444,12 @@ export default function SiteBuilder() {
     setDoc((prev) => ({ ...prev, blocks: prev.blocks.filter((b) => b.id !== id) }));
   }, []);
 
+  const onExportZip = useCallback(async () => {
+    const model = adaptFromSiteBuilderDoc(doc);
+    const blob = await exportSiteZip(model);
+    downloadBlob(blob, "altnet-site.zip");
+  }, [doc]);
+
   return (
     <div className="h-full grid grid-cols-[420px_1fr]">
       {/* Левая панель */}
@@ -452,6 +464,17 @@ export default function SiteBuilder() {
               spellCheck={false}
             />
           </Field>
+        </div>
+
+        {/* Кнопки действий */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={onExportZip}
+            title="Скачать ZIP (index.html + styles.css + manifest.json)"
+          >
+            ⬇️ Экспорт статического сайта (ZIP)
+          </button>
         </div>
 
         <div className="mb-3 text-sm text-[#9aa3b2]">Палитра</div>
@@ -473,7 +496,7 @@ export default function SiteBuilder() {
               onChange={(patch) => updateBlock(b.id, patch)}
               onRemove={() => removeBlock(b.id)}
               onDragStartByHandle={onDragStartByHandle}
-              onDragOverCard={onDragOverCard}
+              onDragOverCard={(_, id) => {}}
               onDropOnCard={onDropOnCard}
             />
           ))}
