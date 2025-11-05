@@ -1,380 +1,484 @@
-import { useMemo, useState, useCallback } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import SafePreview from "../components/SafePreview";
-import {
-  Block, BlockKind, PageDoc,
-  ColSpec,
-  createBlock, createRow, renderDoc, uid,
-  validateDoc, templateHero
-} from "../builder/registry";
 
-// DnD корня: перетаскиваем только за «ручку»
-function useRootDnd(doc: PageDoc, setDoc: (d: PageDoc) => void) {
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const [overIdx, setOverIdx] = useState<number | null>(null);
+/* =========================
+ * Типы документа и блоков
+ * ========================= */
+type BlockType = "hero" | "h1" | "p" | "img" | "btn";
 
-  const onHandleDragStart = (i: number) => (e: React.DragEvent) => {
-    setDragIdx(i);
-    try {
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", String(i));
-    } catch {}
-  };
-  const onDragEnter = (i: number) => (e: React.DragEvent) => {
-    e.preventDefault();
-    setOverIdx(i);
-  };
-  const onDragOver = (i: number) => (e: React.DragEvent) => {
-    e.preventDefault();
-    setOverIdx(i);
-  };
-  const onDrop = (i: number) => (e: React.DragEvent) => {
-    e.preventDefault();
-    if (dragIdx === null || dragIdx === i) { setDragIdx(null); setOverIdx(null); return; }
-    const arr = doc.blocks.slice();
-    const [it] = arr.splice(dragIdx, 1);
-    const insertAt = i > dragIdx ? i - 1 : i;
-    arr.splice(insertAt, 0, it);
-    setDoc({ ...doc, blocks: arr });
-    setDragIdx(null); setOverIdx(null);
-  };
-  const onDragEnd = () => { setDragIdx(null); setOverIdx(null); };
+type HeroBlock = {
+  id: string;
+  type: "hero";
+  title: string;
+  subtitle?: string;
+  ctaText?: string;
+  ctaLink?: string;
+};
 
-  return { overIdx, onHandleDragStart, onDragEnter, onDragOver, onDrop, onDragEnd };
+type H1Block = {
+  id: string;
+  type: "h1";
+  text: string;
+};
+
+type PBlock = {
+  id: string;
+  type: "p";
+  text: string;
+};
+
+type ImgBlock = {
+  id: string;
+  type: "img";
+  cid: string; // altfs://CID или http(s)
+  alt?: string;
+};
+
+type BtnBlock = {
+  id: string;
+  type: "btn";
+  label: string;
+  href: string;
+};
+
+type Block = HeroBlock | H1Block | PBlock | ImgBlock | BtnBlock;
+
+type Doc = {
+  title: string;
+  blocks: Block[];
+};
+
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
 }
 
-export default function SiteBuilder({ onClose }: { onClose: () => void }) {
-  const [doc, setDoc] = useState<PageDoc>({
-    title: "Мой .alt сайт",
-    blocks: [
-      { id: uid(), kind: "h1", text: "Добро пожаловать в AltNet" },
-      { id: uid(), kind: "p",  text: "Это конструктор статических сайтов с безопасным предпросмотром." },
-    ],
-  });
-  const [errors, setErrors] = useState<string[]>([]);
-  const [editing, setEditing] = useState(false); // ← флаг «редактируем текст»
-  const html = useMemo(() => renderDoc(doc), [doc]);
+/* =========================
+ * Рендер HTML для предпросмотра
+ * ========================= */
+function renderDocToHTML(doc: Doc): string {
+  const blocks = doc.blocks
+    .map((b) => {
+      switch (b.type) {
+        case "hero":
+          return `
+<section style="padding:64px 24px; text-align:center; max-width:960px; margin:0 auto;">
+  <h1 style="font-size:40px; line-height:1.1; margin:0 0 12px;">${escapeHtml(b.title || "")}</h1>
+  <p style="font-size:18px; color:#9aa3b2; margin:0 0 20px;">${escapeHtml(b.subtitle || "")}</p>
+  ${
+    b.ctaText
+      ? `<a href="${escapeAttr(b.ctaLink || "#")}" style="display:inline-block; padding:10px 16px; border-radius:10px; background:#5865F2; color:#fff; text-decoration:none;">${escapeHtml(
+          b.ctaText
+        )}</a>`
+      : ""
+  }
+</section>`;
+        case "h1":
+          return `<h1 style="font-size:32px; line-height:1.2; margin:24px 0;">${escapeHtml(b.text)}</h1>`;
+        case "p":
+          return `<p style="font-size:16px; color:#c7cfdd; margin:12px 0;">${escapeHtml(b.text)}</p>`;
+        case "img":
+          return `<img src="${escapeAttr(b.cid)}" alt="${escapeAttr(b.alt || "")}" style="max-width:100%; border-radius:12px; margin:12px 0;" />`;
+        case "btn":
+          return `<a href="${escapeAttr(b.href)}" style="display:inline-block; padding:8px 14px; border-radius:10px; background:#1f2336; color:#e6e9f4; text-decoration:none; border:1px solid #2a2f45; margin:8px 0;">${escapeHtml(
+            b.label
+          )}</a>`;
+      }
+    })
+    .join("\n");
 
-  const addBlock = (kind: BlockKind) => setDoc((d) => ({ ...d, blocks: [...d.blocks, createBlock(kind)] }));
-  const addRowN  = (n: 1|2|3|4) => setDoc((d) => ({ ...d, blocks: [...d.blocks, createRow(n)] }));
-  const updateDocTitle = (v: string) => setDoc((d)=>({ ...d, title: v }));
+  return `<!doctype html>
+<html lang="ru"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>${escapeHtml(doc.title || "Сайт")}</title>
+<body style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0f1a; color:#e6e9f4; padding:24px;">
+<div style="max-width:960px; margin:0 auto;">
+${blocks}
+</div>
+</body></html>`;
+}
 
-  // Редактирование строки/колонок
-  const setCol = (rowId: string, colId: string, patch: Partial<ColSpec>) => {
-    setDoc((d) => ({
-      ...d,
-      blocks: d.blocks.map(b => {
-        if (b.kind !== "row" || b.id !== rowId) return b;
-        return { ...b, cols: b.cols.map(c => c.id === colId ? { ...c, ...patch } : c) };
-      }),
-    }));
-  };
-  const addCol = (rowId: string) => {
-    setDoc((d) => ({
-      ...d,
-      blocks: d.blocks.map(b => {
-        if (b.kind !== "row" || b.id !== rowId) return b;
-        if (b.cols.length >= 4) return b;
-        return { ...b, cols: [...b.cols, { id: uid(), xs: 12, md: 6, blocks: [] }] };
-      }),
-    }));
-  };
-  const delCol = (rowId: string, colId: string) => {
-    setDoc((d) => ({
-      ...d,
-      blocks: d.blocks.map(b => {
-        if (b.kind !== "row" || b.id !== rowId) return b;
-        if (b.cols.length <= 1) return b;
-        return { ...b, cols: b.cols.filter(c => c.id !== colId) };
-      }),
-    }));
-  };
+function escapeHtml(s: string) {
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+function escapeAttr(s?: string) {
+  return (s || "").replaceAll('"', "&quot;");
+}
 
-  // Блоки внутри колонок
-  const addInner = (rowId: string, colId: string, kind: BlockKind) => {
-    setDoc((d) => ({
-      ...d,
-      blocks: d.blocks.map(b => {
-        if (b.kind !== "row" || b.id !== rowId) return b;
-        return { ...b, cols: b.cols.map(c => c.id === colId ? { ...c, blocks: [...c.blocks, createBlock(kind)] } : c) };
-      }),
-    }));
-  };
-  const updInner = (rowId: string, colId: string, blkId: string, patch: Partial<Block>) => {
-    setDoc((d) => ({
-      ...d,
-      blocks: d.blocks.map(b => {
-        if (b.kind !== "row" || b.id !== rowId) return b;
-        return {
-          ...b,
-          cols: b.cols.map(c => c.id !== colId ? c : {
-            ...c, blocks: c.blocks.map(x => x.id === blkId ? { ...x, ...patch } as Block : x)
-          }),
-        };
-      }),
-    }));
-  };
-  const delInner = (rowId: string, colId: string, blkId: string) => {
-    setDoc((d) => ({
-      ...d,
-      blocks: d.blocks.map(b => {
-        if (b.kind !== "row" || b.id !== rowId) return b;
-        return { ...b, cols: b.cols.map(c => c.id !== colId ? c : { ...c, blocks: c.blocks.filter(x => x.id !== blkId) }) };
-      }),
-    }));
-  };
-  const moveInner = (rowId: string, colId: string, blkId: string, dir: -1|1) => {
-    setDoc((d) => ({
-      ...d,
-      blocks: d.blocks.map(b => {
-        if (b.kind !== "row" || b.id !== rowId) return b;
-        return {
-          ...b,
-          cols: b.cols.map(c => {
-            if (c.id !== colId) return c;
-            const i = c.blocks.findIndex(x => x.id === blkId);
-            if (i < 0) return c;
-            const j = i + dir;
-            if (j < 0 || j >= c.blocks.length) return c;
-            const arr = c.blocks.slice();
-            const [x] = arr.splice(i, 1);
-            arr.splice(j, 0, x);
-            return { ...c, blocks: arr };
-          }),
-        };
-      }),
-    }));
-  };
+/* =========================
+ * Карточка блока (DnD только за «ручку»)
+ * ========================= */
+type BlockCardProps = {
+  block: Block;
+  index: number;
+  onChange(patch: Partial<Block>): void;
+  onRemove(): void;
+  onDragStartByHandle(e: React.DragEvent, id: string): void;
+  onDragOverCard(e: React.DragEvent, id: string): void;
+  onDropOnCard(e: React.DragEvent, id: string): void;
+};
 
-  const loadHero = () => setDoc(templateHero());
-  const runValidate = () => setErrors(validateDoc(doc));
-  const downloadJson = () => {
-    const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "altnet-site.json"; a.click();
-    URL.revokeObjectURL(url);
-  };
+const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
+  const { block: b, index, onChange, onRemove, onDragStartByHandle, onDragOverCard, onDropOnCard } =
+    props;
 
-  const dnd = useRootDnd(doc, setDoc);
-
-  // Универсальные props, которыми помечаем ВСЕ инпуты/текстарии, чтобы «замораживать» DnD
-  const focusProps = {
-    onFocus: () => setEditing(true),
-    onBlur:  () => setEditing(false),
-  };
-
-  const SpanPicker = ({ rowId, col }: { rowId: string; col: ColSpec }) => {
-    const makeSel = (label: string, key: keyof ColSpec) => (
-      <label className="text-xs text-white/70">
-        <span className="mr-1">{label}</span>
-        <select
-          {...focusProps}
-          value={(col[key] as number|undefined) ?? ""}
-          onChange={(e)=>setCol(rowId, col.id, { [key]: e.target.value ? Number(e.target.value) : undefined } as Partial<ColSpec>)}
-          className="bg-white/10 border border-white/10 rounded-md px-1 py-0.5 text-white/90"
-        >
-          <option value="">—</option>
-          {Array.from({length:12},(_,i)=><option key={i+1} value={i+1}>{i+1}</option>)}
-        </select>
-      </label>
-    );
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        {makeSel("xs", "xs")}
-        {makeSel("sm", "sm")}
-        {makeSel("md", "md")}
-        {makeSel("lg", "lg")}
-        {makeSel("xl", "xl")}
-      </div>
-    );
-  };
-
-  // Редакторы простых блоков
-  const SimpleEditor = ({ b, update }: { b: Extract<Block, {kind:"h1"|"p"|"img"|"btn"}>; update: (patch: Partial<Block>)=>void }) => {
-    if (b.kind === "h1") return <input {...focusProps} value={b.text} onChange={(e)=>update({ text: e.target.value })} className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 outline-none text-white/90" />;
-    if (b.kind === "p")  return <textarea {...focusProps} value={b.text} onChange={(e)=>update({ text: e.target.value })} rows={3} className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 outline-none text-white/90" />;
-    if (b.kind === "img") return (
-      <div className="grid gap-2">
-        <input {...focusProps} value={b.cid} onChange={(e)=>update({ cid: (e.target as HTMLInputElement).value })} placeholder="CID контента" className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 outline-none text-white/90" />
-        <input {...focusProps} value={b.alt||""} onChange={(e)=>update({ alt: (e.target as HTMLInputElement).value })} placeholder="Описание (alt)" className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 outline-none text-white/90" />
-      </div>
-    );
-    // btn
-    return (
-      <div className="grid gap-2">
-        <input {...focusProps} value={b.label} onChange={(e)=>update({ label: (e.target as HTMLInputElement).value })} placeholder="Текст кнопки" className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 outline-none text-white/90" />
-        <input {...focusProps} value={b.href}  onChange={(e)=>update({ href: (e.target as HTMLInputElement).value })} placeholder="Ссылка (http/https/altfs://)" className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 outline-none text-white/90" />
-      </div>
-    );
-  };
-
-  // Когда редактируем — полностью убираем drop/over/enter-хэндлеры у карточек
-  const makeDropHandlers = useCallback((i: number) => {
-    if (editing) return {};
-    return {
-      onDragEnter: dnd.onDragEnter(i),
-      onDragOver:  dnd.onDragOver(i),
-      onDrop:      dnd.onDrop(i),
-      onDragEnd:   dnd.onDragEnd,
-    } as React.HTMLAttributes<HTMLDivElement>;
-  }, [editing, dnd]);
+  const stopAll = useCallback((e: React.SyntheticEvent) => {
+    e.stopPropagation();
+  }, []);
+  const preventDrag = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
   return (
-    <div className="space-y-4">
-      {/* Панель */}
-      <div className="flex items-center justify-between">
-        <div className="text-white/90 text-lg font-semibold">Конструктор сайта</div>
+    <div
+      className="rounded-2xl bg-[#0f111a] border border-[#1c2030] p-4 mb-3 select-text"
+      onDragOver={(e) => onDragOverCard(e, b.id)}
+      onDrop={(e) => onDropOnCard(e, b.id)}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs tracking-wider uppercase text-[#9aa3b2]">
+          {index + 1}. {labelOf(b.type)}
+        </div>
         <div className="flex items-center gap-2">
-          <button className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20" onClick={onClose}>Закрыть</button>
-          <button className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20" onClick={runValidate} title="Проверка документа">Проверить</button>
-          <button className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20" onClick={downloadJson} title="Скачать JSON">Экспорт JSON</button>
-          <button className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white" title="Экспорт ZIP (скоро)">Экспорт ZIP</button>
+          <button
+            title="Перетащи для сортировки"
+            className="px-2 py-1 rounded-md bg-[#111427] border border-[#1f2751] text-[#b8c1ff] cursor-grab active:cursor-grabbing"
+            draggable
+            onDragStart={(e) => onDragStartByHandle(e, b.id)}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            ≡
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#ffb3a8] hover:bg-[#221f2e]"
+          >
+            Удалить
+          </button>
         </div>
       </div>
 
-      {errors.length > 0 && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
-          <div className="font-semibold mb-1">Найдены проблемы:</div>
-          <ul className="list-disc pl-5 space-y-1">{errors.map((e, i)=><li key={i}>{e}</li>)}</ul>
+      {/* Редакторы блоков, инпуты защищены от всплытия/drag */}
+      {b.type === "hero" && (
+        <div className="grid gap-3">
+          <Field label="Заголовок">
+            <input
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={b.title}
+              onChange={(e) => onChange({ title: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll}
+              onKeyDownCapture={stopAll}
+              onClickCapture={stopAll}
+              onDragStart={preventDrag}
+              draggable={false}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <Field label="Подзаголовок">
+            <textarea
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
+              value={b.subtitle || ""}
+              onChange={(e) => onChange({ subtitle: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll}
+              onKeyDownCapture={stopAll}
+              onClickCapture={stopAll}
+              onDragStart={preventDrag}
+              draggable={false}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Текст кнопки">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.ctaText || ""}
+                onChange={(e) => onChange({ ctaText: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+            <Field label="Ссылка">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.ctaLink || ""}
+                onChange={(e) => onChange({ ctaLink: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+          </div>
         </div>
       )}
 
-      {/* Рабочая область */}
-      <div className="grid lg:grid-cols-3 gap-4">
-        {/* Палитра */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2">
-          <div className="text-white/80 font-medium mb-1">Блоки</div>
-          <div className="grid grid-cols-2 gap-2">
-            <button className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20" onClick={()=>addBlock("h1")}>Заголовок</button>
-            <button className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20" onClick={()=>addBlock("p")}>Текст</button>
-            <button className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20" onClick={()=>addBlock("img")}>Картинка (CID)</button>
-            <button className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20" onClick={()=>addBlock("btn")}>Кнопка</button>
-          </div>
+      {b.type === "h1" && (
+        <Field label="Текст заголовка">
+          <input
+            className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+            value={b.text}
+            onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
+            onMouseDownCapture={stopAll}
+            onKeyDownCapture={stopAll}
+            onClickCapture={stopAll}
+            onDragStart={preventDrag}
+            draggable={false}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </Field>
+      )}
 
-          <div className="mt-3 space-y-2">
-            <div className="text-white/80 font-medium">Строки (сетка)</div>
-            <div className="grid grid-cols-3 gap-2">
-              <button className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20" onClick={()=>addRowN(1)}>1×12</button>
-              <button className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20" onClick={()=>addRowN(2)}>2×6</button>
-              <button className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20" onClick={()=>addRowN(3)}>3×4</button>
-              <button className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20" onClick={()=>addRowN(4)}>4×3</button>
-            </div>
-          </div>
+      {b.type === "p" && (
+        <Field label="Параграф">
+          <textarea
+            className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
+            value={b.text}
+            onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
+            onMouseDownCapture={stopAll}
+            onKeyDownCapture={stopAll}
+            onClickCapture={stopAll}
+            onDragStart={preventDrag}
+            draggable={false}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </Field>
+      )}
 
-          <div className="mt-3 space-y-2">
-            <div className="text-white/80 font-medium">Шаблоны</div>
-            <button className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white" onClick={loadHero}>Hero секция</button>
-          </div>
-
-          <div className="mt-3">
-            <div className="text-xs text-white/60 mb-1">Название сайта</div>
+      {b.type === "img" && (
+        <div className="grid gap-3">
+          <Field label="CID / URL">
             <input
-              {...focusProps}
-              value={doc.title}
-              onChange={(e)=>updateDocTitle(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/10 outline-none text-white/90"
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={b.cid}
+              onChange={(e) => onChange({ cid: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll}
+              onKeyDownCapture={stopAll}
+              onClickCapture={stopAll}
+              onDragStart={preventDrag}
+              draggable={false}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="altfs://<CID> или https://..."
             />
-          </div>
+          </Field>
+          <Field label="Описание (alt)">
+            <input
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={b.alt || ""}
+              onChange={(e) => onChange({ alt: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll}
+              onKeyDownCapture={stopAll}
+              onClickCapture={stopAll}
+              onDragStart={preventDrag}
+              draggable={false}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+        </div>
+      )}
+
+      {b.type === "btn" && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Текст кнопки">
+            <input
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={b.label}
+              onChange={(e) => onChange({ label: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll}
+              onKeyDownCapture={stopAll}
+              onClickCapture={stopAll}
+              onDragStart={preventDrag}
+              draggable={false}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <Field label="Ссылка">
+            <input
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={b.href}
+              onChange={(e) => onChange({ href: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll}
+              onKeyDownCapture={stopAll}
+              onClickCapture={stopAll}
+              onDragStart={preventDrag}
+              draggable={false}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+        </div>
+      )}
+    </div>
+  );
+});
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="grid gap-1">
+      <span className="text-xs text-[#9aa3b2]">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function labelOf(t: BlockType) {
+  switch (t) {
+    case "hero":
+      return "герой";
+    case "h1":
+      return "заголовок";
+    case "p":
+      return "текст";
+    case "img":
+      return "картинка";
+    case "btn":
+      return "кнопка";
+  }
+}
+
+/* =========================
+ * Основной экран
+ * ========================= */
+export default function SiteBuilder() {
+  const [doc, setDoc] = useState<Doc>(() => ({
+    title: "Мой сайт",
+    blocks: [
+      {
+        id: uid(),
+        type: "hero",
+        title: "Заголовок героя",
+        subtitle: "Короткий подзаголовок",
+        ctaText: "Подробнее",
+        ctaLink: "#",
+      },
+    ],
+  }));
+
+  const html = useMemo(() => renderDocToHTML(doc), [doc]);
+
+  // DnD состояние
+  const dragFromId = useRef<string | null>(null);
+
+  const onDragStartByHandle = useCallback((e: React.DragEvent, id: string) => {
+    dragFromId.current = id;
+    e.dataTransfer.effectAllowed = "move";
+    e.stopPropagation();
+  }, []);
+
+  const onDragOverCard = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
+  const onDropOnCard = useCallback((e: React.DragEvent, toId: string) => {
+    e.preventDefault();
+    const fromId = dragFromId.current;
+    dragFromId.current = null;
+    if (!fromId || fromId === toId) return;
+
+    setDoc((prev) => {
+      const arr = [...prev.blocks];
+      const from = arr.findIndex((x) => x.id === fromId);
+      const to = arr.findIndex((x) => x.id === toId);
+      if (from < 0 || to < 0) return prev;
+      const [moved] = arr.splice(from, 1);
+      arr.splice(to, 0, moved);
+      return { ...prev, blocks: arr };
+    });
+  }, []);
+
+  const addBlock = useCallback((type: BlockType) => {
+    const block: Block =
+      type === "hero"
+        ? { id: uid(), type: "hero", title: "Новый раздел", subtitle: "", ctaText: "", ctaLink: "" }
+        : type === "h1"
+        ? { id: uid(), type: "h1", text: "Заголовок" }
+        : type === "p"
+        ? { id: uid(), type: "p", text: "Параграф текста…" }
+        : type === "img"
+        ? { id: uid(), type: "img", cid: "", alt: "" }
+        : { id: uid(), type: "btn", label: "Кнопка", href: "#" };
+
+    setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
+  }, []);
+
+  const updateBlock = useCallback((id: string, patch: Partial<Block>) => {
+    setDoc((prev) => ({
+      ...prev,
+      blocks: prev.blocks.map((b) => (b.id === id ? ({ ...b, ...patch } as Block) : b)),
+    }));
+  }, []);
+
+  const removeBlock = useCallback((id: string) => {
+    setDoc((prev) => ({ ...prev, blocks: prev.blocks.filter((b) => b.id !== id) }));
+  }, []);
+
+  return (
+    <div className="h-full grid grid-cols-[420px_1fr]">
+      {/* Левая панель */}
+      <div className="h-full overflow-y-auto border-r border-[#1c2030] bg-[#0b0e18] p-4">
+        <div className="mb-4">
+          <Field label="Название сайта">
+            <input
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={doc.title}
+              onChange={(e) => setDoc((d) => ({ ...d, title: e.target.value }))}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
         </div>
 
-        {/* Холст — карточки не draggable; drop-обработчики включаются ТОЛЬКО если не редактируем */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2">
-          <div className="text-white/80 font-medium mb-2">Холст</div>
-          {doc.blocks.map((b, i) => {
-            const dropHandlers = makeDropHandlers(i);
-            return (
-              <div
-                key={b.id}
-                {...dropHandlers}
-                className={`rounded-xl border p-3 ${!editing && (dropHandlers ? "": "")} ${(!editing) ? "" : ""} ${"border-white/10 bg-white/5"}`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-white/70 text-sm">
-                    {b.kind === "row" ? "Строка (сетка)" :
-                     b.kind === "h1" ? "Заголовок" :
-                     b.kind === "p"  ? "Текст" :
-                     b.kind === "img" ? "Картинка (CID)" : "Кнопка"}
-                    <span className="ml-2 text-white/40">#{i+1}</span>
-                    {!editing && <span className="ml-2 text-white/40">перетаскивайте за ⋮⋮</span>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {/* Ручка перетаскивания */}
-                    <span
-                      className={`px-2 py-1 rounded-md ${editing ? "bg-white/10 opacity-50 cursor-not-allowed" : "bg-white/10 hover:bg-white/20 cursor-grab"} select-none`}
-                      draggable={!editing}
-                      onDragStart={!editing ? dnd.onHandleDragStart(i) : undefined}
-                      title={editing ? "Перетаскивание отключено во время ввода" : "Перетащите для перестановки"}
-                    >⋮⋮</span>
-                    <button
-                      className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20"
-                      onClick={()=>{
-                        setDoc((d)=>({ ...d, blocks: d.blocks.filter(x=>x.id!==b.id) }));
-                      }}
-                      title="Удалить"
-                    >✕</button>
-                  </div>
-                </div>
-
-                {b.kind !== "row" ? (
-                  <SimpleEditor
-                    b={b as any}
-                    update={(patch)=>setDoc((d)=>({ ...d, blocks: d.blocks.map(x=>x.id===b.id ? { ...x, ...patch } as Block : x) }))}
-                  />
-                ) : (
-                  <div className="space-y-3">
-                    <div className="text-xs text-white/60">Колонки (1..4). Ширины по брейкпоинтам, перенос строк — автоматически.</div>
-                    <div className="grid md:grid-cols-2 gap-3">
-                      {b.cols.map((c) => (
-                        <div key={c.id} className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="text-white/70 text-sm">Колонка {c.id.slice(0,4)}</div>
-                            <div className="flex items-center gap-2">
-                              <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20" onClick={()=>delCol(b.id, c.id)} title="Удалить колонку">✕</button>
-                            </div>
-                          </div>
-                          <SpanPicker rowId={b.id} col={c} />
-                          <div className="text-xs text-white/60">Блоки в колонке</div>
-                          {c.blocks.map((cb, idx) => (
-                            <div key={cb.id} className="rounded-md border border-white/10 bg-white/5 p-2">
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="text-white/70 text-xs">
-                                  {cb.kind === "h1" ? "Заголовок" : cb.kind === "p" ? "Текст" : cb.kind === "img" ? "Картинка" : cb.kind === "btn" ? "Кнопка" : cb.kind}
-                                  <span className="ml-2 text-white/40">#{idx+1}</span>
-                                </div>
-                                <div className="flex gap-1">
-                                  <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20" onClick={()=>moveInner(b.id, c.id, cb.id, -1)} title="Выше">↑</button>
-                                  <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20" onClick={()=>moveInner(b.id, c.id, cb.id,  1)} title="Ниже">↓</button>
-                                  <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20" onClick={()=>delInner(b.id, c.id, cb.id)} title="Удалить">✕</button>
-                                </div>
-                              </div>
-                              <SimpleEditor b={cb as any} update={(patch)=>updInner(b.id, c.id, cb.id, patch)} />
-                            </div>
-                          ))}
-                          <div className="grid grid-cols-4 gap-2">
-                            <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-xs" onClick={()=>addInner(b.id, c.id, "h1")}>H1</button>
-                            <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-xs" onClick={()=>addInner(b.id, c.id, "p")}>Текст</button>
-                            <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-xs" onClick={()=>addInner(b.id, c.id, "img")}>Картинка</button>
-                            <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-xs" onClick={()=>addInner(b.id, c.id, "btn")}>Кнопка</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div>
-                      <button className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20" onClick={()=>addCol(b.id)}>+ колонка</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          {doc.blocks.length === 0 && <div className="text-white/50 text-sm">Добавьте блоки/строки.</div>}
+        <div className="mb-3 text-sm text-[#9aa3b2]">Палитра</div>
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("hero")}>+ Hero</button>
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("h1")}>+ Заголовок</button>
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("p")}>+ Текст</button>
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("img")}>+ Картинка</button>
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("btn")}>+ Кнопка</button>
         </div>
 
-        {/* Предпросмотр */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-          <div className="text-white/80 font-medium mb-2">Предпросмотр (песочница)</div>
-          <SafePreview html={html} />
+        {/* Список блоков */}
+        <div>
+          {doc.blocks.map((b, i) => (
+            <BlockCard
+              key={b.id}
+              block={b}
+              index={i}
+              onChange={(patch) => updateBlock(b.id, patch)}
+              onRemove={() => removeBlock(b.id)}
+              onDragStartByHandle={onDragStartByHandle}
+              onDragOverCard={onDragOverCard}
+              onDropOnCard={onDropOnCard}
+            />
+          ))}
         </div>
+      </div>
+
+      {/* Предпросмотр */}
+      <div className="h-full overflow-hidden">
+        <SafePreview html={html} />
       </div>
     </div>
   );
