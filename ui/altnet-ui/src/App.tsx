@@ -2,6 +2,7 @@ import { useState } from "react";
 import "./index.css";
 import BrowserAlt from "./screens/BrowserAlt";
 import SiteBuilder from "./screens/SiteBuilder";
+import ExploreDiscover from "./screens/ExploreDiscover";
 
 type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "profile";
 type RailView = "global" | "messages" | "servers";
@@ -26,10 +27,9 @@ const ListItem = ({ title, subtitle }: { title: string; subtitle?: string }) => 
 
 export default function App() {
   const [section, setSection] = useState<Section>("feed");
-  const [rail, setRail] = useState<RailView>("global");        // режим левого бара
+  const [rail, setRail] = useState<RailView>("global");
   const [builderOpen, setBuilderOpen] = useState(false);
 
-  // Клик по глобальным иконкам
   const openFeed = () => { setSection("feed"); setRail("global"); };
   const openMessages = () => { setSection("messages"); setRail("messages"); };
   const openServers = () => { setSection("servers"); setRail("servers"); };
@@ -38,12 +38,11 @@ export default function App() {
   const openReputation = () => { setSection("reputation"); setRail("global"); };
   const openProfile = () => { setSection("profile"); setRail("global"); };
 
-  // Ширина бара: узкий в global, широкий в списках
   const railWidth = rail === "global" ? "w-20" : "w-72";
 
   return (
     <div className="min-h-screen flex">
-      {/* ЛЕВЫЙ БАР (переключаемый) */}
+      {/* ЛЕВЫЙ БАР */}
       <aside className={`${railWidth} transition-all duration-200 bg-white/5 border-r border-white/10 flex flex-col gap-3 py-3`}>
         {rail === "global" && (
           <div className="flex flex-col items-center gap-3">
@@ -58,7 +57,6 @@ export default function App() {
 
         {rail === "messages" && (
           <div className="h-full flex flex-col px-3">
-            {/* заголовок + назад */}
             <div className="flex items-center gap-2 mb-2">
               <button className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20" title="Назад к разделам" onClick={()=>setRail("global")}>←</button>
               <div className="text-white/80 font-semibold">Личные сообщения</div>
@@ -97,7 +95,6 @@ export default function App() {
           </div>
         )}
 
-        {/* Профиль всегда внизу */}
         <div className="mt-auto px-4">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center font-bold">E</div>
           <div className="mt-2 grid grid-cols-3 gap-1">
@@ -151,9 +148,7 @@ export default function App() {
           )}
 
           {section === "explore" && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Путешествия: каталог/категории (болванка; оформим отдельно).
-            </div>
+            <ExploreDiscover />
           )}
 
           {section === "reputation" && (
