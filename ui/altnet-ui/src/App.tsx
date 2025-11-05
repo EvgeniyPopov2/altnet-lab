@@ -1,135 +1,174 @@
-import { useState } from "react"
-import "./index.css"
-import AltNetWireframes from "./screens/AltNetWireframes"
+import { useState } from "react";
+import "./index.css";
+import BrowserAlt from "./screens/BrowserAlt";
+import SiteBuilder from "./screens/SiteBuilder";
 
-type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "profile"
+type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "profile";
+type RailView = "global" | "messages" | "servers";
 
-const NavButton = ({ active, onClick, children }: { active?: boolean; onClick: () => void; children: React.ReactNode }) => (
+const RailBtn = ({ icon, label, active, onClick }: { icon: string; label: string; active?: boolean; onClick: () => void }) => (
   <button
+    title={label}
     onClick={onClick}
-    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition
-      ${active ? "bg-indigo-600 text-white" : "bg-white/5 text-white/80 hover:bg-white/10"}`}
+    className={`w-12 h-12 rounded-2xl flex items-center justify-center transition
+      ${active ? "bg-indigo-600 text-white" : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white"}`}
   >
-    {children}
+    <span className="text-lg">{icon}</span>
   </button>
-)
+);
+
+const ListItem = ({ title, subtitle }: { title: string; subtitle?: string }) => (
+  <div className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition text-white/90">
+    <div className="text-sm font-medium truncate">{title}</div>
+    {subtitle && <div className="text-xs text-white/60 truncate">{subtitle}</div>}
+  </div>
+);
 
 export default function App() {
-  const [section, setSection] = useState<Section>("feed")
-  const [devOpen, setDevOpen] = useState(false)
+  const [section, setSection] = useState<Section>("feed");
+  const [rail, setRail] = useState<RailView>("global");        // режим левого бара
+  const [builderOpen, setBuilderOpen] = useState(false);
+
+  // Клик по глобальным иконкам
+  const openFeed = () => { setSection("feed"); setRail("global"); };
+  const openMessages = () => { setSection("messages"); setRail("messages"); };
+  const openServers = () => { setSection("servers"); setRail("servers"); };
+  const openExplore = () => { setSection("explore"); setRail("global"); };
+  const openBrowser = () => { setSection("browser"); setRail("global"); setBuilderOpen(false); };
+  const openReputation = () => { setSection("reputation"); setRail("global"); };
+  const openProfile = () => { setSection("profile"); setRail("global"); };
+
+  // Ширина бара: узкий в global, широкий в списках
+  const railWidth = rail === "global" ? "w-20" : "w-72";
 
   return (
     <div className="min-h-screen flex">
-      {/* Левый бар с серверами */}
-      <aside className="w-16 bg-white/5 border-r border-white/10 flex flex-col items-center gap-3 py-3">
-        <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center font-bold">A</div>
-        <div className="w-10 h-10 rounded-2xl bg-white/10" title="Сервер #1" />
-        <div className="w-10 h-10 rounded-2xl bg-white/10" title="Сервер #2" />
-        <div className="w-10 h-10 rounded-2xl bg-white/10" title="Сервер #3" />
-        <div className="mt-auto" />
-        <button
-          className="text-[10px] text-white/50 hover:text-white/80 underline mb-1"
-          onClick={() => setDevOpen((v) => !v)}
-          title="Показать/скрыть прототипные вайрфреймы (для разработчика)"
-        >
-          DEV: вайрфреймы
-        </button>
+      {/* ЛЕВЫЙ БАР (переключаемый) */}
+      <aside className={`${railWidth} transition-all duration-200 bg-white/5 border-r border-white/10 flex flex-col gap-3 py-3`}>
+        {rail === "global" && (
+          <div className="flex flex-col items-center gap-3">
+            <RailBtn icon="🏠" label="Лента" active={section === "feed"} onClick={openFeed} />
+            <RailBtn icon="💬" label="Сообщения" active={section === "messages"} onClick={openMessages} />
+            <RailBtn icon="🧩" label="Серверы" active={section === "servers"} onClick={openServers} />
+            <RailBtn icon="🧭" label="Путешествия" active={section === "explore"} onClick={openExplore} />
+            <RailBtn icon="🌐" label="Браузер .alt" active={section === "browser"} onClick={openBrowser} />
+            <RailBtn icon="🛡️" label="Репутация" active={section === "reputation"} onClick={openReputation} />
+          </div>
+        )}
+
+        {rail === "messages" && (
+          <div className="h-full flex flex-col px-3">
+            {/* заголовок + назад */}
+            <div className="flex items-center gap-2 mb-2">
+              <button className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20" title="Назад к разделам" onClick={()=>setRail("global")}>←</button>
+              <div className="text-white/80 font-semibold">Личные сообщения</div>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-2 mb-2">
+              <input placeholder="Найти или начать беседу" className="w-full bg-transparent outline-none text-sm text-white/90 placeholder-white/40"/>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+              <ListItem title="Henk" subtitle="в сети • 5 мин назад" />
+              <ListItem title="Валерыч" subtitle="не в сети" />
+              <ListItem title="dencoldgrey" subtitle="Пишет…" />
+              <ListItem title="Curd_one" subtitle="AFK" />
+              <ListItem title="Crystallick" subtitle="новое: 3" />
+            </div>
+          </div>
+        )}
+
+        {rail === "servers" && (
+          <div className="h-full flex flex-col px-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <button className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20" title="Назад к разделам" onClick={()=>setRail("global")}>←</button>
+                <div className="text-white/80 font-semibold">Серверы</div>
+              </div>
+              <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-xs">➕ Создать</button>
+            </div>
+            <div className="rounded-xl bg-white/5 border border-white/10 p-2 mb-2">
+              <input placeholder="Поиск серверов" className="w-full bg-transparent outline-none text-sm text-white/90 placeholder-white/40"/>
+            </div>
+            <div className="flex-1 overflow-y-auto space-y-1 pr-1">
+              <ListItem title="War Thunder" subtitle="текст/голос • 1.2k онлайн" />
+              <ListItem title="Cheburashka Lab" subtitle="вики/файлы • 302 онлайн" />
+              <ListItem title="AltNet Dev" subtitle="вики/чат • 53 онлайн" />
+              <ListItem title="Midjourney" subtitle="image-gen • 12k онлайн" />
+            </div>
+          </div>
+        )}
+
+        {/* Профиль всегда внизу */}
+        <div className="mt-auto px-4">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center font-bold">E</div>
+          <div className="mt-2 grid grid-cols-3 gap-1">
+            <button className="h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs" title="Статус">●</button>
+            <button className="h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs" title="Настройки">⚙️</button>
+            <button className={`h-8 rounded-lg text-xs ${section==="profile"?"bg-indigo-600":"bg-white/10 hover:bg-white/20"}`} title="Профиль" onClick={openProfile}>👤</button>
+          </div>
+        </div>
       </aside>
 
-      {/* Колонка навигации (как список серверных/общих разделов) */}
-      <nav className="w-64 bg-white/5 border-r border-white/10 p-3 space-y-2">
-        <div className="text-white/60 text-xs uppercase tracking-wide px-1">Навигация</div>
-        <NavButton active={section === "feed"} onClick={() => setSection("feed")}>🏠 Лента</NavButton>
-        <NavButton active={section === "messages"} onClick={() => setSection("messages")}>💬 Сообщения</NavButton>
-        <NavButton active={section === "servers"} onClick={() => setSection("servers")}>🧩 Серверы</NavButton>
-        <NavButton active={section === "explore"} onClick={() => setSection("explore")}>🧭 Путешествия</NavButton>
-        <NavButton active={section === "browser"} onClick={() => setSection("browser")}>🌐 Браузер .alt</NavButton>
-        <NavButton active={section === "reputation"} onClick={() => setSection("reputation")}>🛡️ Репутация</NavButton>
-        <NavButton active={section === "profile"} onClick={() => setSection("profile")}>👤 Профиль</NavButton>
-      </nav>
-
-      {/* Основная область */}
+      {/* ПРАВО — КОНТЕНТ */}
       <div className="flex-1 flex flex-col">
-        {/* Верхняя панель с «Почта» и «Поддержка» */}
         <header className="px-4 py-3 border-b border-white/10 bg-white/5 flex items-center justify-between">
-          <div>
-            <div className="text-xl font-bold tracking-tight">AltNet</div>
-            <div className="text-xs text-white/60">Децентрализованно. Приватно. Без телеметрии.</div>
+          <div className="text-lg font-semibold text-white/90">
+            {section === "feed" && "Лента"}
+            {section === "messages" && "Сообщения"}
+            {section === "servers" && "Серверы"}
+            {section === "explore" && "Путешествия"}
+            {section === "browser" && (builderOpen ? "Конструктор сайта" : "Браузер .alt")}
+            {section === "reputation" && "Репутация"}
+            {section === "profile" && "Профиль"}
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">📥 Почта</button>
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">❓ Поддержка</button>
           </div>
         </header>
 
-        {/* Контент */}
         <main className="p-4">
+          {section === "browser" && (builderOpen
+            ? <SiteBuilder onClose={() => setBuilderOpen(false)} />
+            : <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} />
+          )}
+
           {section === "feed" && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
-              <div className="text-white/80">
-                Раздел «Лента». Здесь будет популярное рядом и «Состояние сети». (Добавим детальный виджет в следующем шаге.)
-              </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+              Популярное рядом и «Состояние сети» добавим в следующем шаге.
             </div>
           )}
 
           {section === "messages" && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Раздел «Сообщения». Список чатов и окно диалога (моки).
+              Окно диалога: ввод, стикеры, вложения → CID (моки).
             </div>
           )}
 
           {section === "servers" && (
-            <div className="grid lg:grid-cols-3 gap-4">
-              <div className="lg:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-6">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-white/90 font-semibold">Серверы (сообщества)</div>
-                  <button className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm">
-                    ➕ Создать сервер
-                  </button>
-                </div>
-                <div className="text-white/70 text-sm">
-                  Каталог серверов, каналы, роли. Мастер создания будет открываться отсюда.
-                </div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-                Подсказки и надёжность хранения (кеш/пины/зеркала).
-              </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+              Каналы выбранного сервера (текст/вики/файлы/голос) — моки.
             </div>
           )}
 
           {section === "explore" && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Раздел «Путешествия» (каталог сообществ и мини-приложений).
-            </div>
-          )}
-
-          {section === "browser" && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Раздел «Браузер .alt». Адресная строка и предпросмотр сайтов AltNet.
+              Путешествия: каталог/категории (болванка; оформим отдельно).
             </div>
           )}
 
           {section === "reputation" && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Раздел «Репутация» (общественные метки, жалобы, арбитраж).
+              Публичные метки, жалобы, арбитраж (моки).
             </div>
           )}
 
           {section === "profile" && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Раздел «Профиль»: аватар, статус, темы, экспорт профиля.
-            </div>
-          )}
-
-          {/* DEV: быстрый доступ к старым вайрфреймам (для разработки) */}
-          {devOpen && (
-            <div className="mt-4 rounded-2xl border border-indigo-600/40 bg-indigo-900/10 p-3">
-              <div className="text-xs text-white/60 mb-2">DEV · Вайрфреймы (прототипные вкладки):</div>
-              <AltNetWireframes />
+              Аватар, статус, темы, переключатель профилей сети (Анонимный/Приватный быстрый).
             </div>
           )}
         </main>
       </div>
     </div>
-  )
+  );
 }
