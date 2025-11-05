@@ -3,7 +3,8 @@ import "./index.css";
 import BrowserAlt from "./screens/BrowserAlt";
 import SiteBuilder from "./screens/SiteBuilder";
 import ExploreDiscover from "./screens/ExploreDiscover";
-import QuickSwitcher, { QSItem } from "./components/QuickSwitcher"; // [QS]
+import QuickSwitcher, { QSItem } from "./components/QuickSwitcher";
+import { AnimatePresence, motion } from "framer-motion";
 
 type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "profile";
 type RailView = "global" | "messages" | "servers";
@@ -30,8 +31,6 @@ export default function App() {
   const [section, setSection] = useState<Section>("feed");
   const [rail, setRail] = useState<RailView>("global");
   const [builderOpen, setBuilderOpen] = useState(false);
-
-  // [QS] состояние
   const [qsOpen, setQsOpen] = useState(false);
 
   const openFeed = () => { setSection("feed"); setRail("global"); };
@@ -42,9 +41,7 @@ export default function App() {
   const openReputation = () => { setSection("reputation"); setRail("global"); };
   const openProfile = () => { setSection("profile"); setRail("global"); };
 
-  const railWidth = rail === "global" ? "w-20" : "w-72";
-
-  // [QS] список целей
+  // Quick Switcher — цели
   const qsItems: QSItem[] = [
     { id: "s:feed", kind: "section", label: "Лента", action: openFeed },
     { id: "s:messages", kind: "section", label: "Сообщения", action: openMessages },
@@ -59,11 +56,11 @@ export default function App() {
     { id: "sv:mid", kind: "server", label: "Midjourney", hint: "image-gen • 12k онлайн", action: openServers },
   ];
 
-  // [QS] хоткей Ctrl+K
+  // Хоткей Ctrl/Cmd + K
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const ctrlOrMeta = e.ctrlKey || e.metaKey;
-      if (ctrlOrMeta && (e.key.toLowerCase() === "k")) {
+      if (ctrlOrMeta && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setQsOpen((v) => !v);
       }
@@ -72,10 +69,18 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Пиксельная ширина бара для анимации (w-20 ≈ 80px, w-72 ≈ 288px)
+  const railWidthPx = rail === "global" ? 80 : 288;
+
   return (
     <div className="min-h-screen flex">
-      {/* ЛЕВЫЙ БАР */}
-      <aside className={`${railWidth} transition-all duration-200 bg-white/5 border-r border-white/10 flex flex-col gap-3 py-3`}>
+      {/* ЛЕВЫЙ БАР — плавная ширина */}
+      <motion.aside
+        className="transition-all duration-200 bg-white/5 border-r border-white/10 flex flex-col gap-3 py-3"
+        initial={false}
+        animate={{ width: railWidthPx }}
+        transition={{ type: "spring", stiffness: 260, damping: 30 }}
+      >
         {rail === "global" && (
           <div className="flex flex-col items-center gap-3">
             <RailBtn icon="🏠" label="Лента" active={section === "feed"} onClick={openFeed} />
@@ -127,6 +132,7 @@ export default function App() {
           </div>
         )}
 
+        {/* Профиль — внизу */}
         <div className="mt-auto px-4">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center font-bold">E</div>
           <div className="mt-2 grid grid-cols-3 gap-1">
@@ -135,12 +141,18 @@ export default function App() {
             <button className={`h-8 rounded-lg text-xs ${section==="profile"?"bg-indigo-600":"bg-white/10 hover:bg-white/20"}`} title="Профиль" onClick={openProfile}>👤</button>
           </div>
         </div>
-      </aside>
+      </motion.aside>
 
       {/* ПРАВО — КОНТЕНТ */}
       <div className="flex-1 flex flex-col">
         <header className="px-4 py-3 border-b border-white/10 bg-white/5 flex items-center justify-between">
-          <div className="text-lg font-semibold text-white/90">
+          <motion.div
+            className="text-lg font-semibold text-white/90"
+            key={`hdr-${section}`}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.15 }}
+          >
             {section === "feed" && "Лента"}
             {section === "messages" && "Сообщения"}
             {section === "servers" && "Серверы"}
@@ -148,56 +160,65 @@ export default function App() {
             {section === "browser" && (builderOpen ? "Конструктор сайта" : "Браузер .alt")}
             {section === "reputation" && "Репутация"}
             {section === "profile" && "Профиль"}
-          </div>
+          </motion.div>
           <div className="flex items-center gap-2">
-            {/* [QS] кнопка вызова */}
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20" onClick={() => setQsOpen(true)} title="Быстрый переход (Ctrl+K)">⌘K / Ctrl+K</button>
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">📥 Почта</button>
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">❓ Поддержка</button>
           </div>
         </header>
 
-        <main className="p-4">
-          {section === "browser" && (builderOpen
-            ? <SiteBuilder onClose={() => setBuilderOpen(false)} />
-            : <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} />
-          )}
+        <div className="p-4">
+          <AnimatePresence mode="wait">
+            <motion.main
+              key={section + (builderOpen ? "-builder" : "")}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+            >
+              {section === "browser" && (builderOpen
+                ? <SiteBuilder onClose={() => setBuilderOpen(false)} />
+                : <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} />
+              )}
 
-          {section === "feed" && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Популярное рядом и «Состояние сети» добавим в следующем шаге.
-            </div>
-          )}
+              {section === "feed" && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+                  Популярное рядом и «Состояние сети» добавим в следующем шаге.
+                </div>
+              )}
 
-          {section === "messages" && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Окно диалога: ввод, стикеры, вложения → CID (моки).
-            </div>
-          )}
+              {section === "messages" && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+                  Окно диалога: ввод, стикеры, вложения → CID (моки).
+                </div>
+              )}
 
-          {section === "servers" && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Каналы выбранного сервера (текст/вики/файлы/голос) — моки.
-            </div>
-          )}
+              {section === "servers" && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+                  Каналы выбранного сервера (текст/вики/файлы/голос) — моки.
+                </div>
+              )}
 
-          {section === "explore" && <ExploreDiscover />}
+              {section === "explore" && <ExploreDiscover />}
 
-          {section === "reputation" && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Публичные метки, жалобы, арбитраж (моки).
-            </div>
-          )}
+              {section === "reputation" && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+                  Публичные метки, жалобы, арбитраж (моки).
+                </div>
+              )}
 
-          {section === "profile" && (
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-              Аватар, статус, темы, переключатель профилей сети (Анонимный/Приватный быстрый).
-            </div>
-          )}
-        </main>
+              {section === "profile" && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+                  Аватар, статус, темы, переключатель профилей сети (Анонимный/Приватный быстрый).
+                </div>
+              )}
+            </motion.main>
+          </AnimatePresence>
+        </div>
       </div>
 
-      {/* [QS] Модалка */}
+      {/* Quick Switcher — с анимацией */}
       <QuickSwitcher open={qsOpen} onClose={() => setQsOpen(false)} items={qsItems} />
     </div>
   );
