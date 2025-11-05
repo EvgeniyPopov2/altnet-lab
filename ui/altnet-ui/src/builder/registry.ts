@@ -1,159 +1,191 @@
-// src/builder/registry.ts
-export type BlockKind = "h1" | "p" | "img" | "btn" | "row";
+// ui/altnet-ui/src/builder/registry.ts
+// Единый реестр блоков конструктора.
+// Версия без JSX — рендер через React.createElement, чтобы файл оставался .ts.
 
-export type Block =
-  | { id: string; kind: "h1"; text: string }
-  | { id: string; kind: "p"; text: string }
-  | { id: string; kind: "img"; cid: string; alt?: string }
-  | { id: string; kind: "btn"; label: string; href: string }
-  | { id: string; kind: "row"; cols: ColSpec[] };
+import React from "react";
 
-export type ColSpec = {
-  id: string;
-  // ширины (1..12); если не указано — наследуется от меньшего брейкпоинта
-  xs: number;
-  sm?: number;
-  md?: number;
-  lg?: number;
-  xl?: number;
-  blocks: Block[];
+export type BlockSpec = {
+  id: string; // машинное имя (type)
+  name: string; // человекочитаемое
+  defaults: Record<string, any>;
+  render: (args: { props: Record<string, any> }) => any; // без JSX/FC
+  serialize: (props: Record<string, any>) => string;
 };
 
-export type PageDoc = { title: string; blocks: Block[] };
+// Утилиты
+const esc = (s: string = "") =>
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 
-export function uid() { return Math.random().toString(36).slice(2, 8); }
+const nl2br = (s: string = "") => esc(s).replace(/\n/g, "<br/>");
 
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (ch) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;" }[ch] as string));
+// ---------- Определения блоков ----------
+
+const Hero: BlockSpec = {
+  id: "hero",
+  name: "Hero",
+  defaults: {
+    title: "Добро пожаловать в AltNet",
+    subtitle:
+      "Свобода общения. Приватность по умолчанию. Сообщество важнее алгоритмов.",
+    ctaLabel: "Узнать больше",
+    ctaHref: "#learn",
+  },
+  render: ({ props }) => {
+    const p = { ...Hero.defaults, ...props };
+    return React.createElement(
+      "section",
+      { className: "section" },
+      React.createElement(
+        "div",
+        { className: "card" },
+        React.createElement("h1", null, p.title),
+        React.createElement("p", { className: "muted" }, p.subtitle),
+        React.createElement(
+          "div",
+          { style: { marginTop: 12 } },
+          React.createElement(
+            "a",
+            { className: "btn", href: p.ctaHref },
+            p.ctaLabel
+          )
+        )
+      )
+    );
+  },
+  serialize: (props) => {
+    const p = { ...Hero.defaults, ...props };
+    return `
+<section class="section hero">
+  <h1>${esc(p.title)}</h1>
+  <p>${esc(p.subtitle)}</p>
+  <div style="margin-top:16px">
+    <a class="btn" href="${esc(p.ctaHref)}">${esc(p.ctaLabel)}</a>
+  </div>
+</section>`.trim();
+  },
+};
+
+const H1: BlockSpec = {
+  id: "h1",
+  name: "Заголовок H1",
+  defaults: { text: "Заголовок раздела" },
+  render: ({ props }) => {
+    const p = { ...H1.defaults, ...props };
+    return React.createElement(
+      "section",
+      { className: "section" },
+      React.createElement("h1", null, p.text)
+    );
+  },
+  serialize: (props) => {
+    const p = { ...H1.defaults, ...props };
+    return `<section class="section"><h1>${esc(p.text)}</h1></section>`;
+  },
+};
+
+const Text: BlockSpec = {
+  id: "text",
+  name: "Текст",
+  defaults: { text: "Здесь может быть ваш текст.\nМного текста." },
+  render: ({ props }) => {
+    const p = { ...Text.defaults, ...props };
+    // Для предпросмотра: просто <p> без nl2br — предпросмотр у тебя свой (SafePreview).
+    return React.createElement(
+      "section",
+      { className: "section" },
+      React.createElement("p", null, p.text)
+    );
+  },
+  serialize: (props) => {
+    const p = { ...Text.defaults, ...props };
+    return `<section class="section"><p>${nl2br(p.text)}</p></section>`;
+  },
+};
+
+const Image: BlockSpec = {
+  id: "image",
+  name: "Картинка",
+  defaults: {
+    src: "https://placehold.co/960x540/png",
+    alt: "Изображение",
+  },
+  render: ({ props }) => {
+    const p = { ...Image.defaults, ...props };
+    return React.createElement(
+      "section",
+      { className: "section" },
+      React.createElement("img", {
+        className: "responsive",
+        src: p.src,
+        alt: p.alt,
+      })
+    );
+  },
+  serialize: (props) => {
+    const p = { ...Image.defaults, ...props };
+    return `<section class="section"><img class="responsive" src="${esc(
+      p.src
+    )}" alt="${esc(p.alt)}"/></section>`;
+  },
+};
+
+const Button: BlockSpec = {
+  id: "button",
+  name: "Кнопка",
+  defaults: { label: "Кнопка", href: "#" },
+  render: ({ props }) => {
+    const p = { ...Button.defaults, ...props };
+    return React.createElement(
+      "section",
+      { className: "section" },
+      React.createElement(
+        "a",
+        { className: "btn", href: p.href },
+        String(p.label)
+      )
+    );
+  },
+  serialize: (props) => {
+    const p = { ...Button.defaults, ...props };
+    return `<section class="section"><a class="btn" href="${esc(
+      p.href
+    )}">${esc(String(p.label))}</a></section>`;
+  },
+};
+
+// Регистр
+const BLOCKS: Record<string, BlockSpec> = {
+  [Hero.id]: Hero,
+  [H1.id]: H1,
+  [Text.id]: Text,
+  [Image.id]: Image,
+  [Button.id]: Button,
+};
+
+// API реестра
+export function listBlocks(): BlockSpec[] {
+  return Object.values(BLOCKS);
 }
-function escapeAttr(s: string) { return escapeHtml(s).replace(/\s+/g, " ").trim(); }
 
-const CID_RE = /^[a-z0-9]+[a-z0-9\-_/]*$/i;
-const HREF_OK = /^(https?:\/\/|altfs:\/\/|cid:|#|\/|mailto:)/i;
-
-export function createBlock(kind: BlockKind): Block {
-  switch (kind) {
-    case "h1":  return { id: uid(), kind: "h1", text: "Заголовок" };
-    case "p":   return { id: uid(), kind: "p", text: "Абзац текста" };
-    case "img": return { id: uid(), kind: "img", cid: "bafy...CID", alt: "Картинка" };
-    case "btn": return { id: uid(), kind: "btn", label: "Кнопка", href: "https://example.org" };
-    case "row": return createRow(2); // дефолт 2 колонки 6/6
-  }
+export function getBlock(id: string): BlockSpec | undefined {
+  return BLOCKS[id];
 }
 
-// Шаблон строки на N колонок, равномерно
-export function createRow(n: 1|2|3|4): Block {
-  const span = Math.max(1, Math.min(12, Math.round(12 / n)));
-  const cols: ColSpec[] = Array.from({ length: n }, () => ({
-    id: uid(),
-    xs: span,
-    md: span,
-    blocks: [],
-  }));
-  return { id: uid(), kind: "row", cols };
+export function serializeBlock(id: string, props: Record<string, any>): string {
+  const spec = getBlock(id);
+  if (!spec) throw new Error(`Unknown block: ${id}`);
+  return spec.serialize(props || {});
 }
 
-export function validateBlock(b: Block): string[] {
-  const errs: string[] = [];
-  if (b.kind === "h1" || b.kind === "p") {
-    if (!b.text || b.text.trim().length === 0) errs.push("Текст не задан");
-    if ((b.text ?? "").length > 2000) errs.push("Слишком длинный текст");
-  }
-  if (b.kind === "img") {
-    if (!CID_RE.test(b.cid)) errs.push("CID имеет неверный формат");
-    if ((b.alt ?? "").length > 2000) errs.push("Слишком длинный alt");
-  }
-  if (b.kind === "btn") {
-    if (!b.label) errs.push("Нет текста кнопки");
-    if (!HREF_OK.test(b.href)) errs.push("Недопустимый href (разрешены: http/https, altfs://, cid:, #, /, mailto:)");
-  }
-  if (b.kind === "row") {
-    if (b.cols.length < 1 || b.cols.length > 4) errs.push("Количество колонок 1..4");
-    const bps: (keyof ColSpec)[] = ["xs","sm","md","lg","xl"];
-    for (const c of b.cols) {
-      for (const bp of bps) {
-        const w = (c[bp] as number|undefined);
-        if (w !== undefined && (w < 1 || w > 12)) {
-          errs.push(`Колонка ${c.id}: ширина ${String(bp)} вне диапазона 1..12`);
-        }
-      }
-      // рекурсивная валидация вложенных блоков
-      c.blocks.forEach((child, j) => {
-        const ce = validateBlock(child);
-        ce.forEach((e) => errs.push(`Колонка ${c.id} blk#${j+1}: ${e}`));
-      });
-    }
-    // ВАЖНО: не проверяем сумму спанов по брейкпоинтам — есть flex-wrap.
-  }
-  return errs;
-}
+// Совместимость: дефолтный экспорт как реестр
+const registry = {
+  list: listBlocks,
+  get: getBlock,
+  serialize: serializeBlock,
+};
 
-export function validateDoc(doc: PageDoc): string[] {
-  const errs: string[] = [];
-  if (!doc.title || doc.title.trim().length === 0) errs.push("Название сайта пустое");
-  if (doc.blocks.length > 200) errs.push("Слишком много блоков");
-  doc.blocks.forEach((b, i) => {
-    const be = validateBlock(b);
-    be.forEach((e) => errs.push(`Блок #${i+1} (${b.kind}): ${e}`));
-  });
-  return errs;
-}
-
-export function renderBlock(b: Block): string {
-  if (b.kind === "h1") return `<h2>${escapeHtml(b.text)}</h2>`;
-  if (b.kind === "p")  return `<p>${escapeHtml(b.text)}</p>`;
-  if (b.kind === "img") return `<img src="altfs://${escapeAttr(b.cid)}" alt="${escapeAttr(b.alt ?? "")}" />`;
-  if (b.kind === "btn") return `<a class="btn" href="${escapeAttr(b.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(b.label)}</a>`;
-  if (b.kind === "row") {
-    const colsHtml = b.cols.map(col => {
-      const classes = spanClasses(col);
-      const inner = col.blocks.map(renderBlock).join("\n");
-      return `<div class="col ${classes}">${inner}</div>`;
-    }).join("\n");
-    return `<div class="row">${colsHtml}</div>`;
-  }
-  return "";
-}
-
-export function renderDoc(doc: PageDoc): string {
-  const parts: string[] = [];
-  parts.push(`<h1>${escapeHtml(doc.title)}</h1>`);
-  for (const b of doc.blocks) parts.push(renderBlock(b));
-  return parts.join("\n");
-}
-
-function spanClasses(c: ColSpec): string {
-  const xs = c.xs ?? 12;
-  const sm = c.sm ?? xs;
-  const md = c.md ?? sm;
-  const lg = c.lg ?? md;
-  const xl = c.xl ?? lg;
-  return `c-xs-${xs} c-sm-${sm} c-md-${md} c-lg-${lg} c-xl-${xl}`;
-}
-
-// Шаблон Hero, адаптированный под сетку (кнопка + иллюстрация)
-export function templateHero(): PageDoc {
-  return {
-    title: "AltNet — свободная сеть",
-    blocks: [
-      {
-        id: uid(),
-        kind: "row",
-        cols: [
-          {
-            id: uid(), xs: 12, md: 7, blocks: [
-              { id: uid(), kind: "h1", text: "Свобода общения. Приватность по умолчанию." },
-              { id: uid(), kind: "p",  text: "Создайте свой уголок в .alt за минуты. Без рекламы и слежки." },
-              { id: uid(), kind: "btn", label: "Начать", href: "#get-started" },
-            ],
-          },
-          {
-            id: uid(), xs: 12, md: 5, blocks: [
-              { id: uid(), kind: "img", cid: "bafy-hero-illustration", alt: "Иллюстрация" },
-            ],
-          },
-        ],
-      },
-    ],
-  };
-}
+export default registry;
