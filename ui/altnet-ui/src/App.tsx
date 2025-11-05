@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./index.css";
 import BrowserAlt from "./screens/BrowserAlt";
 import SiteBuilder from "./screens/SiteBuilder";
 import ExploreDiscover from "./screens/ExploreDiscover";
+import QuickSwitcher, { QSItem } from "./components/QuickSwitcher"; // [QS]
 
 type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "profile";
 type RailView = "global" | "messages" | "servers";
@@ -30,6 +31,9 @@ export default function App() {
   const [rail, setRail] = useState<RailView>("global");
   const [builderOpen, setBuilderOpen] = useState(false);
 
+  // [QS] состояние
+  const [qsOpen, setQsOpen] = useState(false);
+
   const openFeed = () => { setSection("feed"); setRail("global"); };
   const openMessages = () => { setSection("messages"); setRail("messages"); };
   const openServers = () => { setSection("servers"); setRail("servers"); };
@@ -39,6 +43,34 @@ export default function App() {
   const openProfile = () => { setSection("profile"); setRail("global"); };
 
   const railWidth = rail === "global" ? "w-20" : "w-72";
+
+  // [QS] список целей
+  const qsItems: QSItem[] = [
+    { id: "s:feed", kind: "section", label: "Лента", action: openFeed },
+    { id: "s:messages", kind: "section", label: "Сообщения", action: openMessages },
+    { id: "s:servers", kind: "section", label: "Серверы", action: openServers },
+    { id: "s:explore", kind: "section", label: "Путешествия", action: openExplore },
+    { id: "s:browser", kind: "section", label: "Браузер .alt", action: openBrowser },
+    { id: "s:reputation", kind: "section", label: "Репутация", action: openReputation },
+    { id: "dm:henk", kind: "dm", label: "Henk", hint: "Личные сообщения", action: openMessages },
+    { id: "dm:valerych", kind: "dm", label: "Валерыч", hint: "Личные сообщения", action: openMessages },
+    { id: "sv:wt", kind: "server", label: "War Thunder", hint: "текст/голос • 1.2k онлайн", action: openServers },
+    { id: "sv:altdev", kind: "server", label: "AltNet Dev", hint: "вики/чат • 53 онлайн", action: openServers },
+    { id: "sv:mid", kind: "server", label: "Midjourney", hint: "image-gen • 12k онлайн", action: openServers },
+  ];
+
+  // [QS] хоткей Ctrl+K
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const ctrlOrMeta = e.ctrlKey || e.metaKey;
+      if (ctrlOrMeta && (e.key.toLowerCase() === "k")) {
+        e.preventDefault();
+        setQsOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="min-h-screen flex">
@@ -118,6 +150,8 @@ export default function App() {
             {section === "profile" && "Профиль"}
           </div>
           <div className="flex items-center gap-2">
+            {/* [QS] кнопка вызова */}
+            <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20" onClick={() => setQsOpen(true)} title="Быстрый переход (Ctrl+K)">⌘K / Ctrl+K</button>
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">📥 Почта</button>
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">❓ Поддержка</button>
           </div>
@@ -147,9 +181,7 @@ export default function App() {
             </div>
           )}
 
-          {section === "explore" && (
-            <ExploreDiscover />
-          )}
+          {section === "explore" && <ExploreDiscover />}
 
           {section === "reputation" && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
@@ -164,6 +196,9 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* [QS] Модалка */}
+      <QuickSwitcher open={qsOpen} onClose={() => setQsOpen(false)} items={qsItems} />
     </div>
   );
 }
