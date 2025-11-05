@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./index.css";
 import BrowserAlt from "./screens/BrowserAlt";
 import SiteBuilder from "./screens/SiteBuilder";
 import ExploreDiscover from "./screens/ExploreDiscover";
 import QuickSwitcher, { QSItem } from "./components/QuickSwitcher";
+import NetStatus, { NetProfile } from "./components/NetStatus";
 import { AnimatePresence, motion } from "framer-motion";
 
 type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "profile";
@@ -33,6 +34,24 @@ export default function App() {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [qsOpen, setQsOpen] = useState(false);
 
+  // === Профиль сети (глобальный) ===
+  const [netProfile, setNetProfile] = useState<NetProfile>("anon");
+
+  // Заголовок шапки
+  const headerTitle = useMemo(() => {
+    switch (section) {
+      case "feed": return "Лента";
+      case "messages": return "Сообщения";
+      case "servers": return "Серверы";
+      case "explore": return "Путешествия";
+      case "browser": return builderOpen ? "Конструктор сайта" : "Браузер .alt";
+      case "reputation": return "Репутация";
+      case "profile": return "Профиль";
+      default: return "";
+    }
+  }, [section, builderOpen]);
+
+  // Навигация
   const openFeed = () => { setSection("feed"); setRail("global"); };
   const openMessages = () => { setSection("messages"); setRail("messages"); };
   const openServers = () => { setSection("servers"); setRail("servers"); };
@@ -69,12 +88,28 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Пиксельная ширина бара для анимации (w-20 ≈ 80px, w-72 ≈ 288px)
+  // Плавная ширина бара
   const railWidthPx = rail === "global" ? 80 : 288;
+
+  // Плашка профиля в шапке
+  const ProfileSwitch = () => (
+    <div className="hidden md:flex items-center gap-1 bg-white/10 rounded-xl p-1">
+      <button
+        onClick={() => setNetProfile("anon")}
+        className={`px-2.5 py-1 rounded-lg text-sm ${netProfile === "anon" ? "bg-white/20 text-white" : "text-white/70 hover:bg-white/15"}`}
+        title="Анонимный (Tor/I2P)"
+      >🕶️ Анонимный</button>
+      <button
+        onClick={() => setNetProfile("fast")}
+        className={`px-2.5 py-1 rounded-lg text-sm ${netProfile === "fast" ? "bg-white/20 text-white" : "text-white/70 hover:bg-white/15"}`}
+        title="Приватный быстрый (Yggdrasil/WireGuard)"
+      >⚡ Быстрый</button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen flex">
-      {/* ЛЕВЫЙ БАР — плавная ширина */}
+      {/* ЛЕВЫЙ БАР */}
       <motion.aside
         className="transition-all duration-200 bg-white/5 border-r border-white/10 flex flex-col gap-3 py-3"
         initial={false}
@@ -153,15 +188,10 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.15 }}
           >
-            {section === "feed" && "Лента"}
-            {section === "messages" && "Сообщения"}
-            {section === "servers" && "Серверы"}
-            {section === "explore" && "Путешествия"}
-            {section === "browser" && (builderOpen ? "Конструктор сайта" : "Браузер .alt")}
-            {section === "reputation" && "Репутация"}
-            {section === "profile" && "Профиль"}
+            {headerTitle}
           </motion.div>
           <div className="flex items-center gap-2">
+            <ProfileSwitch />
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20" onClick={() => setQsOpen(true)} title="Быстрый переход (Ctrl+K)">⌘K / Ctrl+K</button>
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">📥 Почта</button>
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">❓ Поддержка</button>
@@ -183,8 +213,11 @@ export default function App() {
               )}
 
               {section === "feed" && (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-                  Популярное рядом и «Состояние сети» добавим в следующем шаге.
+                <div className="space-y-4">
+                  <NetStatus profile={netProfile} onChangeProfile={setNetProfile} />
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+                    Популярное рядом (моки) — позже.
+                  </div>
                 </div>
               )}
 
@@ -209,8 +242,21 @@ export default function App() {
               )}
 
               {section === "profile" && (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
-                  Аватар, статус, темы, переключатель профилей сети (Анонимный/Приватный быстрый).
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80 space-y-3">
+                  <div className="text-white/80">Настройки профиля. Переключение профиля сети:</div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setNetProfile("anon")}
+                      className={`px-3 py-1.5 rounded-lg ${netProfile==="anon"?"bg-indigo-600 text-white":"bg-white/10 hover:bg-white/20"}`}
+                    >🕶️ Анонимный</button>
+                    <button
+                      onClick={() => setNetProfile("fast")}
+                      className={`px-3 py-1.5 rounded-lg ${netProfile==="fast"?"bg-indigo-600 text-white":"bg-white/10 hover:bg-white/20"}`}
+                    >⚡ Быстрый</button>
+                  </div>
+                  <div className="text-sm text-white/60">
+                    Текущий профиль влияет на политику DHT/mDNS/Relay и выбор транспортов.
+                  </div>
                 </div>
               )}
             </motion.main>
@@ -218,7 +264,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Quick Switcher — с анимацией */}
+      {/* Quick Switcher */}
       <QuickSwitcher open={qsOpen} onClose={() => setQsOpen(false)} items={qsItems} />
     </div>
   );
