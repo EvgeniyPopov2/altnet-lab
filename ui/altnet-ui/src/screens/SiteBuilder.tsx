@@ -92,6 +92,10 @@ function renderDocToHTML(doc: Doc): string {
 <title>${escapeHtml(doc.title || "Сайт")}</title>
 <body style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0f1a; color:#e6e9f4; padding:24px;">
 <div style="max-width:960px; margin:0 auto;">
+<div style="max-width:960px; margin:0 auto;">
+${doc.title ? `<h1 style="font-size:28px; line-height:1.2; margin:16px 0 12px; opacity:.85;">${escapeHtml(doc.title)}</h1>` : ""}
+${blocks}
+</div>
 ${blocks}
 </div>
 </body></html>`;
