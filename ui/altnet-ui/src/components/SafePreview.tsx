@@ -65,7 +65,7 @@ ${clean}
       onLoad={() => { iframeRef.current?.blur(); }}
       sandbox=""
       srcDoc={doc}
-      className="w-full h-[420px] rounded-2xl border border-white/10 bg-black"
+      className="w-full h-full rounded-2xl border border-white/10 bg-black"
       title="SafePreview"
     />
   );

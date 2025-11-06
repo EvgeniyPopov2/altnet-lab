@@ -451,16 +451,9 @@ export default function SiteBuilder() {
     downloadBlob(blob, "altnet-site.zip");
   }, [doc]);
 
-  // Зум предпросмотра
-  const [zoom, setZoom] = useState(1);
-  const decZoom = () => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)));
-  const incZoom = () => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)));
-  const resetZoom = () => setZoom(1);
-
-  // Отключаем навигацию в превью; Ctrl/⌘+клик — новая вкладка
   const handlePreviewClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const el = e.target as HTMLElement | null;
-    const link = el && el.closest ? (el.closest("a") as HTMLAnchorElement | null) : null;
+    const link = el?.closest?.("a") as HTMLAnchorElement | null;
     if (!link) return;
 
     const isNewTab = e.ctrlKey || e.metaKey || e.button === 1;
@@ -470,6 +463,15 @@ export default function SiteBuilder() {
     e.preventDefault();
     e.stopPropagation();
   }, []);
+
+
+  // Зум предпросмотра (горизонтальный скролл обеспечим «холстом»)
+  const [zoom, setZoom] = useState(1);
+  const decZoom = () => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)));
+  const incZoom = () => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)));
+  const resetZoom = () => setZoom(1);
+
+  const CONTENT_WIDTH = 960; // ширина макета предпросмотра
 
   return (
     <div className="h-full grid grid-cols-1 md:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)] gap-4">
@@ -526,7 +528,7 @@ export default function SiteBuilder() {
 
       {/* Предпросмотр */}
       <div
-        className="md:col-[2] rounded-2xl p-4 overflow-auto bg-[#0f111a] border border-[#1c2030]"
+        className="md:col-[2] rounded-2xl p-4 bg-[#0f111a] border border-[#1c2030]"
         onClick={handlePreviewClick}
         style={{ minHeight: "calc(100vh - 96px)" }}
       >
@@ -540,12 +542,27 @@ export default function SiteBuilder() {
           </div>
         </div>
 
-        {/* Масштабируемое содержимое превью */}
-        <div
-          className="origin-top mx-auto"
-          style={{ transform: `scale(${zoom})`, transformOrigin: "top center", width: "100%" }}
-        >
-          <SafePreview html={html} />
+        {/* Скроллируемый холст: даёт H/V скролл при зуме.
+            Важное: высота = 100% панели; iframe внутри SafePreview тоже 100% высоты. */}
+        <div className="w-full h-[calc(100%-44px)] overflow-auto rounded-xl bg-[#0b0f1a] border border-[#1c2030]">
+          {/* «Холст» шириной 960*zoom создаёт горизонтальный скролл */}
+          <div
+            className="relative"
+            style={{ width: `${960 * zoom}px`, height: "100%" }}
+          >
+            {/* Масштабируем содержимое от левого верхнего края */}
+            <div
+              className="absolute top-0 left-0"
+              style={{
+                width: `${CONTENT_WIDTH}px`,
+                transform: `scale(${zoom})`,
+                transformOrigin: "top left",
+                height: "100%",
+              }}
+            >
+              <SafePreview html={html} />
+            </div>
+          </div>
         </div>
       </div>
     </div>
