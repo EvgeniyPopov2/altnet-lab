@@ -72,7 +72,12 @@ img.responsive{max-width:100%;height:auto;border-radius:12px;box-shadow:0 6px 20
 footer{opacity:.8;padding:24px 0;text-align:center;font-size:14px}
 .site-title{font-size:28px;line-height:1.2;margin:16px 0 12px;opacity:.85}
 header.container{padding-top:12px;padding-bottom:0}
+.mt-8{margin-top:8px}
 .mt-16{margin-top:16px}
+.mt-24{margin-top:24px}
+.mb-8{margin-bottom:8px}
+.mb-16{margin-bottom:16px}
+.mb-24{margin-bottom:24px}
 `.trim();
 
 // -------- Рендер --------

@@ -38,11 +38,20 @@ export default function SafePreview({ html }: { html: string }) {
     h1,h2,h3 { margin:0 0 12px; }
     p { margin:0 0 12px; line-height:1.6; }
 
+    /* Utilities (паритет со styles.css экспорта) */
+    .mt-8{margin-top:8px}
+    .mt-16{margin-top:16px}
+    .mt-24{margin-top:24px}
+    .mb-8{margin-bottom:8px}
+    .mb-16{margin-bottom:16px}
+    .mb-24{margin-bottom:24px}
+
     /* 12-колоночная сетка */
     .row { display:flex; flex-wrap:wrap; margin-left:calc(var(--gap) * -0.5); margin-right:calc(var(--gap) * -0.5); }
     .col { padding-left:calc(var(--gap) * 0.5); padding-right:calc(var(--gap) * 0.5); margin-bottom:var(--gap); }
     /* брейкпоинты */
     /* xs (mobile) */
+
     ${Array.from({length:12}, (_,i)=>`.c-xs-${i+1}{ width:${((i+1)/12*100).toFixed(6)}%; }`).join("\n")}
     /* sm ≥640px */
     @media (min-width:640px){ ${Array.from({length:12},(_,i)=>`.c-sm-${i+1}{ width:${((i+1)/12*100).toFixed(6)}%; }`).join("\n")} }

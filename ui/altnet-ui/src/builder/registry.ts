@@ -120,6 +120,8 @@ const Image: BlockSpec = {
       { className: "section" },
       React.createElement("img", {
         className: "responsive",
+        loading: "lazy",
+        decoding: "async",
         src: p.src,
         alt: p.alt,
       })
@@ -127,7 +129,7 @@ const Image: BlockSpec = {
   },
   serialize: (props) => {
     const p = { ...Image.defaults, ...props };
-    return `<section class="section"><img class="responsive" src="${esc(
+    return `<section class="section"><img class="responsive" loading="lazy" decoding="async" src="${esc(
       p.src
     )}" alt="${esc(p.alt)}"/></section>`;
   },
