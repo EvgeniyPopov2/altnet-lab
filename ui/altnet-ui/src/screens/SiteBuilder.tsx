@@ -446,13 +446,16 @@ export default function SiteBuilder() {
   }, []);
 
   const onExportZip = useCallback(async () => {
-    // 1) адаптируем текущую модель конструктора
     const model = adaptFromSiteBuilderDoc(doc);
-    // 2) собираем ZIP c бандлом https-картинок
     const blob = await exportSiteZip(model, { bundleAssets: true });
-    // 3) скачиваем
     downloadBlob(blob, "altnet-site.zip");
   }, [doc]);
+
+  // Зум предпросмотра
+  const [zoom, setZoom] = useState(1);
+  const decZoom = () => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)));
+  const incZoom = () => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)));
+  const resetZoom = () => setZoom(1);
 
   // Отключаем навигацию в превью; Ctrl/⌘+клик — новая вкладка
   const handlePreviewClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -469,9 +472,9 @@ export default function SiteBuilder() {
   }, []);
 
   return (
-    <div className="h-full grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="h-full grid grid-cols-1 md:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)] gap-4">
       {/* Левая панель */}
-      <div className="md:col-span-1 h-full overflow-y-auto border-r border-[#1c2030] bg-[#0b0e18] p-4">
+      <div className="md:col-[1] h-full overflow-y-auto border-r border-[#1c2030] bg-[#0b0e18] p-4">
         <div className="mb-4">
           <Field label="Название сайта">
             <input
@@ -514,7 +517,7 @@ export default function SiteBuilder() {
               onChange={(patch) => updateBlock(b.id, patch)}
               onRemove={() => removeBlock(b.id)}
               onDragStartByHandle={onDragStartByHandle}
-              onDragOverCard={(e) => onDragOverCard(e)}   // важный фикс: реально предотвращаем default
+              onDragOverCard={(e) => onDragOverCard(e)}   // предотвращаем default
               onDropOnCard={onDropOnCard}
             />
           ))}
@@ -523,10 +526,27 @@ export default function SiteBuilder() {
 
       {/* Предпросмотр */}
       <div
-        className="md:col-span-2 rounded-2xl p-4 overflow-auto bg-[#0f111a] border border-[#1c2030]"
+        className="md:col-[2] rounded-2xl p-4 overflow-auto bg-[#0f111a] border border-[#1c2030]"
         onClick={handlePreviewClick}
+        style={{ minHeight: "calc(100vh - 96px)" }}
       >
-        <SafePreview html={html} />
+        {/* Панель зума */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm text-[#9aa3b2]">Предпросмотр</div>
+          <div className="flex items-center gap-2">
+            <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45]" onClick={decZoom}>−</button>
+            <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45]" onClick={resetZoom}>{Math.round(zoom * 100)}%</button>
+            <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45]" onClick={incZoom}>+</button>
+          </div>
+        </div>
+
+        {/* Масштабируемое содержимое превью */}
+        <div
+          className="origin-top mx-auto"
+          style={{ transform: `scale(${zoom})`, transformOrigin: "top center", width: "100%" }}
+        >
+          <SafePreview html={html} />
+        </div>
       </div>
     </div>
   );
