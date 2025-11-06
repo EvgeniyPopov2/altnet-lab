@@ -1,9 +1,11 @@
 // ui/altnet-ui/src/builder/exporter.ts
 // Экспорт статического сайта в ZIP: index.html + styles.css + manifest.json + assets/*
 // Безопасность: CSP, запрет inline-скриптов, белый список URL, best-effort загрузка картинок.
+// Дополнительно: дедупликация ассетов по SHA-256 и безопасные rel для внешних ссылок.
 
 import JSZip from "jszip";
 import { serializeBlock } from "./registry";
+import { fetchAndCleanImage, placeholderDataUrl, sanitizeHref, externalLinkRels } from "./cdr";
 
 export type BlockInstance = {
   id?: string;
@@ -25,7 +27,11 @@ export type ExportOptions = {
 const esc = (html: string = "") =>
   html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-// Белый список схем для href/src; всё остальное → "#"
+/**
+ * Локальный совместимый санитайзер URL, сохраняя твоё поведение.
+ * - Пропускаем data: для image/video/audio (как у тебя было)
+ * - Всё остальное — прокидываем через sanitizeHref() из cdr.ts (белый список схем).
+ */
 function sanitizeUrl(u?: string, fallback = "#"): string {
   let s = (u || "").trim();
   if (!s) return fallback;
@@ -34,28 +40,15 @@ function sanitizeUrl(u?: string, fallback = "#"): string {
   s = s.replace(/\s+/g, "");
   const lower = s.toLowerCase();
 
-  // 1) чистый javascript: → запрет
-  if (lower.startsWith("javascript:")) return fallback;
-
-  // 2) якоря. недопускаем "#javascript:..." → "#"
-  if (lower.startsWith("#")) {
-    const rest = lower.slice(1);
-    if (!rest || rest.startsWith("javascript:")) return "#";
-    return s; // обычные якоря оставляем
+  // data: для медиа (разрешаем, как было)
+  if (lower.startsWith("data:image/") || lower.startsWith("data:video/") || lower.startsWith("data:audio/")) {
+    return s;
   }
 
-  // 3) белый список
-  const allowed = [
-    "https://", "http://",
-    "ipfs://", "altfs://",
-    "data:image/", "data:video/", "data:audio/",
-    "/", "./", "../"
-  ];
-  if (allowed.some(p => lower.startsWith(p))) return s;
-
-  return fallback;
+  // остальное — через глобальный санитайзер (он отбросит javascript:, file:, vbscript:, и т.п.)
+  const safe = sanitizeHref(s);
+  return safe || fallback;
 }
-
 
 // -------- Стили (оффлайн) --------
 const BASE_CSS = `
@@ -170,6 +163,10 @@ function isHttpUrl(s: string) {
   return l.startsWith("https://") || l.startsWith("http://");
 }
 
+/**
+ * Старый вспомогательный метод (оставляю для совместимости).
+ * Сейчас мы используем fetchAndCleanImage() + дедуп по SHA-256.
+ */
 async function tryFetchImageToZip(zip: JSZip, url: string, nameBase: string): Promise<{ savedPath?: string }> {
   try {
     const resp = await fetch(url, { mode: "cors" });
@@ -190,34 +187,52 @@ function deepClone<T>(x: T): T {
   return JSON.parse(JSON.stringify(x));
 }
 
-async function bundleImages(modelIn: SiteModel, zip: JSZip, onProgress?: (d: number, t: number) => void): Promise<{ model: SiteModel; assets: string[] }> {
+/**
+ * Подтягиваем http(s)-картинки в assets/ с дедупликацией по SHA-256.
+ * Имена вида: img-<hash8>.<ext> возвращаются из fetchAndCleanImage().
+ */
+async function bundleImages(
+  modelIn: SiteModel,
+  zip: JSZip,
+  onProgress?: (d: number, t: number) => void
+): Promise<{ model: SiteModel; assets: string[] }> {
   const model = deepClone(modelIn);
   const assets: string[] = [];
+  const totalCandidates: Array<{ idx: number; url: string }> = [];
 
-  // собираем кандидатов (только type=image и http(s))
-  const candidates: Array<{ b: BlockInstance; idx: number }> = [];
   model.blocks.forEach((b, i) => {
     if (b?.type === "image") {
       const src = String(b?.props?.src || "");
-      if (isHttpUrl(src)) candidates.push({ b, idx: i });
+      if (isHttpUrl(src)) totalCandidates.push({ idx: i, url: src });
     }
   });
 
-  const total = candidates.length;
+  const total = totalCandidates.length;
   let done = 0;
   onProgress?.(done, total);
 
-  for (let i = 0; i < candidates.length; i++) {
-    const { b, idx } = candidates[i];
-    const src = String(b?.props?.src || "");
-    const base = `img-${i + 1}`;
-    const res = await tryFetchImageToZip(zip, src, base);
-    if (res.savedPath) {
-      model.blocks[idx].props = { ...(model.blocks[idx].props || {}), src: res.savedPath };
-      assets.push(res.savedPath.replace("./", ""));
+  // hash -> filename (для дедупликации)
+  const byHash = new Map<string, string>();
+
+  for (const { idx, url } of totalCandidates) {
+    try {
+      const { name, blob, hash } = await fetchAndCleanImage(url); // попытка re-encode → PNG, remove EXIF
+      let filename = byHash.get(hash);
+      if (!filename) {
+        filename = name;                  // уже "img-<hash8>.<ext>"
+        byHash.set(hash, filename);
+        zip.file(`assets/${filename}`, blob);
+        assets.push(`assets/${filename}`);
+      }
+      // Переписываем src блока на локальный файл
+      model.blocks[idx].props = { ...(model.blocks[idx].props || {}), src: `./assets/${filename}` };
+    } catch {
+      // Если не удалось скачать/перекодировать — ставим плейсхолдер (data:)
+      model.blocks[idx].props = { ...(model.blocks[idx].props || {}), src: placeholderDataUrl() };
+    } finally {
+      done++;
+      onProgress?.(done, total);
     }
-    done++;
-    onProgress?.(done, total);
   }
 
   return { model, assets };
@@ -228,22 +243,36 @@ export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions)
   const opts: ExportOptions = { bundleAssets: true, ...(options || {}) };
   const zip = new JSZip();
 
-  // 1) Санация URL на уровне модели (доп. защита)
+  // 1) Санация URL на уровне модели + rel для внешних ссылок (не ломает, если serializeBlock это игнорит).
   const sanitized: SiteModel = {
     title: modelIn.title,
     description: modelIn.description,
     blocks: (modelIn.blocks || []).map((b) => {
       const p = { ...(b.props || {}) };
-      if (b.type === "image" && typeof p.src === "string") p.src = sanitizeUrl(p.src);
-      if (b.type === "button" && typeof p.href === "string") p.href = sanitizeUrl(p.href || "#");
-      if (b.type === "hero") {
-        if (typeof p.ctaHref === "string") p.ctaHref = sanitizeUrl(p.ctaHref || "#");
+
+      if (b.type === "image" && typeof p.src === "string") {
+        p.src = sanitizeUrl(p.src);
       }
+
+      if (b.type === "button") {
+        const href = sanitizeUrl(p.href || "#");
+        const rel = externalLinkRels(href);
+        p.href = href;
+        if (rel) p.rel = rel;
+      }
+
+      if (b.type === "hero") {
+        const href = sanitizeUrl(p.ctaHref || "#");
+        const rel = externalLinkRels(href);
+        p.ctaHref = href;
+        if (rel) p.ctaRel = rel;
+      }
+
       return { type: b.type, props: p };
     }),
   };
 
-  // 2) При необходимости — подтянуть https-картинки в assets/ и переписать ссылки
+  // 2) При необходимости — подтянуть https-картинки в assets/ и переписать ссылки (с дедупом).
   let model = sanitized;
   let assets: string[] = [];
   if (opts.bundleAssets) {
@@ -277,24 +306,31 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
   const blocksRaw: any[] = Array.isArray(builderDoc?.blocks) ? builderDoc.blocks : [];
   const blocks: BlockInstance[] = blocksRaw.map((b) => {
     switch (b?.type) {
-      case "hero":
+      case "hero": {
+        const href = sanitizeUrl(b.ctaLink || "#");
+        const rel = externalLinkRels(href);
         return {
           type: "hero",
           props: {
             title: String(b.title || ""),
             subtitle: String(b.subtitle || ""),
             ctaLabel: String(b.ctaText || "Подробнее"),
-            ctaHref: sanitizeUrl(b.ctaLink || "#"),
+            ctaHref: href,
+            ...(rel ? { ctaRel: rel } : {}),
           },
         };
+      }
       case "h1":
         return { type: "h1", props: { text: String(b.text || "") } };
       case "p":
         return { type: "text", props: { text: String(b.text || "") } };
       case "img":
         return { type: "image", props: { src: sanitizeUrl(b.cid || ""), alt: String(b.alt || "") } };
-      case "btn":
-        return { type: "button", props: { label: String(b.label || "Кнопка"), href: sanitizeUrl(b.href || "#") } };
+      case "btn": {
+        const href = sanitizeUrl(b.href || "#");
+        const rel = externalLinkRels(href);
+        return { type: "button", props: { label: String(b.label || "Кнопка"), href, ...(rel ? { rel } : {}) } };
+      }
       default:
         return { type: "unknown", props: { raw: b } };
     }
