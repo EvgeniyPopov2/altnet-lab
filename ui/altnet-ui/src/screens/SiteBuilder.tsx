@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import SafePreview from "../components/SafePreview";
 import { exportSiteZip, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
 
+
 /* =========================
  * Типы документа и блоков
  * ========================= */
@@ -445,10 +446,14 @@ export default function SiteBuilder() {
   }, []);
 
   const onExportZip = useCallback(async () => {
-    const model = adaptFromSiteBuilderDoc(doc);
-    const blob = await exportSiteZip(model);
-    downloadBlob(blob, "altnet-site.zip");
-  }, [doc]);
+  // 1) адаптируем текущую модель конструктора
+  const model = adaptFromSiteBuilderDoc(doc);
+  // 2) собираем ZIP c бандлом https-картинок
+  const blob = await exportSiteZip(model, { bundleAssets: true });
+  // 3) скачиваем
+  downloadBlob(blob, "altnet-site.zip");
+}, [doc]);
+
 
   return (
     <div className="h-full grid grid-cols-[420px_1fr]">

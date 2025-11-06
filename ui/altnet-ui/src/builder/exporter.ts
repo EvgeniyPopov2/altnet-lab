@@ -1,6 +1,6 @@
 // ui/altnet-ui/src/builder/exporter.ts
-// Экспорт статического сайта в ZIP: index.html + styles.css + manifest.json.
-// Включает CSP и фильтрацию URL (href/src) через белый список.
+// Экспорт статического сайта в ZIP: index.html + styles.css + manifest.json + assets/*
+// Безопасность: CSP, запрет inline-скриптов, белый список URL, best-effort загрузка картинок.
 
 import JSZip from "jszip";
 import { serializeBlock } from "./registry";
@@ -17,33 +17,47 @@ export type SiteModel = {
   blocks: BlockInstance[];
 };
 
-const esc = (html: string = "") =>
-  html
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+export type ExportOptions = {
+  bundleAssets?: boolean; // по умолчанию true
+  onProgress?: (done: number, total: number) => void;
+};
 
-// Разрешённые схемы/префиксы; всё остальное → "#"
+const esc = (html: string = "") =>
+  html.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+// Белый список схем для href/src; всё остальное → "#"
 function sanitizeUrl(u?: string, fallback = "#"): string {
-  const s = (u || "").trim();
+  let s = (u || "").trim();
   if (!s) return fallback;
+
+  // убираем пробелы внутри (часто пишут "javascript: alert(1)")
+  s = s.replace(/\s+/g, "");
   const lower = s.toLowerCase();
 
+  // 1) чистый javascript: → запрет
   if (lower.startsWith("javascript:")) return fallback;
 
+  // 2) якоря. недопускаем "#javascript:..." → "#"
+  if (lower.startsWith("#")) {
+    const rest = lower.slice(1);
+    if (!rest || rest.startsWith("javascript:")) return "#";
+    return s; // обычные якоря оставляем
+  }
+
+  // 3) белый список
   const allowed = [
     "https://", "http://",
     "ipfs://", "altfs://",
     "data:image/", "data:video/", "data:audio/",
-    "/", "./", "../", "#"
+    "/", "./", "../"
   ];
   if (allowed.some(p => lower.startsWith(p))) return s;
 
   return fallback;
 }
 
-// Базовые стили (оффлайн, без Tailwind)
+
+// -------- Стили (оффлайн) --------
 const BASE_CSS = `
 :root{--bg:#0b0d12;--fg:#e7e9f0;--muted:#9aa3b2;--accent:#5865f2;--card:#12141c}
 *{box-sizing:border-box}
@@ -67,15 +81,14 @@ footer{opacity:.8;padding:24px 0;text-align:center;font-size:14px}
 header.container{padding-top:12px;padding-bottom:0}
 `.trim();
 
+// -------- Рендер --------
 function renderBlocksToHtml(blocks: BlockInstance[]): string {
   return (blocks || [])
     .map((b) => {
       try {
         return serializeBlock(b.type, b.props || {});
       } catch {
-        return `<section class="section"><p class="muted">[Неизвестный блок: ${esc(
-          String(b?.type || "")
-        )}]</p></section>`;
+        return `<section class="section"><p class="muted">[Неизвестный блок: ${esc(String(b?.type || ""))}]</p></section>`;
       }
     })
     .join("\n");
@@ -83,9 +96,7 @@ function renderBlocksToHtml(blocks: BlockInstance[]): string {
 
 function buildIndexHtml(model: SiteModel): string {
   const title = esc(model.title || "AltNet Site");
-  const desc =
-    esc(model.description || "") ||
-    "Статический экспорт сайта, созданного в AltNet Конструкторе.";
+  const desc = esc(model.description || "") || "Статический экспорт сайта, созданного в AltNet Конструкторе.";
   const body = renderBlocksToHtml(model.blocks || []);
 
   const CSP = [
@@ -131,25 +142,122 @@ function buildIndexHtml(model: SiteModel): string {
 </html>`;
 }
 
-function buildManifest(model: SiteModel): string {
+function buildManifest(model: SiteModel, assets: string[]): string {
   const data = {
     name: model.title || "AltNet Site",
     short_name: model.title || "AltNet",
-    description:
-      model.description ||
-      "Статический экспорт сайта, созданного в AltNet Конструкторе.",
+    description: model.description || "Статический экспорт сайта, созданного в AltNet Конструкторе.",
     generatedAt: new Date().toISOString(),
     version: "1.0.0",
+    assets,
   };
   return JSON.stringify(data, null, 2);
 }
 
-export async function exportSiteZip(model: SiteModel): Promise<Blob> {
+// -------- Ассеты (best-effort) --------
+const mimeToExt: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  // SVG в <img> безопасен, но часто ломает CORS; можно включить при необходимости:
+  "image/svg+xml": "svg",
+};
+
+function isHttpUrl(s: string) {
+  const l = s.toLowerCase();
+  return l.startsWith("https://") || l.startsWith("http://");
+}
+
+async function tryFetchImageToZip(zip: JSZip, url: string, nameBase: string): Promise<{ savedPath?: string }> {
+  try {
+    const resp = await fetch(url, { mode: "cors" });
+    if (!resp.ok) return {};
+    const ct = resp.headers.get("content-type") || "";
+    const ext = mimeToExt[ct.split(";")[0].trim()];
+    if (!ext) return {}; // неизвестный MIME — не трогаем
+    const buf = await resp.arrayBuffer();
+    const path = `assets/${nameBase}.${ext}`;
+    zip.file(path, buf);
+    return { savedPath: `./${path}` };
+  } catch {
+    return {};
+  }
+}
+
+function deepClone<T>(x: T): T {
+  return JSON.parse(JSON.stringify(x));
+}
+
+async function bundleImages(modelIn: SiteModel, zip: JSZip, onProgress?: (d: number, t: number) => void): Promise<{ model: SiteModel; assets: string[] }> {
+  const model = deepClone(modelIn);
+  const assets: string[] = [];
+
+  // собираем кандидатов (только type=image и http(s))
+  const candidates: Array<{ b: BlockInstance; idx: number }> = [];
+  model.blocks.forEach((b, i) => {
+    if (b?.type === "image") {
+      const src = String(b?.props?.src || "");
+      if (isHttpUrl(src)) candidates.push({ b, idx: i });
+    }
+  });
+
+  const total = candidates.length;
+  let done = 0;
+  onProgress?.(done, total);
+
+  for (let i = 0; i < candidates.length; i++) {
+    const { b, idx } = candidates[i];
+    const src = String(b?.props?.src || "");
+    const base = `img-${i + 1}`;
+    const res = await tryFetchImageToZip(zip, src, base);
+    if (res.savedPath) {
+      model.blocks[idx].props = { ...(model.blocks[idx].props || {}), src: res.savedPath };
+      assets.push(res.savedPath.replace("./", ""));
+    }
+    done++;
+    onProgress?.(done, total);
+  }
+
+  return { model, assets };
+}
+
+// -------- Публичный API --------
+export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions): Promise<Blob> {
+  const opts: ExportOptions = { bundleAssets: true, ...(options || {}) };
   const zip = new JSZip();
+
+  // 1) Санация URL на уровне модели (доп. защита)
+  const sanitized: SiteModel = {
+    title: modelIn.title,
+    description: modelIn.description,
+    blocks: (modelIn.blocks || []).map((b) => {
+      const p = { ...(b.props || {}) };
+      if (b.type === "image" && typeof p.src === "string") p.src = sanitizeUrl(p.src);
+      if (b.type === "button" && typeof p.href === "string") p.href = sanitizeUrl(p.href || "#");
+      if (b.type === "hero") {
+        if (typeof p.ctaHref === "string") p.ctaHref = sanitizeUrl(p.ctaHref || "#");
+      }
+      return { type: b.type, props: p };
+    }),
+  };
+
+  // 2) При необходимости — подтянуть https-картинки в assets/ и переписать ссылки
+  let model = sanitized;
+  let assets: string[] = [];
+  if (opts.bundleAssets) {
+    const res = await bundleImages(sanitized, zip, opts.onProgress);
+    model = res.model;
+    assets = res.assets;
+  }
+
+  // 3) Файлы ZIP
   zip.file("index.html", buildIndexHtml(model));
   zip.file("styles.css", BASE_CSS);
-  zip.file("manifest.json", buildManifest(model));
-  zip.folder("assets"); // зарезервировано под ассеты (Шаг 2)
+  zip.file("manifest.json", buildManifest(model, assets));
+  zip.folder("assets"); // если ассетов нет — просто пустая папка
+
   return await zip.generateAsync({ type: "blob" });
 }
 
@@ -164,7 +272,7 @@ export function downloadBlob(blob: Blob, filename: string = "altnet-site.zip") {
   URL.revokeObjectURL(href);
 }
 
-// Адаптер из твоего конструктора → модель экспорта с фильтрацией URL.
+// Адаптер из твоего конструктора → модель экспорта с маппингом типов и фильтрацией URL
 export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
   const blocksRaw: any[] = Array.isArray(builderDoc?.blocks) ? builderDoc.blocks : [];
   const blocks: BlockInstance[] = blocksRaw.map((b) => {
