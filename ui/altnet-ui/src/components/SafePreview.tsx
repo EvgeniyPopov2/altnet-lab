@@ -34,6 +34,7 @@ export default function SafePreview({ html }: { html: string }) {
     img,video { max-width:100%; height:auto; border-radius:12px; }
     a { color:#93c5fd; }
     .btn { display:inline-block; padding:10px 14px; border-radius:12px; background:#4f46e5; color:white; text-decoration:none; }
+    .mt-16 { margin-top:16px; }
     h1,h2,h3 { margin:0 0 12px; }
     p { margin:0 0 12px; line-height:1.6; }
 

@@ -68,7 +68,7 @@ function renderDocToHTML(doc: Doc): string {
   <p style="font-size:18px; color:#9aa3b2; margin:0 0 20px;">${escapeHtml(b.subtitle || "")}</p>
   ${
     b.ctaText
-      ? `<a href="${escapeAttr(b.ctaLink || "#")}" style="display:inline-block; padding:10px 16px; border-radius:10px; background:#5865F2; color:#fff; text-decoration:none;">${escapeHtml(
+      ? `<div class="mt-16"><a class="btn" href="${escapeAttr(b.ctaLink || "#")}" rel="noopener noreferrer nofollow">${escapeHtml(
           b.ctaText
         )}</a>`
       : ""
@@ -81,7 +81,7 @@ function renderDocToHTML(doc: Doc): string {
         case "img":
           return `<img src="${escapeAttr(b.cid)}" alt="${escapeAttr(b.alt || "")}" style="max-width:100%; border-radius:12px; margin:12px 0;" />`;
         case "btn":
-          return `<a href="${escapeAttr(b.href)}" style="display:inline-block; padding:8px 14px; border-radius:10px; background:#1f2336; color:#e6e9f4; text-decoration:none; border:1px solid #2a2f45; margin:8px 0;">${escapeHtml(
+          return `<a href="${escapeAttr(b.href)}" rel="noopener noreferrer nofollow" style="display:inline-block; padding:8px 14px; border-radius:10px; background:#1f2336; color:#e6e9f4; text-decoration:none; border:1px solid #2a2f45; margin:8px 0;">${escapeHtml(
             b.label
           )}</a>`;
       }

@@ -72,6 +72,7 @@ img.responsive{max-width:100%;height:auto;border-radius:12px;box-shadow:0 6px 20
 footer{opacity:.8;padding:24px 0;text-align:center;font-size:14px}
 .site-title{font-size:28px;line-height:1.2;margin:16px 0 12px;opacity:.85}
 header.container{padding-top:12px;padding-bottom:0}
+.mt-16{margin-top:16px}
 `.trim();
 
 // -------- Рендер --------
@@ -87,10 +88,19 @@ function renderBlocksToHtml(blocks: BlockInstance[]): string {
     .join("\n");
 }
 
+// Вставляет rel="noopener noreferrer nofollow" на все <a>, если ещё не задан
+function ensureRelOnLinks(html: string): string {
+  return html.replace(/<a\b([^>]*?)>/gi, (m, attrs) => {
+    if (/\brel\s*=/i.test(attrs)) return m; // уже есть rel — не трогаем
+    return `<a${attrs} rel="noopener noreferrer nofollow">`;
+  });
+}
+
 function buildIndexHtml(model: SiteModel): string {
   const title = esc(model.title || "AltNet Site");
   const desc = esc(model.description || "") || "Статический экспорт сайта, созданного в AltNet Конструкторе.";
-  const body = renderBlocksToHtml(model.blocks || []);
+  const bodyRaw = renderBlocksToHtml(model.blocks || []);
+  const body = ensureRelOnLinks(bodyRaw);
 
   const CSP = [
     "default-src 'self'",
@@ -147,40 +157,9 @@ function buildManifest(model: SiteModel, assets: string[]): string {
   return JSON.stringify(data, null, 2);
 }
 
-// -------- Ассеты (best-effort) --------
-const mimeToExt: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/webp": "webp",
-  "image/gif": "gif",
-  // SVG в <img> безопасен, но часто ломает CORS; можно включить при необходимости:
-  "image/svg+xml": "svg",
-};
-
 function isHttpUrl(s: string) {
   const l = s.toLowerCase();
   return l.startsWith("https://") || l.startsWith("http://");
-}
-
-/**
- * Старый вспомогательный метод (оставляю для совместимости).
- * Сейчас мы используем fetchAndCleanImage() + дедуп по SHA-256.
- */
-async function tryFetchImageToZip(zip: JSZip, url: string, nameBase: string): Promise<{ savedPath?: string }> {
-  try {
-    const resp = await fetch(url, { mode: "cors" });
-    if (!resp.ok) return {};
-    const ct = resp.headers.get("content-type") || "";
-    const ext = mimeToExt[ct.split(";")[0].trim()];
-    if (!ext) return {}; // неизвестный MIME — не трогаем
-    const buf = await resp.arrayBuffer();
-    const path = `assets/${nameBase}.${ext}`;
-    zip.file(path, buf);
-    return { savedPath: `./${path}` };
-  } catch {
-    return {};
-  }
 }
 
 function deepClone<T>(x: T): T {

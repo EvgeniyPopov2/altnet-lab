@@ -62,7 +62,7 @@ const Hero: BlockSpec = {
 <section class="section hero">
   <h1>${esc(p.title)}</h1>
   <p>${esc(p.subtitle)}</p>
-  <div style="margin-top:16px">
+  <div class="mt-16">
     <a class="btn" href="${esc(p.ctaHref)}">${esc(p.ctaLabel)}</a>
   </div>
 </section>`.trim();
