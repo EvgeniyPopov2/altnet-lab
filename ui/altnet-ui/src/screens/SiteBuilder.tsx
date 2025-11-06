@@ -446,19 +446,32 @@ export default function SiteBuilder() {
   }, []);
 
   const onExportZip = useCallback(async () => {
-  // 1) адаптируем текущую модель конструктора
-  const model = adaptFromSiteBuilderDoc(doc);
-  // 2) собираем ZIP c бандлом https-картинок
-  const blob = await exportSiteZip(model, { bundleAssets: true });
-  // 3) скачиваем
-  downloadBlob(blob, "altnet-site.zip");
-}, [doc]);
+    // 1) адаптируем текущую модель конструктора
+    const model = adaptFromSiteBuilderDoc(doc);
+    // 2) собираем ZIP c бандлом https-картинок
+    const blob = await exportSiteZip(model, { bundleAssets: true });
+    // 3) скачиваем
+    downloadBlob(blob, "altnet-site.zip");
+  }, [doc]);
 
+  // Отключаем навигацию в превью; Ctrl/⌘+клик — новая вкладка
+  const handlePreviewClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.target as HTMLElement | null;
+    const link = el && el.closest ? (el.closest("a") as HTMLAnchorElement | null) : null;
+    if (!link) return;
+
+    const isNewTab = e.ctrlKey || e.metaKey || e.button === 1;
+    if (isNewTab && link.href) {
+      window.open(link.href, "_blank", "noopener,noreferrer");
+    }
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
 
   return (
-    <div className="h-full grid grid-cols-[420px_1fr]">
+    <div className="h-full grid grid-cols-1 md:grid-cols-3 gap-4">
       {/* Левая панель */}
-      <div className="h-full overflow-y-auto border-r border-[#1c2030] bg-[#0b0e18] p-4">
+      <div className="md:col-span-1 h-full overflow-y-auto border-r border-[#1c2030] bg-[#0b0e18] p-4">
         <div className="mb-4">
           <Field label="Название сайта">
             <input
@@ -501,7 +514,7 @@ export default function SiteBuilder() {
               onChange={(patch) => updateBlock(b.id, patch)}
               onRemove={() => removeBlock(b.id)}
               onDragStartByHandle={onDragStartByHandle}
-              onDragOverCard={(_, id) => {}}
+              onDragOverCard={(e) => onDragOverCard(e)}   // важный фикс: реально предотвращаем default
               onDropOnCard={onDropOnCard}
             />
           ))}
@@ -509,7 +522,10 @@ export default function SiteBuilder() {
       </div>
 
       {/* Предпросмотр */}
-      <div className="h-full overflow-hidden">
+      <div
+        className="md:col-span-2 rounded-2xl p-4 overflow-auto bg-[#0f111a] border border-[#1c2030]"
+        onClick={handlePreviewClick}
+      >
         <SafePreview html={html} />
       </div>
     </div>
