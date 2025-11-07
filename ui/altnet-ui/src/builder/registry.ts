@@ -46,10 +46,15 @@ const Hero: BlockSpec = {
         React.createElement("p", { className: "muted" }, p.subtitle),
         React.createElement(
           "div",
-          { style: { marginTop: 12 } },
+          { className: "mt-16" },
           React.createElement(
             "a",
-            { className: "btn", href: p.ctaHref },
+            { 
+              className: "btn",
+              href: p.ctaHref,
+              rel: p.ctaRel,
+              target: p.ctaTarget,
+            },
             p.ctaLabel
           )
         )
@@ -63,7 +68,7 @@ const Hero: BlockSpec = {
   <h1>${esc(p.title)}</h1>
   <p>${esc(p.subtitle)}</p>
   <div class="mt-16">
-    <a class="btn" href="${esc(p.ctaHref)}">${esc(p.ctaLabel)}</a>
+    <a class="btn" href="${esc(p.ctaHref)}"${p.ctaRel ? ` rel="${esc(p.ctaRel)}"` : ""}${p.ctaTarget ? ` target="${esc(p.ctaTarget)}"` : ""}>${esc(p.ctaLabel)}</a>
   </div>
 </section>`.trim();
   },
@@ -121,7 +126,6 @@ const Image: BlockSpec = {
       React.createElement("img", {
         className: "responsive",
         loading: "lazy",
-        decoding: "async",
         src: p.src,
         alt: p.alt,
       })
@@ -129,7 +133,7 @@ const Image: BlockSpec = {
   },
   serialize: (props) => {
     const p = { ...Image.defaults, ...props };
-    return `<section class="section"><img class="responsive" loading="lazy" decoding="async" src="${esc(
+    return `<section class="section"><img class="responsive" src="${esc(
       p.src
     )}" alt="${esc(p.alt)}"/></section>`;
   },
@@ -146,16 +150,19 @@ const Button: BlockSpec = {
       { className: "section" },
       React.createElement(
         "a",
-        { className: "btn", href: p.href },
+        {
+           className: "btn",
+           href: p.href,
+           rel: p.rel,
+           target: p.target, 
+          },
         String(p.label)
       )
     );
   },
   serialize: (props) => {
     const p = { ...Button.defaults, ...props };
-    return `<section class="section"><a class="btn" href="${esc(
-      p.href
-    )}">${esc(String(p.label))}</a></section>`;
+    return `<section class="section"><a class="btn" href="${esc(p.href)}"${p.rel ? ` rel="${esc(p.rel)}"` : ""}${p.target ? ` target="${esc(p.target)}"` : ""}>${esc(String(p.label))}</a></section>`;
   },
 };
 

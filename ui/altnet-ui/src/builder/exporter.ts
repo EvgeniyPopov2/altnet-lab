@@ -293,6 +293,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
       case "hero": {
         const href = sanitizeUrl(b.ctaLink || "#");
         const rel = externalLinkRels(href);
+        const target = href.startsWith("http") ? "_blank" : undefined; // ДОБАВКА
         return {
           type: "hero",
           props: {
@@ -301,6 +302,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
             ctaLabel: String(b.ctaText || "Подробнее"),
             ctaHref: href,
             ...(rel ? { ctaRel: rel } : {}),
+            ...(target ? { ctaTarget: target } : {}), // ДОБАВКА
           },
         };
       }
@@ -313,7 +315,8 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
       case "btn": {
         const href = sanitizeUrl(b.href || "#");
         const rel = externalLinkRels(href);
-        return { type: "button", props: { label: String(b.label || "Кнопка"), href, ...(rel ? { rel } : {}) } };
+        const target = href.startsWith("http") ? "_blank" : undefined; // ДОБАВКА
+        return { type: "button", props: { label: String(b.label || "Кнопка"), href, ...(rel ? { rel } : {}), ...(target ? { target } : {}), } };
       }
       default:
         return { type: "unknown", props: { raw: b } };
