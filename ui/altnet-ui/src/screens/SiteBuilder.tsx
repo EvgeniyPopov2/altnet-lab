@@ -47,12 +47,14 @@ type Block = HeroBlock | H1Block | PBlock | ImgBlock | BtnBlock;
 
 type Doc = {
   title: string;
+  description?: string; // новое поле для meta description
   blocks: Block[];
 };
 const STORAGE_KEY = "altnet.sitebuilder.v1";
 
 const DEFAULT_DOC: Doc = {
   title: "Мой сайт",
+  description: "", // ← добавили meta description (по умолчанию пусто)
   blocks: [
     {
       id: Math.random().toString(36).slice(2, 9),
@@ -573,6 +575,30 @@ export default function SiteBuilder() {
               spellCheck={false}
             />
           </Field>
+        </div>
+
+        <div className="mb-4">
+          {(() => {
+            const desc = doc.description || "";
+            const max = 160;
+            const left = max - desc.length;
+            const tooLong = left < 0;
+            return (
+              <Field label="Описание сайта (meta description, до 160 символов)">
+                <textarea
+                  className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#cfd5e6] min-h-[72px] resize-vertical ${tooLong ? "border-[#ff6b6b] focus:border-[#ff6b6b]" : "border-[#1f2751] focus:border-[#2a3a8f]"
+                    }`}
+                  value={desc}
+                  onChange={(e) => setDoc((d) => ({ ...d, description: e.target.value }))}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <div className="text-xs mt-1" style={{ color: tooLong ? "#ff9b9b" : "#9aa3b2" }}>
+                  Осталось {Math.max(0, left)} символов{tooLong ? " (лишнее не попадёт в сниппеты)" : ""}
+                </div>
+              </Field>
+            );
+          })()}
         </div>
 
         {/* Кнопки действий */}
