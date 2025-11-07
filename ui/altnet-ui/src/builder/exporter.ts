@@ -66,6 +66,7 @@ p{margin:8px 0}
 .hero h1{font-size:48px;margin:0 0 12px}
 .hero p{font-size:18px;color:var(--muted)}
 .btn{display:inline-block;padding:10px 16px;border-radius:10px;background:var(--accent);color:white;font-weight:600}
+.btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .btn.secondary{background:#2a2e45}
 img.responsive{max-width:100%;height:auto;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,0.25)}
 .card{background:var(--card);border:1px solid rgba(255,255,255,0.06);border-radius:16px;padding:20px}

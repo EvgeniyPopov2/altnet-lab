@@ -133,9 +133,7 @@ const Image: BlockSpec = {
   },
   serialize: (props) => {
     const p = { ...Image.defaults, ...props };
-    return `<section class="section"><img class="responsive" src="${esc(
-      p.src
-    )}" alt="${esc(p.alt)}"/></section>`;
+    return `<section class="section"><img class="responsive" src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"/></section>`; 
   },
 };
 
