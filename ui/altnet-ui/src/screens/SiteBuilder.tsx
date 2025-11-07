@@ -250,20 +250,32 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                 spellCheck={false}
               />
             </Field>
-            <Field label="Ссылка">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.ctaLink || ""}
-                onChange={(e) => onChange({ ctaLink: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </Field>
+            {(() => {
+              const link = b.ctaLink || "";
+              const ok = isSafeLink(link);
+              return (
+                <Field label="Ссылка">
+                  <input
+                    className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
+                      }`}
+                    value={link}
+                    onChange={(e) => onChange({ ctaLink: e.target.value } as Partial<Block>)}
+                    onMouseDownCapture={stopAll}
+                    onKeyDownCapture={stopAll}
+                    onClickCapture={stopAll}
+                    onDragStart={preventDrag}
+                    draggable={false}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  {!ok && (
+                    <div className="text-xs text-[#ff9b9b] mt-1">
+                      Разрешено: #якорь, /путь, ./относительный, http(s)://, altfs://, ipfs://
+                    </div>
+                  )}
+                </Field>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -304,21 +316,33 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
 
       {b.type === "img" && (
         <div className="grid gap-3">
-          <Field label="CID / URL">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={b.cid}
-              onChange={(e) => onChange({ cid: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll}
-              onKeyDownCapture={stopAll}
-              onClickCapture={stopAll}
-              onDragStart={preventDrag}
-              draggable={false}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="altfs://<CID> или https://..."
-            />
-          </Field>
+          {(() => {
+            const src = b.cid || "";
+            const ok = isSafeImageSrc(src);
+            return (
+              <Field label="CID / URL">
+                <input
+                  className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
+                    }`}
+                  value={src}
+                  onChange={(e) => onChange({ cid: e.target.value } as Partial<Block>)}
+                  onMouseDownCapture={stopAll}
+                  onKeyDownCapture={stopAll}
+                  onClickCapture={stopAll}
+                  onDragStart={preventDrag}
+                  draggable={false}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="altfs://<CID> или https://..."
+                />
+                {!ok && (
+                  <div className="text-xs text-[#ff9b9b] mt-1">
+                    Разрешено: data:image/*, http(s)://, altfs://, ipfs://
+                  </div>
+                )}
+              </Field>
+            );
+          })()}
           <Field label="Описание (alt)">
             <input
               className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
@@ -352,20 +376,32 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
               spellCheck={false}
             />
           </Field>
-          <Field label="Ссылка">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={b.href}
-              onChange={(e) => onChange({ href: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll}
-              onKeyDownCapture={stopAll}
-              onClickCapture={stopAll}
-              onDragStart={preventDrag}
-              draggable={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
+          {(() => {
+            const link = b.href || "";
+            const ok = isSafeLink(link);
+            return (
+              <Field label="Ссылка">
+                <input
+                  className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
+                    }`}
+                  value={link}
+                  onChange={(e) => onChange({ href: e.target.value } as Partial<Block>)}
+                  onMouseDownCapture={stopAll}
+                  onKeyDownCapture={stopAll}
+                  onClickCapture={stopAll}
+                  onDragStart={preventDrag}
+                  draggable={false}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                {!ok && (
+                  <div className="text-xs text-[#ff9b9b] mt-1">
+                    Разрешено: #якорь, /путь, ./относительный, http(s)://, altfs://, ipfs://
+                  </div>
+                )}
+              </Field>
+            );
+          })()}
         </div>
       )}
     </div>
@@ -394,6 +430,27 @@ function labelOf(t: BlockType) {
     case "btn":
       return "кнопка";
   }
+}
+
+// ── Валидация URL'ов для полей
+function isSafeLink(href?: string): boolean {
+  const s = (href || "").trim();
+  if (!s) return true;                 // пустое не ругаем в редакторе
+  if (s.startsWith("#")) return true;  // якорь
+  if (s.startsWith("/")) return true;  // абсолютный относительный путь
+  if (/^(\.\/|\.\.\/)/.test(s)) return true; // относительный путь
+  if (/^https?:\/\//i.test(s)) return true;  // внешние http/https
+  if (/^(altfs:|ipfs:)/i.test(s)) return true;
+  return false;
+}
+
+function isSafeImageSrc(src?: string): boolean {
+  const s = (src || "").trim();
+  if (!s) return false;                       // для картинки пустое — не ок
+  if (/^data:image\//i.test(s)) return true;  // data: для изображений
+  if (/^https?:\/\//i.test(s)) return true;
+  if (/^(altfs:|ipfs:)/i.test(s)) return true;
+  return false;
 }
 
 /* =========================
