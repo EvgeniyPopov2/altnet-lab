@@ -588,24 +588,57 @@ export default function SiteBuilder() {
         .map((b: any) => {
           if (!b || !okTypes.has(b.type)) return null;
           const id = uid();
+
+          // ВАЖНО: читаем поля из b.props, если они есть (экспортная модель),
+          // иначе — с верхнего уровня (старый формат).
+          const p = (b && typeof b.props === "object" && b.props) || b;
+
           switch (b.type as BlockType) {
             case "hero":
               return {
                 id,
                 type: "hero",
-                title: String(b.title ?? ""),
-                subtitle: String(b.subtitle ?? ""),
-                ctaText: String(b.ctaText ?? b.ctaLabel ?? ""),
-                ctaLink: String(b.ctaLink ?? b.ctaHref ?? "#"),
+                title: String(p.title ?? ""),
+                subtitle: String(p.subtitle ?? ""),
+                // ctaText | ctaLabel
+                ctaText: String(p.ctaText ?? p.ctaLabel ?? ""),
+                // ctaLink | ctaHref
+                ctaLink: String(p.ctaLink ?? p.ctaHref ?? "#"),
               } as HeroBlock;
+
             case "h1":
-              return { id, type: "h1", text: String(b.text ?? "") } as H1Block;
+              return {
+                id,
+                type: "h1",
+                // допускаем импорт, где заголовок лежит в title/text
+                text: String(p.text ?? p.title ?? ""),
+              } as H1Block;
+
             case "p":
-              return { id, type: "p", text: String(b.text ?? "") } as PBlock;
+              return {
+                id,
+                type: "p",
+                text: String(p.text ?? ""),
+              } as PBlock;
+
             case "img":
-              return { id, type: "img", cid: String(b.cid ?? b.src ?? ""), alt: String(b.alt ?? "") } as ImgBlock;
+              return {
+                id,
+                type: "img",
+                // cid | src
+                cid: String(p.cid ?? p.src ?? ""),
+                alt: String(p.alt ?? ""),
+              } as ImgBlock;
+
             case "btn":
-              return { id, type: "btn", label: String(b.label ?? b.text ?? "Кнопка"), href: String(b.href ?? b.url ?? "#"), } as BtnBlock;
+              return {
+                id,
+                type: "btn",
+                // label | text
+                label: String(p.label ?? p.text ?? "Кнопка"),
+                // href | url
+                href: String(p.href ?? p.url ?? "#"),
+              } as BtnBlock;
           }
         })
         .filter(Boolean) as Block[];
