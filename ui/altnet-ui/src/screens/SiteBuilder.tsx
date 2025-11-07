@@ -83,6 +83,17 @@ function uid() {
   return Math.random().toString(36).slice(2, 9);
 }
 
+// Делаем "человечное" имя файла и оставляем кириллицу
+function prettyFileName(title: string, ext: string) {
+  const base = (title || "site")
+    .normalize("NFC")
+    .replace(/[\\/:*?"<>|]+/g, " ") // запрещённые в Windows символы
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60); // не длиннее ~60 символов, чтобы не было проблем
+  return (base || "site") + "." + ext;
+}
+
 /* =========================
  * Рендер HTML для предпросмотра
  * ========================= */
@@ -475,14 +486,6 @@ export default function SiteBuilder() {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
 
   const html = useMemo(() => renderDocToHTML(doc), [doc]);
-
-function safeFileName(s: string) {
-  const base = (s || "altnet-site")
-    .replace(/\s+/g, "-")
-    .replace(/[^a-zA-Z0-9._-]/g, "")
-    .slice(0, 64) || "altnet-site";
-  return base;
-}
   
   // Автосохранение в localStorage
   useEffect(() => {
@@ -561,7 +564,8 @@ function safeFileName(s: string) {
   const onExportZip = useCallback(async () => {
     const model = adaptFromSiteBuilderDoc(doc);
     const blob = await exportSiteZip(model, { bundleAssets: true });
-    downloadBlob(blob, `${safeFileName(doc.title || "altnet-site")}.zip`);
+    const fname = prettyFileName(doc.title || "site", "zip");
+    downloadBlob(blob, fname);
   }, [doc]);
   
   // Импорт модели из JSON
@@ -663,7 +667,8 @@ function safeFileName(s: string) {
   const onExportJson = useCallback(() => {
     const model = adaptFromSiteBuilderDoc(doc);
     const blob = new Blob([JSON.stringify(model, null, 2)], { type: "application/json" });
-    downloadBlob(blob, "altnet-site.json");
+    const fname = prettyFileName(doc.title || "site", "json");
+    downloadBlob(blob, fname);
   }, [doc]); 
 
   const resetDoc = useCallback(() => {
