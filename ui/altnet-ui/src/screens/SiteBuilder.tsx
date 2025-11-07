@@ -160,10 +160,11 @@ type BlockCardProps = {
   onDragStartByHandle(e: React.DragEvent, id: string): void;
   onDragOverCard(e: React.DragEvent, id: string): void;
   onDropOnCard(e: React.DragEvent, id: string): void;
+  onDuplicate(): void;
 };
 
 const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
-  const { block: b, index, onChange, onRemove, onDragStartByHandle, onDragOverCard, onDropOnCard } =
+  const { block: b, index, onChange, onRemove, onDuplicate, onDragStartByHandle, onDragOverCard, onDropOnCard } =
     props;
 
   const stopAll = useCallback((e: React.SyntheticEvent) => {
@@ -194,6 +195,18 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           >
             ≡
           </button>
+           
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate();
+            }}
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8ffc1] hover:bg-[#1a2e1f]"
+            title="Создать копию блока ниже"
+          >
+            Дублировать
+          </button> 
+
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -526,12 +539,29 @@ export default function SiteBuilder() {
     setDoc((prev) => ({ ...prev, blocks: prev.blocks.filter((b) => b.id !== id) }));
   }, []);
 
+  const duplicateBlock = useCallback((id: string) => {
+    setDoc((prev) => {
+      const arr = [...prev.blocks];
+      const idx = arr.findIndex((b) => b.id === id);
+      if (idx < 0) return prev;
+      const copy = { ...(arr[idx] as any), id: uid() } as Block; // новый id
+      arr.splice(idx + 1, 0, copy); // вставляем КОПИЮ ниже исходного
+      return { ...prev, blocks: arr };
+    });
+  }, []);
+
   const onExportZip = useCallback(async () => {
     const model = adaptFromSiteBuilderDoc(doc);
     const blob = await exportSiteZip(model, { bundleAssets: true });
     downloadBlob(blob, "altnet-site.zip");
   }, [doc]);
   
+  const onExportJson = useCallback(() => {
+    const model = adaptFromSiteBuilderDoc(doc);
+    const blob = new Blob([JSON.stringify(model, null, 2)], { type: "application/json" });
+    downloadBlob(blob, "altnet-site.json");
+  }, [doc]); 
+
   const resetDoc = useCallback(() => {
     setDoc(DEFAULT_DOC);
     try {
@@ -612,6 +642,14 @@ export default function SiteBuilder() {
           </button>
 
           <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={onExportJson}
+            title="Скачать модель сайта (JSON)"
+          >
+            🧾 Скачать JSON
+          </button>
+
+          <button
             className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#ffb3a8] hover:bg-[#241a24]"
             onClick={resetDoc}
             title="Сбросить документ к заводским значениям"
@@ -638,6 +676,7 @@ export default function SiteBuilder() {
               index={i}
               onChange={(patch) => updateBlock(b.id, patch)}
               onRemove={() => removeBlock(b.id)}
+              onDuplicate={() => duplicateBlock(b.id)}    // ← ДОБАВЛЕНО
               onDragStartByHandle={onDragStartByHandle}
               onDragOverCard={(e) => onDragOverCard(e)}   // предотвращаем default
               onDropOnCard={onDropOnCard}
