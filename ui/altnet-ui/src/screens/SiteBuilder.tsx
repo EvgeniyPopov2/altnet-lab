@@ -581,6 +581,7 @@ export default function SiteBuilder() {
       const okTypes = new Set<BlockType>(["hero", "h1", "p", "img", "btn"]);
 
       const title = typeof (data as any).title === "string" ? (data as any).title : "Мой сайт";
+      const description = typeof (data as any).description === "string" ? (data as any).description : "";
       const blocksRaw: any[] = (data as any).blocks;
 
       const blocks: Block[] = blocksRaw
@@ -594,17 +595,17 @@ export default function SiteBuilder() {
                 type: "hero",
                 title: String(b.title ?? ""),
                 subtitle: String(b.subtitle ?? ""),
-                ctaText: String(b.ctaText ?? ""),
-                ctaLink: String(b.ctaLink ?? "#"),
+                ctaText: String(b.ctaText ?? b.ctaLabel ?? ""),
+                ctaLink: String(b.ctaLink ?? b.ctaHref ?? "#"),
               } as HeroBlock;
             case "h1":
               return { id, type: "h1", text: String(b.text ?? "") } as H1Block;
             case "p":
               return { id, type: "p", text: String(b.text ?? "") } as PBlock;
             case "img":
-              return { id, type: "img", cid: String(b.cid ?? ""), alt: String(b.alt ?? "") } as ImgBlock;
+              return { id, type: "img", cid: String(b.cid ?? b.src ?? ""), alt: String(b.alt ?? "") } as ImgBlock;
             case "btn":
-              return { id, type: "btn", label: String(b.label ?? "Кнопка"), href: String(b.href ?? "#") } as BtnBlock;
+              return { id, type: "btn", label: String(b.label ?? b.text ?? "Кнопка"), href: String(b.href ?? b.url ?? "#"), } as BtnBlock;
           }
         })
         .filter(Boolean) as Block[];
@@ -612,7 +613,7 @@ export default function SiteBuilder() {
       if (!blocks.length) throw new Error("В файле нет валидных блоков.");
 
       if (!confirm("Импортировать JSON и заменить текущий документ?")) return;
-      setDoc({ title, blocks });
+      setDoc({ title, description, blocks });
     } catch (err: any) {
       alert("Не удалось импортировать JSON: " + (err?.message || String(err)));
     }
