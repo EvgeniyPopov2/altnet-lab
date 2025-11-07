@@ -475,6 +475,14 @@ export default function SiteBuilder() {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
 
   const html = useMemo(() => renderDocToHTML(doc), [doc]);
+
+function safeFileName(s: string) {
+  const base = (s || "altnet-site")
+    .replace(/\s+/g, "-")
+    .replace(/[^a-zA-Z0-9._-]/g, "")
+    .slice(0, 64) || "altnet-site";
+  return base;
+}
   
   // Автосохранение в localStorage
   useEffect(() => {
@@ -553,7 +561,7 @@ export default function SiteBuilder() {
   const onExportZip = useCallback(async () => {
     const model = adaptFromSiteBuilderDoc(doc);
     const blob = await exportSiteZip(model, { bundleAssets: true });
-    downloadBlob(blob, "altnet-site.zip");
+    downloadBlob(blob, `${safeFileName(doc.title || "altnet-site")}.zip`);
   }, [doc]);
   
   // Импорт модели из JSON

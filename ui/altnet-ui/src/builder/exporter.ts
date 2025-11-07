@@ -104,7 +104,7 @@ function ensureRelOnLinks(html: string): string {
   });
 }
 
-function buildIndexHtml(model: SiteModel): string {
+function buildIndexHtml(model: SiteModel, ogImage?: string): string {
   const title = esc(model.title || "AltNet Site");
   const desc = esc(model.description || "") || "Статический экспорт сайта, созданного в AltNet Конструкторе.";
   const bodyRaw = renderBlocksToHtml(model.blocks || []);
@@ -141,6 +141,14 @@ function buildIndexHtml(model: SiteModel): string {
 <meta name="color-scheme" content="dark light"/>
 <link rel="stylesheet" href="./styles.css"/>
 <link rel="icon" href="./favicon.svg" type="image/svg+xml"/>
+<meta property="og:title" content="${title}"/>
+<meta property="og:description" content="${desc}"/>
+<meta property="og:type" content="website"/>
+${ogImage ? `<meta property="og:image" content="${esc(ogImage)}"/>` : ""}
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="${title}"/>
+<meta name="twitter:description" content="${desc}"/>
+${ogImage ? `<meta name="twitter:image" content="${esc(ogImage)}"/>` : ""}
 </head>
 <body>
   ${header}
@@ -226,6 +234,20 @@ async function bundleImages(
   return { model, assets };
 }
 
+function pickOgImage(model: SiteModel, assets: string[]): string {
+  // 1) если есть подтянутые ассеты — берём первый файл в assets/
+  const first = assets.find(a => /^assets\//.test(a));
+  if (first) return `./${first}`;
+
+  // 2) иначе — ищем первый image-блок с http(s)
+  const img = (model.blocks || []).find(b => b.type === "image" && typeof (b as any)?.props?.src === "string") as any;
+  const src = img?.props?.src || "";
+  if (/^https?:\/\//i.test(src)) return src;
+
+  // 3) запасной вариант
+  return "./favicon.svg";
+}
+
 // -------- Публичный API --------
 export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions): Promise<Blob> {
   const opts: ExportOptions = { bundleAssets: true, ...(options || {}) };
@@ -269,9 +291,11 @@ export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions)
     assets = res.assets;
   }
 
+  const ogImage = pickOgImage(model, assets);
+
   // 3) Файлы ZIP
   zip.file("favicon.svg", FAVICON_SVG);
-  zip.file("index.html", buildIndexHtml(model));
+  zip.file("index.html", buildIndexHtml(model, ogImage));
   zip.file("styles.css", BASE_CSS);
   zip.file("manifest.json", buildManifest(model, assets));
   zip.folder("assets"); // если ассетов нет — просто пустая папка
