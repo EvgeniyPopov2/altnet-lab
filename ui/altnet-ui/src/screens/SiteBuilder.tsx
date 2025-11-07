@@ -172,10 +172,12 @@ type BlockCardProps = {
   onDragOverCard(e: React.DragEvent, id: string): void;
   onDropOnCard(e: React.DragEvent, id: string): void;
   onDuplicate(): void;
+  onMoveUp(id: string): void;
+  onMoveDown(id: string): void;
 };
 
 const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
-  const { block: b, index, onChange, onRemove, onDuplicate, onDragStartByHandle, onDragOverCard, onDropOnCard } =
+  const { block: b, index, onChange, onRemove, onDuplicate, onDragStartByHandle, onDragOverCard, onDropOnCard, onMoveUp, onMoveDown } =
     props;
 
   const stopAll = useCallback((e: React.SyntheticEvent) => {
@@ -227,6 +229,25 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           >
             Удалить
           </button>
+          
+          <button
+            title="Переместить вверх"
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={(e) => { e.stopPropagation(); onMoveUp(b.id); }}
+            aria-label="Переместить блок вверх"
+          >
+            ↑
+          </button>
+
+          <button
+            title="Переместить вниз"
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={(e) => { e.stopPropagation(); onMoveDown(b.id); }}
+            aria-label="Переместить блок вниз"
+          >
+            ↓
+          </button>
+
         </div>
       </div>
 
@@ -550,6 +571,22 @@ export default function SiteBuilder() {
     setDoc((prev) => ({ ...prev, blocks: prev.blocks.filter((b) => b.id !== id) }));
   }, []);
 
+  const moveBlock = useCallback((id: string, dir: -1 | 1) => {
+    setDoc((prev) => {
+      const i = prev.blocks.findIndex((x) => x.id === id);
+      if (i < 0) return prev;
+      const j = i + dir;
+      if (j < 0 || j >= prev.blocks.length) return prev;
+      const arr = [...prev.blocks];
+      const [moved] = arr.splice(i, 1);
+      arr.splice(j, 0, moved);
+      return { ...prev, blocks: arr };
+    });
+  }, []);
+
+  const moveUp = useCallback((id: string) => moveBlock(id, -1), [moveBlock]);
+  const moveDown = useCallback((id: string) => moveBlock(id, 1), [moveBlock]);
+
   const duplicateBlock = useCallback((id: string) => {
     setDoc((prev) => {
       const arr = [...prev.blocks];
@@ -805,6 +842,8 @@ export default function SiteBuilder() {
               onDragStartByHandle={onDragStartByHandle}
               onDragOverCard={(e) => onDragOverCard(e)}   // предотвращаем default
               onDropOnCard={onDropOnCard}
+              onMoveUp={moveUp}
+              onMoveDown={moveDown}
             />
           ))}
         </div>
