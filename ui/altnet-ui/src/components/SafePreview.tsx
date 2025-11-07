@@ -73,7 +73,7 @@ ${clean}
       ref={iframeRef}
       tabIndex={-1}
       onLoad={() => { iframeRef.current?.blur(); }}
-      sandbox=""
+      sandbox="allow-popups"
       srcDoc={doc}
       className="w-full h-full rounded-2xl border border-white/10 bg-black"
       title="SafePreview"
