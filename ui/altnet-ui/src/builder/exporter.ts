@@ -81,6 +81,8 @@ header.container{padding-top:12px;padding-bottom:0}
 .mb-24{margin-bottom:24px}
 `.trim();
 
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#0b0d12"/><path d="M20 36l8 8 16-24" fill="none" stroke="#5865F2" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
 // -------- Рендер --------
 function renderBlocksToHtml(blocks: BlockInstance[]): string {
   return (blocks || [])
@@ -138,6 +140,7 @@ function buildIndexHtml(model: SiteModel): string {
 <meta name="referrer" content="no-referrer"/>
 <meta name="color-scheme" content="dark light"/>
 <link rel="stylesheet" href="./styles.css"/>
+<link rel="icon" href="./favicon.svg" type="image/svg+xml"/>
 </head>
 <body>
   ${header}
@@ -267,6 +270,7 @@ export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions)
   }
 
   // 3) Файлы ZIP
+  zip.file("favicon.svg", FAVICON_SVG);
   zip.file("index.html", buildIndexHtml(model));
   zip.file("styles.css", BASE_CSS);
   zip.file("manifest.json", buildManifest(model, assets));
