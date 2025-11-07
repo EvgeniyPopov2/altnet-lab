@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import SafePreview from "../components/SafePreview";
 import { exportSiteZip, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
 
@@ -49,6 +49,33 @@ type Doc = {
   title: string;
   blocks: Block[];
 };
+const STORAGE_KEY = "altnet.sitebuilder.v1";
+
+const DEFAULT_DOC: Doc = {
+  title: "Мой сайт",
+  blocks: [
+    {
+      id: Math.random().toString(36).slice(2, 9),
+      type: "hero",
+      title: "Заголовок героя",
+      subtitle: "Короткий подзаголовок",
+      ctaText: "Подробнее",
+      ctaLink: "#",
+    },
+  ],
+};
+
+function loadFromStorage(): Doc | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.blocks)) return null;
+    return parsed as Doc;
+  } catch {
+    return null;
+  }
+}
 
 function uid() {
   return Math.random().toString(36).slice(2, 9);
@@ -373,21 +400,16 @@ function labelOf(t: BlockType) {
  * Основной экран
  * ========================= */
 export default function SiteBuilder() {
-  const [doc, setDoc] = useState<Doc>(() => ({
-    title: "Мой сайт",
-    blocks: [
-      {
-        id: uid(),
-        type: "hero",
-        title: "Заголовок героя",
-        subtitle: "Короткий подзаголовок",
-        ctaText: "Подробнее",
-        ctaLink: "#",
-      },
-    ],
-  }));
+  const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
 
   const html = useMemo(() => renderDocToHTML(doc), [doc]);
+  
+  // Автосохранение в localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
+    } catch {}
+  }, [doc]);
 
   // DnD состояние
   const dragFromId = useRef<string | null>(null);
@@ -450,6 +472,13 @@ export default function SiteBuilder() {
     const blob = await exportSiteZip(model, { bundleAssets: true });
     downloadBlob(blob, "altnet-site.zip");
   }, [doc]);
+  
+  const resetDoc = useCallback(() => {
+    setDoc(DEFAULT_DOC);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+  }, []);
 
   const handlePreviewClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const el = e.target as HTMLElement | null;
@@ -497,6 +526,14 @@ export default function SiteBuilder() {
             title="Скачать ZIP (index.html + styles.css + manifest.json)"
           >
             ⬇️ Экспорт статического сайта (ZIP)
+          </button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#ffb3a8] hover:bg-[#241a24]"
+            onClick={resetDoc}
+            title="Сбросить документ к заводским значениям"
+          >
+            ↩️ Сбросить
           </button>
         </div>
 
