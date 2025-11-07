@@ -556,6 +556,68 @@ export default function SiteBuilder() {
     downloadBlob(blob, "altnet-site.zip");
   }, [doc]);
   
+  // Импорт модели из JSON
+  const importJsonInputRef = useRef<HTMLInputElement>(null);
+
+  const onImportJsonClick = () => {
+    importJsonInputRef.current?.click();
+  };
+
+  const onImportJsonChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    // сбрасываем value, чтобы повторно можно было выбрать тот же файл
+    e.target.value = "";
+    if (!f) return;
+
+    try {
+      const text = await f.text();
+      const data = JSON.parse(text);
+
+      // очень лёгкая валидация структуры
+      if (!data || typeof data !== "object" || !Array.isArray((data as any).blocks)) {
+        throw new Error("Ожидался объект с массивом blocks.");
+      }
+
+      const okTypes = new Set<BlockType>(["hero", "h1", "p", "img", "btn"]);
+
+      const title = typeof (data as any).title === "string" ? (data as any).title : "Мой сайт";
+      const blocksRaw: any[] = (data as any).blocks;
+
+      const blocks: Block[] = blocksRaw
+        .map((b: any) => {
+          if (!b || !okTypes.has(b.type)) return null;
+          const id = uid();
+          switch (b.type as BlockType) {
+            case "hero":
+              return {
+                id,
+                type: "hero",
+                title: String(b.title ?? ""),
+                subtitle: String(b.subtitle ?? ""),
+                ctaText: String(b.ctaText ?? ""),
+                ctaLink: String(b.ctaLink ?? "#"),
+              } as HeroBlock;
+            case "h1":
+              return { id, type: "h1", text: String(b.text ?? "") } as H1Block;
+            case "p":
+              return { id, type: "p", text: String(b.text ?? "") } as PBlock;
+            case "img":
+              return { id, type: "img", cid: String(b.cid ?? ""), alt: String(b.alt ?? "") } as ImgBlock;
+            case "btn":
+              return { id, type: "btn", label: String(b.label ?? "Кнопка"), href: String(b.href ?? "#") } as BtnBlock;
+          }
+        })
+        .filter(Boolean) as Block[];
+
+      if (!blocks.length) throw new Error("В файле нет валидных блоков.");
+
+      if (!confirm("Импортировать JSON и заменить текущий документ?")) return;
+      setDoc({ title, blocks });
+    } catch (err: any) {
+      alert("Не удалось импортировать JSON: " + (err?.message || String(err)));
+    }
+  };
+
   const onExportJson = useCallback(() => {
     const model = adaptFromSiteBuilderDoc(doc);
     const blob = new Blob([JSON.stringify(model, null, 2)], { type: "application/json" });
@@ -640,6 +702,22 @@ export default function SiteBuilder() {
           >
             ⬇️ Экспорт статического сайта (ZIP)
           </button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={onImportJsonClick}
+            title="Загрузить *.json с моделью сайта"
+          >
+            ⬆️ Импорт модели (JSON)
+          </button>
+
+          <input
+            ref={importJsonInputRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={onImportJsonChange}
+          /> 
 
           <button
             className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
