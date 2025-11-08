@@ -162,7 +162,7 @@ const Button: BlockSpec = {
   serialize: (props) => {
     const p = { ...Button.defaults, ...props };
     const cls = p.variant === "secondary" ? "btn secondary" : "btn";
-    return `<section class="section"><a class="${cls}" href="${esc(p.href)}${p.rel ? `" rel="${esc(p.rel)}` : ""}${p.target ? `" target="${esc(p.target)}` : ""}">${esc(String(p.label))}</a></section>`;
+    return `<section class="section"><a class="${cls}" href="${esc(p.href)}"${p.rel ? ` rel="${esc(p.rel)}"` : ""}${p.target ? ` target="${esc(p.target)}"` : ""}>${esc(String(p.label))}</a></section>`;
   },
 };
 
