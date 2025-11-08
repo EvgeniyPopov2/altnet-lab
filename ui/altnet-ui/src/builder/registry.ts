@@ -166,6 +166,50 @@ const Button: BlockSpec = {
   },
 };
 
+const Cols2: BlockSpec = {
+  id: "cols2",
+  name: "Две колонки (текст + картинка)",
+  defaults: {
+    title: "Заголовок секции",
+    text: "Описание секции. Короткий абзац текста.",
+    img: "https://placehold.co/640x360/png",
+    alt: "Иллюстрация",
+    ratio: "6-6",         // варианты: "5-7" | "6-6" | "7-5"
+    reverse: false        // менять порядок (картинка слева/справа)
+  },
+  render: ({ props }) => {
+    const p = { ...Cols2.defaults, ...props };
+    const [l, r] = String(p.ratio || "6-6").split("-");
+    // порядок колонок
+    const left = React.createElement("div", { className: `col c-xs-12 c-md-${l}` },
+      React.createElement("h2", null, p.title),
+      React.createElement("p", null, p.text)
+    );
+    const right = React.createElement("div", { className: `col c-xs-12 c-md-${r}` },
+      React.createElement("img", { className: "responsive", loading: "lazy", src: p.img, alt: p.alt })
+    );
+    return React.createElement(
+      "section",
+      { className: "section" },
+      React.createElement("div", { className: "row" }, p.reverse ? [right, left] : [left, right])
+    );
+  },
+  serialize: (props) => {
+    const p = { ...Cols2.defaults, ...props };
+    const [l, r] = String(p.ratio || "6-6").split("-");
+    const left = `
+<div class="col c-xs-12 c-md-${l}">
+  <h2>${esc(p.title)}</h2>
+  <p>${esc(p.text)}</p>
+</div>`.trim();
+    const right = `
+<div class="col c-xs-12 c-md-${r}">
+  <img class="responsive" src="${esc(p.img)}" alt="${esc(p.alt)}"/>
+</div>`.trim();
+    return `<section class="section"><div class="row">${p.reverse ? right + left : left + right}</div></section>`;
+  }
+};
+
 // Регистр
 const BLOCKS: Record<string, BlockSpec> = {
   [Hero.id]: Hero,
@@ -173,6 +217,7 @@ const BLOCKS: Record<string, BlockSpec> = {
   [Text.id]: Text,
   [Image.id]: Image,
   [Button.id]: Button,
+  [Cols2.id]: Cols2,
 };
 
 // API реестра

@@ -12,7 +12,7 @@ const notEmpty = (s?: string) => !!(s && s.trim().length > 0);
 /* =========================
  * Типы документа и блоков
  * ========================= */
-type BlockType = "hero" | "h1" | "p" | "img" | "btn";
+type BlockType = "hero" | "h1" | "p" | "img" | "btn" | "cols2";
 
 type HeroBlock = {
   id: string;
@@ -50,7 +50,20 @@ type BtnBlock = {
   variant?: "primary" | "secondary";
 };
 
-type Block = HeroBlock | H1Block | PBlock | ImgBlock | BtnBlock;
+type ColsRatio = "5-7" | "6-6" | "7-5";
+
+type Cols2Block = {
+  id: string;
+  type: "cols2";
+  title: string;
+  text: string;
+  img: string;   // CID/URL
+  alt: string;
+  ratio: ColsRatio;
+  reverse?: boolean;
+};
+
+type Block = HeroBlock | H1Block | PBlock | ImgBlock | BtnBlock | Cols2Block;
 
 type Doc = {
   title: string;
@@ -206,6 +219,22 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
           return `<p style="font-size:16px; color:#c7cfdd; margin:12px 0;">${escapeHtml(b.text)}</p>`;
         case "img":
           return `<img src="${escapeAttr(b.cid)}" alt="${escapeAttr(b.alt || "")}" style="max-width:100%; border-radius:12px; margin:12px 0;" />`;
+        case "cols2": {
+          const ratio = String((b as any).ratio || "6-6").split("-");
+          const l = ratio[0] || "6";
+          const r = ratio[1] || "6";
+          const left = `
+<div class="col c-xs-12 c-md-${l}">
+  <h2>${escapeHtml((b as any).title || "")}</h2>
+  <p>${escapeHtml((b as any).text || "")}</p>
+</div>`.trim();
+          const right = `
+<div class="col c-xs-12 c-md-${r}">
+  <img class="responsive" src="${escapeAttr((b as any).img || "")}" alt="${escapeAttr((b as any).alt || "")}"/>
+</div>`.trim();
+          const inner = (b as any).reverse ? right + left : left + right;
+          return `<section class="section"><div class="row">${inner}</div></section>`;
+        }  
         case "btn":
           return `<a class="btn${b.variant === "secondary" ? " secondary" : ""}" href="${escapeAttr(b.href)}" rel="noopener noreferrer nofollow">${escapeHtml(
             b.label
@@ -496,6 +525,73 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
         </div>
       )}
 
+      {b.type === "cols2" && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Заголовок">
+            <input
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={(b as Cols2Block).title}
+              onChange={(e) => onChange({ title: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+            />
+          </Field>
+
+          <Field label="Доля колонок">
+            <select
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={(b as Cols2Block).ratio}
+              onChange={(e) => onChange({ ratio: e.target.value as ColsRatio } as Partial<Block>)}
+              onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+            >
+              <option value="5-7">5-7</option>
+              <option value="6-6">6-6</option>
+              <option value="7-5">7-5</option>
+            </select>
+          </Field>
+
+          <div className="col-span-2">
+            <Field label="Текст">
+              <textarea
+                className="w-full px-3 py-2 h-24 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as Cols2Block).text}
+                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+              />
+            </Field>
+          </div>
+
+          <Field label="Картинка (CID/URL)">
+            <input
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={(b as Cols2Block).img}
+              onChange={(e) => onChange({ img: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+            />
+          </Field>
+
+          <Field label="Alt">
+            <input
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={(b as Cols2Block).alt}
+              onChange={(e) => onChange({ alt: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+            />
+          </Field>
+
+          <div className="col-span-2">
+            <label className="inline-flex items-center gap-2 select-none">
+              <input
+                type="checkbox"
+                checked={Boolean((b as Cols2Block).reverse)}
+                onChange={(e) => onChange({ reverse: e.target.checked } as Partial<Block>)}
+                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+              />
+              <span>Картинка слева, текст справа</span>
+            </label>
+          </div>
+        </div>
+      )}
+
       {b.type === "btn" && (
         <div className="grid grid-cols-2 gap-3">
           <Field label="Текст кнопки">
@@ -579,6 +675,8 @@ function labelOf(t: BlockType) {
       return "картинка";
     case "btn":
       return "кнопка";
+    case "cols2":
+      return "две колонки";  
   }
 }
 
@@ -667,12 +765,14 @@ export default function SiteBuilder() {
       type === "hero"
         ? { id: uid(), type: "hero", title: "Новый раздел", subtitle: "", ctaText: "", ctaLink: "" }
         : type === "h1"
-        ? { id: uid(), type: "h1", text: "Заголовок" }
-        : type === "p"
-        ? { id: uid(), type: "p", text: "Параграф текста…" }
-        : type === "img"
-        ? { id: uid(), type: "img", cid: "", alt: "" }
-        : { id: uid(), type: "btn", label: "Кнопка", href: "#" };
+          ? { id: uid(), type: "h1", text: "Заголовок" }
+          : type === "p"
+            ? { id: uid(), type: "p", text: "Параграф текста…" }
+            : type === "img"
+              ? { id: uid(), type: "img", cid: "", alt: "" }
+              : type === "cols2"
+                ? { id: uid(), type: "cols2", title: "Заголовок", text: "Текст…", img: "", alt: "", ratio: "6-6", reverse: false }
+                : { id: uid(), type: "btn", label: "Кнопка", href: "#" };
 
     setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
   }, []);
@@ -725,7 +825,7 @@ export default function SiteBuilder() {
   const onExportSingle = useCallback(async () => {
     const model = adaptFromSiteBuilderDoc(doc);
     const blob = await exportSingleHtml(model, { bundleAssets: true });
-    downloadBlob(blob, prettyFileName(doc.title || "site", "zip") + ".html");
+    downloadBlob(blob, prettyFileName(doc.title || "site", "html"));
   }, [doc]);
 
   // Импорт модели из JSON
@@ -750,7 +850,7 @@ export default function SiteBuilder() {
         throw new Error("Ожидался объект с массивом blocks.");
       }
 
-      const okTypes = new Set<BlockType>(["hero", "h1", "p", "img", "btn"]);
+      const okTypes = new Set<BlockType>(["hero", "h1", "p", "img", "btn", "cols2"]);
 
       const title = typeof (data as any).title === "string" ? (data as any).title : "Мой сайт";
       const description = typeof (data as any).description === "string" ? (data as any).description : "";
@@ -811,6 +911,19 @@ export default function SiteBuilder() {
                 // href | url
                 href: String(p.href ?? p.url ?? "#"),
               } as BtnBlock;
+
+            case "cols2":
+              return {
+                id,
+                type: "cols2",
+                title: String(b.title ?? ""),
+                text: String(b.text ?? ""),
+                img: String(b.img ?? ""),
+                alt: String(b.alt ?? ""),
+                ratio: (["5-7", "6-6", "7-5"].includes(b.ratio) ? b.ratio : "6-6") as ColsRatio,
+                reverse: Boolean(b.reverse),
+              } as Cols2Block;
+
           }
         })
         .filter(Boolean) as Block[];
@@ -1047,6 +1160,12 @@ export default function SiteBuilder() {
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("p")}>+ Текст</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("img")}>+ Картинка</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("btn")}>+ Кнопка</button>
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("cols2")}
+>
+  + Две колонки
+</button>
         </div>
 
         {/* Список блоков */}

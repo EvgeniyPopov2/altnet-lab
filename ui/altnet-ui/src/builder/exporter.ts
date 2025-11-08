@@ -88,6 +88,13 @@ header.container{padding-top:12px;padding-bottom:0}
 .mb-8{margin-bottom:8px}
 .mb-16{margin-bottom:16px}
 .mb-24{margin-bottom:24px}
+.row{display:flex;flex-wrap:wrap;margin-left:-8px;margin-right:-8px}
+.col{padding-left:8px;padding-right:8px;margin-bottom:16px}
+.c-xs-12{width:100%}
+@media(min-width:768px){
+  .c-md-5{width:41.6667%}
+  .c-md-6{width:50%}
+  .c-md-7{width:58.3333%}
   `.trim();
 }
 
