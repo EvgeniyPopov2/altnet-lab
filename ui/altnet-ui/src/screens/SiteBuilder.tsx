@@ -165,9 +165,24 @@ function prettyFileName(title: string, ext: string) {
  * Рендер HTML для предпросмотра
  * ========================= */
 function renderDocToHTML(doc: Doc): string {
+  // Базовый CSS для предпросмотра (привязан к var(--accent))
+  const PREVIEW_CSS = `
+:root{--accent:#5865F2}
+body{background:#0b0f1a;color:#e6e9f4;font:16px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+.container{max-width:960px;margin:0 auto;padding:24px}
+.section{padding:32px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
+h1{font-size:40px;line-height:1.2;margin:0 0 16px}
+p{margin:8px 0}
+.muted{color:#9aa3b2}
+.hero{text-align:center}
+.btn{display:inline-block;padding:10px 16px;border-radius:10px;background:var(--accent);color:#fff;font-weight:600}
+.btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+img.responsive{max-width:100%;height:auto;border-radius:12px}
+`.trim();
   const accent = (doc as any)?.theme?.accent?.trim() || "#5865F2";
   const container = Number((doc as any)?.theme?.container) || 960;
-  const themeStyle = `<style id="altnet-theme">:root{--accent:${accent}} .container{max-width:${container}px}</style>`;
+  // ВАЖНО: !important — чтобы перебить дефолт 960px из PREVIEW_CSS
+  const themeStyle = `<style id="altnet-theme">:root{--accent:${accent}} .container{max-width:${container}px !important}</style>`;
   const blocks = doc.blocks
     .map((b) => {
       switch (b.type) {
@@ -199,7 +214,7 @@ function renderDocToHTML(doc: Doc): string {
     .join("\n");
 
   const siteTitle = doc.title
-    ? `<header style="max-width:960px;margin:0 auto;padding:24px;">
+    ? `<header class="container">
          <h1 style="font-size:28px; line-height:1.2; margin:16px 0 12px; opacity:.85;">${escapeHtml(doc.title)}</h1>
        </header>`
     : "";
@@ -208,11 +223,12 @@ function renderDocToHTML(doc: Doc): string {
 <html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(doc.title || "Сайт")}</title>
+<style id="altnet-preview-css">${PREVIEW_CSS}</style>
 ${themeStyle}
 </head>
 <body style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0f1a; color:#e6e9f4; padding:24px;">
   ${siteTitle}
-  <main style="max-width:960px; margin:0 auto;">
+  <main class="container">
     ${blocks}
   </main>
 </body></html>`;
