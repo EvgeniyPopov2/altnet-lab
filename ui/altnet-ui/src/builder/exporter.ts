@@ -16,6 +16,7 @@ export type BlockInstance = {
 export type SiteModel = {
   title?: string;
   description?: string;
+  ogImage?: string;
   blocks: BlockInstance[];
 };
 
@@ -424,6 +425,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
   return {
     title: builderDoc?.title || "Мой сайт",
     description: builderDoc?.description || "",
+    ogImage: sanitizeUrl(builderDoc?.ogImage || ""),
     blocks,
   };
 }

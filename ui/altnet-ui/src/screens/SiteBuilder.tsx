@@ -54,6 +54,7 @@ type Block = HeroBlock | H1Block | PBlock | ImgBlock | BtnBlock;
 type Doc = {
   title: string;
   description?: string; // новое поле для meta description
+  ogImage?: string;
   blocks: Block[];
 };
 const STORAGE_KEY = "altnet.sitebuilder.v1";
@@ -61,6 +62,7 @@ const STORAGE_KEY = "altnet.sitebuilder.v1";
 const DEFAULT_DOC: Doc = {
   title: "Мой сайт",
   description: "", // ← добавили meta description (по умолчанию пусто)
+  ogImage: "",
   blocks: [
     {
       id: Math.random().toString(36).slice(2, 9),
@@ -123,6 +125,7 @@ function validateDoc(doc: Doc): CheckItem[] {
     text: hasAnyImage ? "Есть изображение для превью (OG)." : "Добавьте хотя бы одну «Картинку» — пригодится для превью в соцсетях.",
   });
 
+  
   return checks;
 }
 
@@ -564,12 +567,22 @@ function isSafeImageSrc(src?: string): boolean {
  * ========================= */
 export default function SiteBuilder() {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
-
   const html = useMemo(() => renderDocToHTML(doc), [doc]);
   const checks = useMemo(() => validateDoc(doc), [doc]);
   const okCount = useMemo(() => checks.filter(c => c.ok).length, [checks]);
   const [showChecklist, setShowChecklist] = useState(false);
-
+  // Валидатор для поля "OG-картинка"
+  const isValidOgImage = (s: string) => {
+    if (!s) return true; // пустое — не ошибка
+    const v = s.trim().toLowerCase();
+    return (
+      v.startsWith("https://") ||
+      v.startsWith("http://") ||
+      v.startsWith("altfs://") ||
+      v.startsWith("ipfs://") ||
+      v.startsWith("data:image/")
+    );
+  };
 
   // Автосохранение в localStorage
   useEffect(() => {
@@ -844,6 +857,29 @@ export default function SiteBuilder() {
               </Field>
             );
           })()}
+        </div>
+
+        <div className="mb-4">
+          <Field label="OG-картинка (CID/URL)">
+            <input
+              className={
+                "w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none " +
+                (isValidOgImage(doc.ogImage || "")
+                  ? "border-[#1f2751] text-[#e6e9f4]"
+                  : "border-red-500 text-red-300")
+              }
+              value={doc.ogImage || ""}
+              onChange={(e) => setDoc(d => ({ ...d, ogImage: e.target.value }))}
+              placeholder="altfs://CID или https://… или data:image/…"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          {!isValidOgImage(doc.ogImage || "") && (
+            <div className="mt-1 text-xs text-red-400">
+              Разрешены: https://, http://, altfs://, ipfs:// или data:image/…
+            </div>
+          )}
         </div>
 
         {/* Кнопки действий */}
