@@ -47,6 +47,7 @@ type BtnBlock = {
   type: "btn";
   label: string;
   href: string;
+  variant?: "primary" | "secondary";
 };
 
 type Block = HeroBlock | H1Block | PBlock | ImgBlock | BtnBlock;
@@ -206,7 +207,7 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
         case "img":
           return `<img src="${escapeAttr(b.cid)}" alt="${escapeAttr(b.alt || "")}" style="max-width:100%; border-radius:12px; margin:12px 0;" />`;
         case "btn":
-          return `<a href="${escapeAttr(b.href)}" rel="noopener noreferrer nofollow" style="display:inline-block; padding:8px 14px; border-radius:10px; background:#1f2336; color:#e6e9f4; text-decoration:none; border:1px solid #2a2f45; margin:8px 0;">${escapeHtml(
+          return `<a class="btn${b.variant === "secondary" ? " secondary" : ""}" href="${escapeAttr(b.href)}" rel="noopener noreferrer nofollow">${escapeHtml(
             b.label
           )}</a>`;
       }
@@ -516,6 +517,20 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
             const ok = isSafeLink(link);
             return (
               <Field label="Ссылка">
+                <Field label="Вариант">
+                  <select
+                    className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                    value={(b as any).variant || "primary"}
+                    onChange={(e) => onChange({ variant: e.target.value } as any)}
+                    onMouseDownCapture={stopAll}
+                    onKeyDownCapture={stopAll}
+                    onClickCapture={stopAll}
+                  >
+                    <option value="primary">Основная</option>
+                    <option value="secondary">Вторичная</option>
+                  </select>
+                </Field>
+
                 <input
                   className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
                     }`}

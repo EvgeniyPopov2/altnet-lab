@@ -140,16 +140,17 @@ const Image: BlockSpec = {
 const Button: BlockSpec = {
   id: "button",
   name: "Кнопка",
-  defaults: { label: "Кнопка", href: "#" },
+  defaults: { label: "Кнопка", href: "#", variant: "primary" },
   render: ({ props }) => {
     const p = { ...Button.defaults, ...props };
+    const cls = p.variant === "secondary" ? "btn secondary" : "btn";
     return React.createElement(
       "section",
       { className: "section" },
       React.createElement(
         "a",
         {
-           className: "btn",
+           className: cls,
            href: p.href,
            rel: p.rel,
            target: p.target, 
@@ -160,7 +161,8 @@ const Button: BlockSpec = {
   },
   serialize: (props) => {
     const p = { ...Button.defaults, ...props };
-    return `<section class="section"><a class="btn" href="${esc(p.href)}"${p.rel ? ` rel="${esc(p.rel)}"` : ""}${p.target ? ` target="${esc(p.target)}"` : ""}>${esc(String(p.label))}</a></section>`;
+    const cls = p.variant === "secondary" ? "btn secondary" : "btn";
+    return `<section class="section"><a class="${cls}" href="${esc(p.href)}${p.rel ? `" rel="${esc(p.rel)}` : ""}${p.target ? `" target="${esc(p.target)}` : ""}">${esc(String(p.label))}</a></section>`;
   },
 };
 
