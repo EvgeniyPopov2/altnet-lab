@@ -12,6 +12,8 @@ export default function SafePreview({ html }: { html: string }) {
   // 2) Санитайзим уже "задебоунсенный" HTML
   const clean = useMemo(() => DOMPurify.sanitize(deb, {
     USE_PROFILES: { html: true },
+    ADD_TAGS: ['style'],
+    ADD_ATTR: ['id'],
     FORBID_TAGS: ["script", "iframe", "object", "embed", "link"],
     FORBID_ATTR: ["onerror", "onload", "onclick", "style"],
     ALLOWED_URI_REGEXP: /^(?:(?:https?:|data:image\/|altfs:\/\/|cid:))/i,
@@ -33,8 +35,9 @@ export default function SafePreview({ html }: { html: string }) {
     html,body { margin:0; padding:16px; color:#e5e7eb; background:#0b0d12; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto; }
     img,video { max-width:100%; height:auto; border-radius:12px; }
     a { color:#93c5fd; }
-    .btn { display:inline-block; padding:10px 14px; border-radius:12px; background:#4f46e5; color:white; text-decoration:none; }
-    .mt-16 { margin-top:16px; }
+    .container{max-width:960px;margin:0 auto;padding:16px}
+    .btn{display:inline-block;padding:10px 14px;border-radius:12px;background:var(--accent);color:#fff;text-decoration:none;font-weight:600}
+    .btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
     h1,h2,h3 { margin:0 0 12px; }
     p { margin:0 0 12px; line-height:1.6; }
 
