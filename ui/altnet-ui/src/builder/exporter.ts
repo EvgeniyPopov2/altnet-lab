@@ -92,6 +92,7 @@ header.container{padding-top:12px;padding-bottom:0}
 /* мини-сетка для cols2 */
 .row{display:flex;flex-wrap:wrap;margin-left:-8px;margin-right:-8px}
 .col{padding-left:8px;padding-right:8px;margin-bottom:16px}
+.row.row-reverse{flex-direction:row-reverse}
 .c-xs-12{width:100%}
 @media(min-width:768px){
   .c-md-5{width:41.6667%}

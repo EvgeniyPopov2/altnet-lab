@@ -196,6 +196,7 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
 /* мини-сетка для cols2 — паритет с export styles.css */
 .row{display:flex;flex-wrap:wrap;margin-left:-8px;margin-right:-8px}
 .col{padding-left:8px;padding-right:8px;margin-bottom:16px}
+.row.row-reverse{flex-direction:row-reverse}
 .c-xs-12{width:100%}
 @media(min-width:768px){
   .c-md-5{width:41.6667%}
@@ -242,8 +243,8 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
 <div class="col c-xs-12 c-md-${r}">
   <img class="responsive" src="${escapeAttr((b as any).img || "")}" alt="${escapeAttr((b as any).alt || "")}"/>
 </div>`.trim();
-          const inner = (b as any).reverse ? right + left : left + right;
-          return `<section class="section"><div class="row">${inner}</div></section>`;
+          const rowClass = (b as any).reverse ? "row row-reverse" : "row";
+          return `<section class="section"><div class="${rowClass}">${left}${right}</div></section>`;
         }  
         case "btn":
           return `<a class="btn${b.variant === "secondary" ? " secondary" : ""}" href="${escapeAttr(b.href)}" rel="noopener noreferrer nofollow">${escapeHtml(
