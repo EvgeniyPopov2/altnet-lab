@@ -232,20 +232,24 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
           return `<img src="${escapeAttr(b.cid)}" alt="${escapeAttr(b.alt || "")}" style="max-width:100%; border-radius:12px; margin:12px 0;" />`;
         case "cols2": {
           const ratio = String((b as any).ratio || "6-6").split("-");
-          const l = ratio[0] || "6";
-          const r = ratio[1] || "6";
+          const l = (ratio[0] || "6").trim();
+          const r = (ratio[1] || "6").trim();
+
           const left = `
 <div class="col c-xs-12 c-md-${l}">
   <h2>${escapeHtml((b as any).title || "")}</h2>
   <p>${escapeHtml((b as any).text || "")}</p>
 </div>`.trim();
+
           const right = `
 <div class="col c-xs-12 c-md-${r}">
   <img class="responsive" src="${escapeAttr((b as any).img || "")}" alt="${escapeAttr((b as any).alt || "")}"/>
 </div>`.trim();
+
           const rowClass = (b as any).reverse ? "row row-reverse" : "row";
           return `<section class="section"><div class="${rowClass}">${left}${right}</div></section>`;
-        }  
+        }
+
         case "btn":
           return `<a class="btn${b.variant === "secondary" ? " secondary" : ""}" href="${escapeAttr(b.href)}" rel="noopener noreferrer nofollow">${escapeHtml(
             b.label
@@ -541,18 +545,16 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           <Field label="Заголовок">
             <input
               className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={(b as Cols2Block).title}
-              onChange={(e) => onChange({ title: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+              value={(b as any).title || ""}
+              onChange={(e) => onChange({ title: e.target.value } as any)}
             />
           </Field>
 
           <Field label="Доля колонок">
             <select
               className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={(b as Cols2Block).ratio}
-              onChange={(e) => onChange({ ratio: e.target.value as ColsRatio } as Partial<Block>)}
-              onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+              value={(b as any).ratio || "6-6"}
+              onChange={(e) => onChange({ ratio: e.target.value } as any)}
             >
               <option value="5-7">5-7</option>
               <option value="6-6">6-6</option>
@@ -560,46 +562,40 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
             </select>
           </Field>
 
-          <div className="col-span-2">
-            <Field label="Текст">
-              <textarea
-                className="w-full px-3 py-2 h-24 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as Cols2Block).text}
-                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-              />
-            </Field>
-          </div>
+          <Field label="Текст">
+            <textarea
+              className="w-full px-3 py-2 h-24 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={(b as any).text || ""}
+              onChange={(e) => onChange({ text: e.target.value } as any)}
+            />
+          </Field>
 
           <Field label="Картинка (CID/URL)">
             <input
               className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={(b as Cols2Block).img}
-              onChange={(e) => onChange({ img: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+              value={(b as any).img || ""}
+              onChange={(e) => onChange({ img: e.target.value } as any)}
             />
           </Field>
 
           <Field label="Alt">
             <input
               className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={(b as Cols2Block).alt}
-              onChange={(e) => onChange({ alt: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+              value={(b as any).alt || ""}
+              onChange={(e) => onChange({ alt: e.target.value } as any)}
             />
           </Field>
 
-          <div className="col-span-2">
+          <Field label="Поменять местами">
             <label className="inline-flex items-center gap-2 select-none">
               <input
                 type="checkbox"
-                checked={Boolean((b as Cols2Block).reverse)}
-                onChange={(e) => onChange({ reverse: e.target.checked } as Partial<Block>)}
-                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                checked={Boolean((b as any).reverse)}
+                onChange={(e) => onChange({ reverse: e.target.checked } as any)}
               />
               <span>Картинка слева, текст справа</span>
             </label>
-          </div>
+          </Field>
         </div>
       )}
 

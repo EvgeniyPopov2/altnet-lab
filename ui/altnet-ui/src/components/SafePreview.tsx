@@ -16,7 +16,7 @@ export default function SafePreview({ html }: { html: string }) {
     ADD_ATTR: ['id'],
     FORBID_TAGS: ["script", "iframe", "object", "embed", "link"],
     FORBID_ATTR: ["onerror", "onload", "onclick", "style"],
-    ALLOWED_URI_REGEXP: /^(?:(?:https?:|data:image\/|altfs:\/\/|cid:))/i,
+    ALLOWED_URI_REGEXP: /^(?:(?:https?:|data:image\/|altfs:\/\/|cid:|ipfs:\/\/))/i,
     KEEP_CONTENT: false,
   }), [deb]);
 
@@ -52,6 +52,7 @@ export default function SafePreview({ html }: { html: string }) {
     /* 12-колоночная сетка */
     .row { display:flex; flex-wrap:wrap; margin-left:calc(var(--gap) * -0.5); margin-right:calc(var(--gap) * -0.5); }
     .col { padding-left:calc(var(--gap) * 0.5); padding-right:calc(var(--gap) * 0.5); margin-bottom:var(--gap); }
+    .row.row-reverse { flex-direction: row-reverse; }
     /* брейкпоинты */
     /* xs (mobile) */
 
