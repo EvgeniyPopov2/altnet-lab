@@ -55,6 +55,10 @@ type Doc = {
   title: string;
   description?: string; // новое поле для meta description
   ogImage?: string;
+  theme?: {
+    accent?: string;     // HEX или css-цвет
+    container?: number;  // px
+  };
   blocks: Block[];
 };
 const STORAGE_KEY = "altnet.sitebuilder.v1";
@@ -63,6 +67,7 @@ const DEFAULT_DOC: Doc = {
   title: "Мой сайт",
   description: "", // ← добавили meta description (по умолчанию пусто)
   ogImage: "",
+  theme: { accent: "#5865F2", container: 960 },
   blocks: [
     {
       id: Math.random().toString(36).slice(2, 9),
@@ -857,6 +862,50 @@ export default function SiteBuilder() {
               </Field>
             );
           })()}
+        </div>
+
+        <div className="mb-4">
+          <div className="mb-2 text-sm text-[#9aa3b2]">Настройки темы</div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="grid gap-1">
+              <span className="text-xs text-[#9aa3b2]">Акцентный цвет</span>
+              <input
+                type="text"
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={doc.theme?.accent || ""}
+                onChange={(e) =>
+                  setDoc((d) => ({
+                    ...d,
+                    theme: { ...(d.theme || {}), accent: e.target.value.trim() },
+                  }))
+                }
+                placeholder="#5865F2"
+                spellCheck={false}
+                autoComplete="off"
+              />
+            </label>
+
+            <label className="grid gap-1">
+              <span className="text-xs text-[#9aa3b2]">Ширина контейнера, px</span>
+              <input
+                type="number"
+                min={640}
+                max={1920}
+                step={10}
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={String(doc.theme?.container ?? 960)}
+                onChange={(e) =>
+                  setDoc((d) => ({
+                    ...d,
+                    theme: {
+                      ...(d.theme || {}),
+                      container: Math.max(640, Math.min(1920, parseInt(e.target.value || "960", 10))),
+                    },
+                  }))
+                }
+              />
+            </label>
+          </div>
         </div>
 
         <div className="mb-4">

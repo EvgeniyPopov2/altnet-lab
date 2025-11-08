@@ -17,6 +17,10 @@ export type SiteModel = {
   title?: string;
   description?: string;
   ogImage?: string;
+  theme?: {
+    accent?: string;       // HEX или css-цвет (напр. #5865F2)
+    container?: number;    // ширина контейнера в px (напр. 960)
+  };
   blocks: BlockInstance[];
 };
 
@@ -51,13 +55,17 @@ function sanitizeUrl(u?: string, fallback = "#"): string {
   return safe || fallback;
 }
 
-// -------- Стили (оффлайн) --------
-const BASE_CSS = `
-:root{--bg:#0b0d12;--fg:#e7e9f0;--muted:#9aa3b2;--accent:#5865f2;--card:#12141c}
+// -------- Стили (оффлайн) — с подстановкой темы --------
+function buildStylesCss(theme?: { accent?: string; container?: number }) {
+  const accent = (theme?.accent || "#5865F2").trim();
+  const container = Number.isFinite(theme?.container) ? Number(theme?.container) : 960;
+
+  return `
+:root{--bg:#0b0d12;--fg:#e7e9f0;--muted:#9aa3b2;--accent:${accent};--card:#12141c}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
 a{color:var(--accent);text-decoration:none}
-.container{max-width:960px;margin:0 auto;padding:24px}
+.container{max-width:${container}px;margin:0 auto;padding:24px}
 .section{padding:32px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
 h1{font-size:40px;line-height:1.2;margin:0 0 16px}
 h2{font-size:28px;line-height:1.3;margin:0 0 12px}
@@ -80,7 +88,8 @@ header.container{padding-top:12px;padding-bottom:0}
 .mb-8{margin-bottom:8px}
 .mb-16{margin-bottom:16px}
 .mb-24{margin-bottom:24px}
-`.trim();
+  `.trim();
+}
 
 // Иконка для single-file (data:)
 const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#5865F2"/><path d="M64 36c-12 0-22 9-22 20 0 9 7 16 16 19v9l14-9c8-3 14-10 14-19 0-11-10-20-22-20z" fill="#fff"/></svg>`;
@@ -308,7 +317,7 @@ export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions)
   // 3) Файлы ZIP
   zip.file("favicon.svg", FAVICON_SVG);
   zip.file("index.html", buildIndexHtml(model, ogImage));
-  zip.file("styles.css", BASE_CSS);
+  zip.file("styles.css", buildStylesCss(model.theme));
   zip.file("manifest.json", buildManifest(model, assets));
   zip.folder("assets"); // если ассетов нет — просто пустая папка
 
@@ -366,7 +375,7 @@ export async function exportSingleHtml(modelIn: SiteModel, options?: ExportOptio
   // Готовый index.html → single-file: inline CSS, data:-favicon, CSP без script
   let html = buildIndexHtml(model);
   html = html
-    .replace(`<link rel="stylesheet" href="./styles.css"/>`, `<style>${BASE_CSS}</style>`)
+    .replace(`<link rel="stylesheet" href="./styles.css"/>`, `<style>${buildStylesCss(model.theme)}</style>`)
     .replace(`style-src 'self'`, `style-src 'unsafe-inline'`)
     .replace(`href="./favicon.svg"`, `href="${FAVICON_DATA}"`);
 
@@ -425,7 +434,11 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
   return {
     title: builderDoc?.title || "Мой сайт",
     description: builderDoc?.description || "",
-    ogImage: sanitizeUrl(builderDoc?.ogImage || ""),
+    ogImage: builderDoc?.ogImage || "",
+    theme: {
+      accent: typeof builderDoc?.theme?.accent === "string" ? builderDoc.theme.accent : undefined,
+      container: Number.isFinite(builderDoc?.theme?.container) ? Number(builderDoc.theme.container) : undefined,
+    },
     blocks,
   };
-}
+}  
