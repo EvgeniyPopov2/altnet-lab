@@ -2,6 +2,11 @@ import React, { useCallback, useMemo, useRef, useState, useEffect } from "react"
 import SafePreview from "../components/SafePreview";
 import { exportSiteZip, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
 
+type CheckItem = { id: string; ok: boolean; text: string };
+
+const isHttp = (s: string) => /^https?:\/\//i.test(s || "");
+const isHash = (s: string) => (s || "").trim().startsWith("#");
+const notEmpty = (s?: string) => !!(s && s.trim().length > 0);
 
 /* =========================
  * Типы документа и блоков
@@ -66,6 +71,59 @@ const DEFAULT_DOC: Doc = {
     },
   ],
 };
+
+function validateDoc(doc: Doc): CheckItem[] {
+  const checks: CheckItem[] = [];
+  const titleOk = notEmpty(doc.title) && doc.title.trim().length >= 3;
+  checks.push({ id: "title", ok: titleOk, text: titleOk ? "Заголовок задан." : "Добавьте заголовок сайта (≥ 3 символов)." });
+
+  const desc = (doc as any).description || ""; // если поля нет — считаем пустым
+  const descOk = !desc ? false : desc.trim().length >= 50 && desc.trim().length <= 160;
+  checks.push({
+    id: "desc",
+    ok: descOk,
+    text: descOk ? "Описание 50–160 символов." : "Заполните «Описание сайта» (желательно 50–160 символов).",
+  });
+
+  const hasHero = doc.blocks.some(b => b.type === "hero");
+  checks.push({ id: "hero", ok: hasHero, text: hasHero ? "Есть блок Hero." : "Добавьте блок Hero." });
+
+  const hero = doc.blocks.find(b => b.type === "hero") as HeroBlock | undefined;
+  const ctaOk = !!hero && notEmpty(hero.ctaText) && notEmpty(hero.ctaLink);
+  checks.push({
+    id: "hero-cta",
+    ok: ctaOk,
+    text: ctaOk ? "CTA в Hero заполнен." : "В Hero заполните «Текст кнопки» и «Ссылка».",
+  });
+
+  // alt у всех картинок
+  const imgBlocks = doc.blocks.filter(b => b.type === "img") as ImgBlock[];
+  const allImgAlt = imgBlocks.every(b => notEmpty(b.alt));
+  checks.push({
+    id: "img-alt",
+    ok: allImgAlt || imgBlocks.length === 0,
+    text: imgBlocks.length === 0 ? "Картинок нет — ок." : (allImgAlt ? "У всех изображений заполнен alt." : "Добавьте alt ко всем изображениям."),
+  });
+
+  // кнопки: href валиден/не пуст
+  const btnBlocks = doc.blocks.filter(b => b.type === "btn") as BtnBlock[];
+  const allBtnHrefOk = btnBlocks.every(b => notEmpty(b.href) && (isHttp(b.href) || isHash(b.href) || b.href.startsWith("/")));
+  checks.push({
+    id: "btn-href",
+    ok: allBtnHrefOk || btnBlocks.length === 0,
+    text: btnBlocks.length === 0 ? "Кнопок нет — ок." : (allBtnHrefOk ? "Ссылки у кнопок валидны." : "Проверьте ссылки у кнопок (http(s), /путь или #якорь)."),
+  });
+
+  // OG-картинка (хотя бы одна картинка в документе для красивых превью)
+  const hasAnyImage = imgBlocks.length > 0;
+  checks.push({
+    id: "og",
+    ok: hasAnyImage,
+    text: hasAnyImage ? "Есть изображение для превью (OG)." : "Добавьте хотя бы одну «Картинку» — пригодится для превью в соцсетях.",
+  });
+
+  return checks;
+}
 
 function loadFromStorage(): Doc | null {
   try {
@@ -507,7 +565,11 @@ export default function SiteBuilder() {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
 
   const html = useMemo(() => renderDocToHTML(doc), [doc]);
-  
+  const checks = useMemo(() => validateDoc(doc), [doc]);
+  const okCount = useMemo(() => checks.filter(c => c.ok).length, [checks]);
+  const [showChecklist, setShowChecklist] = useState(false);
+
+
   // Автосохранение в localStorage
   useEffect(() => {
     try {
@@ -786,6 +848,14 @@ export default function SiteBuilder() {
           >
             ⬇️ Экспорт статического сайта (ZIP)
           </button>
+          
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#93e5ab] hover:bg-[#1f2336]"
+            onClick={() => setShowChecklist(v => !v)}
+            title="Проверки качества"
+          >
+            ✅ Проверки ({okCount}/{checks.length})
+          </button>
 
           <button
             className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
@@ -819,6 +889,20 @@ export default function SiteBuilder() {
             ↩️ Сбросить
           </button>
         </div>
+
+        {showChecklist && (
+          <div className="mb-4 rounded-xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
+            <div className="text-sm mb-2 text-[#9aa3b2]">Проверки качества</div>
+            <ul className="space-y-1 text-sm">
+              {checks.map(it => (
+                <li key={it.id} className="flex items-start gap-2">
+                  <span className={it.ok ? "text-green-400" : "text-red-400"}>{it.ok ? "✔" : "✖"}</span>
+                  <span className={it.ok ? "text-[#9aa3b2]" : "text-[#ffb3a8]"}>{it.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <div className="mb-3 text-sm text-[#9aa3b2]">Палитра</div>
         <div className="grid grid-cols-2 gap-2 mb-4">
@@ -857,7 +941,18 @@ export default function SiteBuilder() {
       >
         {/* Панель зума */}
         <div className="flex items-center justify-between mb-3">
-          <div className="text-sm text-[#9aa3b2]">Предпросмотр</div>
+          <div className="text-sm text-[#9aa3b2]">
+            Предпросмотр
+            <button
+              className={`ml-2 px-2 py-0.5 rounded-md border ${okCount === checks.length ? "bg-[#0e2e1f] border-[#14532d] text-[#a7f3d0]" : "bg-[#2a1212] border-[#7f1d1d] text-[#fecaca]"}`}
+              onClick={() => setShowChecklist(v => !v)}
+              title="Открыть проверки качества"
+            >
+              {okCount}/{checks.length}
+            </button>
+          </div>
+          <div className="flex items-center gap-2"></div>
+        
           <div className="flex items-center gap-2">
             <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45]" onClick={decZoom}>−</button>
             <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45]" onClick={resetZoom}>{Math.round(zoom * 100)}%</button>
