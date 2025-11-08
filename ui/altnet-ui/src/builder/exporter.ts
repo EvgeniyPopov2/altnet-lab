@@ -81,7 +81,18 @@ header.container{padding-top:12px;padding-bottom:0}
 .mb-24{margin-bottom:24px}
 `.trim();
 
-const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#0b0d12"/><path d="M20 36l8 8 16-24" fill="none" stroke="#5865F2" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// Иконка для single-file (data:)
+const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#5865F2"/><path d="M64 36c-12 0-22 9-22 20 0 9 7 16 16 19v9l14-9c8-3 14-10 14-19 0-11-10-20-22-20z" fill="#fff"/></svg>`;
+const FAVICON_DATA = `data:image/svg+xml;utf8,${encodeURIComponent(FAVICON_SVG)}`;
+
+function blobToDataUrl(b: Blob): Promise<string> {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.onerror = rej;
+    r.readAsDataURL(b);
+  });
+}
 
 // -------- Рендер --------
 function renderBlocksToHtml(blocks: BlockInstance[]): string {
@@ -301,6 +312,64 @@ export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions)
   zip.folder("assets"); // если ассетов нет — просто пустая папка
 
   return await zip.generateAsync({ type: "blob" });
+}
+
+// Экспорт одним HTML-файлом (всё inline: CSS + изображения), без JS.
+export async function exportSingleHtml(modelIn: SiteModel, options?: ExportOptions): Promise<Blob> {
+  const opts: ExportOptions = { bundleAssets: true, ...(options || {}) };
+
+  const sanitized: SiteModel = {
+    title: modelIn.title,
+    description: modelIn.description,
+    blocks: (modelIn.blocks || []).map((b) => {
+      const p = { ...(b.props || {}) };
+
+      if (b.type === "image" && typeof p.src === "string") {
+        p.src = sanitizeUrl(p.src);
+      }
+      if (b.type === "button") {
+        const href = sanitizeUrl(p.href || "#");
+        const rel = externalLinkRels(href);
+        p.href = href;
+        if (rel) p.rel = rel;
+      }
+      if (b.type === "hero") {
+        const href = sanitizeUrl(p.ctaHref || "#");
+        const rel = externalLinkRels(href);
+        p.ctaHref = href;
+        if (rel) p.ctaRel = rel;
+      }
+      return { type: b.type, props: p };
+    }),
+  };
+
+  // Инлайн картинок http(s) → data:
+  const model = JSON.parse(JSON.stringify(sanitized)) as SiteModel;
+  if (opts.bundleAssets) {
+    for (const b of model.blocks) {
+      if (b.type === "image") {
+        const src = String(b.props?.src || "");
+        if (isHttpUrl(src)) {
+          try {
+            const { blob } = await fetchAndCleanImage(src);
+            const dataUrl = await blobToDataUrl(blob);
+            b.props = { ...(b.props || {}), src: dataUrl };
+          } catch {
+            b.props = { ...(b.props || {}), src: placeholderDataUrl() };
+          }
+        }
+      }
+    }
+  }
+
+  // Готовый index.html → single-file: inline CSS, data:-favicon, CSP без script
+  let html = buildIndexHtml(model);
+  html = html
+    .replace(`<link rel="stylesheet" href="./styles.css"/>`, `<style>${BASE_CSS}</style>`)
+    .replace(`style-src 'self'`, `style-src 'unsafe-inline'`)
+    .replace(`href="./favicon.svg"`, `href="${FAVICON_DATA}"`);
+
+  return new Blob([html], { type: "text/html" });
 }
 
 export function downloadBlob(blob: Blob, filename: string = "altnet-site.zip") {

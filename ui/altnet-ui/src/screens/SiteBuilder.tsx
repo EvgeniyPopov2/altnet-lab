@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import SafePreview from "../components/SafePreview";
-import { exportSiteZip, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
+import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
+
 
 type CheckItem = { id: string; ok: boolean; text: string };
 
@@ -667,6 +668,12 @@ export default function SiteBuilder() {
     downloadBlob(blob, fname);
   }, [doc]);
   
+  const onExportSingle = useCallback(async () => {
+    const model = adaptFromSiteBuilderDoc(doc);
+    const blob = await exportSingleHtml(model, { bundleAssets: true });
+    downloadBlob(blob, prettyFileName(doc.title || "site", "zip") + ".html");
+  }, [doc]);
+
   // Импорт модели из JSON
   const importJsonInputRef = useRef<HTMLInputElement>(null);
 
@@ -849,6 +856,14 @@ export default function SiteBuilder() {
             ⬇️ Экспорт статического сайта (ZIP)
           </button>
           
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#93e5ab] hover:bg-[#1f2336]"
+            onClick={onExportSingle}
+            title="Скачать один HTML-файл (всё внутри, без JS)"
+          >
+            📄 Экспорт одним файлом (HTML)
+          </button>
+
           <button
             className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#93e5ab] hover:bg-[#1f2336]"
             onClick={() => setShowChecklist(v => !v)}
