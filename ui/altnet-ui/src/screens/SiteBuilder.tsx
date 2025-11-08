@@ -192,6 +192,16 @@ p{margin:8px 0}
 .btn{display:inline-block;padding:10px 16px;border-radius:10px;background:var(--accent);color:#fff;font-weight:600}
 .btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 img.responsive{max-width:100%;height:auto;border-radius:12px}
+
+/* мини-сетка для cols2 — паритет с export styles.css */
+.row{display:flex;flex-wrap:wrap;margin-left:-8px;margin-right:-8px}
+.col{padding-left:8px;padding-right:8px;margin-bottom:16px}
+.c-xs-12{width:100%}
+@media(min-width:768px){
+  .c-md-5{width:41.6667%}
+  .c-md-6{width:50%}
+  .c-md-7{width:58.3333%}
+}
 `.trim();
   const accent = (doc as any)?.theme?.accent?.trim() || "#5865F2";
   const container = Number((doc as any)?.theme?.container) || 960;
