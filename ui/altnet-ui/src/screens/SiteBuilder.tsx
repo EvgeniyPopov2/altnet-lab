@@ -165,6 +165,9 @@ function prettyFileName(title: string, ext: string) {
  * Рендер HTML для предпросмотра
  * ========================= */
 function renderDocToHTML(doc: Doc): string {
+  const accent = (doc as any)?.theme?.accent?.trim() || "#5865F2";
+  const container = Number((doc as any)?.theme?.container) || 960;
+  const themeStyle = `<style id="altnet-theme">:root{--accent:${accent}} .container{max-width:${container}px}</style>`;
   const blocks = doc.blocks
     .map((b) => {
       switch (b.type) {
@@ -202,9 +205,11 @@ function renderDocToHTML(doc: Doc): string {
     : "";
 
   return `<!doctype html>
-<html lang="ru"><meta charset="utf-8">
+<html lang="ru"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(doc.title || "Сайт")}</title>
+${themeStyle}
+</head>
 <body style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0f1a; color:#e6e9f4; padding:24px;">
   ${siteTitle}
   <main style="max-width:960px; margin:0 auto;">
