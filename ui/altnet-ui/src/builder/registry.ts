@@ -82,14 +82,14 @@ const H1: BlockSpec = {
     const p = { ...H1.defaults, ...props };
     return React.createElement(
       "section",
-      { className: "section" },
-      React.createElement("h1", { style: { textAlign: p.align || "left" } }, p.text)
+      { className: `section t-${p.align || "left"}` },
+      React.createElement("h1", null, p.text)
     );
   },
   serialize: (props) => {
     const p = { ...H1.defaults, ...props };
-    const alignAttr = p.align && p.align !== "left" ? ` style="text-align:${p.align}"` : "";
-    return `<section class="section"><h1${alignAttr}>${esc(p.text)}</h1></section>`;
+    const cls = `section t-${p.align || "left"}`;
+    return `<section class="${cls}"><h1>${esc(p.text)}</h1></section>`;
   },
 };
 
@@ -101,14 +101,14 @@ const Text: BlockSpec = {
     const p = { ...Text.defaults, ...props };
     return React.createElement(
       "section",
-      { className: "section" },
-      React.createElement("p", { style: { textAlign: p.align || "left" } }, p.text)
+      { className: `section t-${p.align || "left"}` },
+      React.createElement("p", null, p.text)
     );
   },
   serialize: (props) => {
     const p = { ...Text.defaults, ...props };
-    const alignAttr = p.align && p.align !== "left" ? ` style="text-align:${p.align}"` : "";
-    return `<section class="section"><p${alignAttr}>${nl2br(p.text)}</p></section>`;
+    const cls = `section t-${p.align || "left"}`;
+    return `<section class="${cls}"><p>${nl2br(p.text)}</p></section>`;
   },
 };
 
@@ -141,31 +141,29 @@ const Image: BlockSpec = {
 const Button: BlockSpec = {
   id: "button",
   name: "Кнопка",
-  defaults: { label: "Кнопка", href: "#", variant: "primary" },
+  defaults: { label: "Кнопка", href: "#", variant: "primary", align: "center" },
   render: ({ props }) => {
     const p = { ...Button.defaults, ...props };
-    const cls = p.variant === "secondary" ? "btn secondary" : "btn";
+    const clsBtn = p.variant === "secondary" ? "btn secondary" : "btn";
+    const clsSec = `section t-${p.align || "center"}`;
     return React.createElement(
       "section",
-      { className: "section" },
+      { className: clsSec },
       React.createElement(
         "a",
-        {
-          className: cls,
-          href: p.href,
-          rel: p.rel,
-          target: p.target,
-        },
+        { className: clsBtn, href: p.href, rel: p.rel, target: p.target },
         String(p.label)
       )
     );
   },
   serialize: (props) => {
     const p = { ...Button.defaults, ...props };
-    const cls = p.variant === "secondary" ? "btn secondary" : "btn";
-    return `<section class="section"><a class="${cls}" href="${esc(p.href)}"${p.rel ? ` rel="${esc(p.rel)}"` : ""}${p.target ? ` target="${esc(p.target)}"` : ""}>${esc(String(p.label))}</a></section>`;
+    const clsBtn = p.variant === "secondary" ? "btn secondary" : "btn";
+    const clsSec = `section t-${p.align || "center"}`;
+    return `<section class="${clsSec}"><a class="${clsBtn}" href="${esc(p.href)}"${p.rel ? ` rel="${esc(p.rel)}"` : ""}${p.target ? ` target="${esc(p.target)}"` : ""}>${esc(String(p.label))}</a></section>`;
   },
 };
+
 
 const Cols2: BlockSpec = {
   id: "cols2",

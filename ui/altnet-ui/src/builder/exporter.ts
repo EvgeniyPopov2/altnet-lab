@@ -433,26 +433,39 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
           },
         };
       }
-      case "h1": {
-        const a = ["left", "center", "right"].includes(String((b as any).align))
-          ? String((b as any).align)
-          : "left";
-        return { type: "h1", props: { text: String(b.text || ""), align: a } };
-      }
+      case "h1":
+        return {
+          type: "h1",
+          props: {
+            text: String(b.text || ""),
+            align: (["left", "center", "right"].includes(b.align) ? b.align : "left"),
+          },
+        };
 
-      case "p": {
-        const a = ["left", "center", "right"].includes(String((b as any).align))
-          ? String((b as any).align)
-          : "left";
-        return { type: "text", props: { text: String(b.text || ""), align: a } };
-      }
+      case "p":
+        return {
+          type: "text",
+          props: {
+            text: String(b.text || ""),
+            align: (["left", "center", "right"].includes(b.align) ? b.align : "left"),
+          },
+        };
       case "img":
         return { type: "image", props: { src: sanitizeUrl(b.cid || ""), alt: String(b.alt || "") } };
       case "btn": {
         const href = sanitizeUrl(b.href || "#");
         const rel = externalLinkRels(href);
         const target = href.startsWith("http") ? "_blank" : undefined; // ДОБАВКА
-        return { type: "button", props: { label: String(b.label || "Кнопка"), href, ...(rel ? { rel } : {}), ...(target ? { target } : {}), } };
+        return {
+          type: "button",
+          props: {
+            label: String(b.label || "Кнопка"),
+            href,
+            ...(rel ? { rel } : {}),
+            ...(target ? { target } : {}),
+            align: (["left", "center", "right"].includes(b.align) ? b.align : "center"),
+          },
+        };
       }
 
       case "cols2":

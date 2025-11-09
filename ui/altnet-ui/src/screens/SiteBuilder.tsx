@@ -59,6 +59,7 @@ type BtnBlock = {
   label: string;
   href: string;
   variant?: "primary" | "secondary";
+  align?: "left" | "center" | "right";
 };
 
 type ColsRatio = "5-7" | "6-6" | "7-5";
@@ -594,6 +595,19 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                     </select>
                   </Field>
 
+                  <Field label="Выравнивание">
+                    <select
+                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                      value={(b as any).align || "center"}
+                      onChange={(e) => onChange({ align: e.target.value } as any)}
+                    >
+                      <option value="left">Слева</option>
+                      <option value="center">По центру</option>
+                      <option value="right">Справа</option>
+                    </select>
+                  </Field>
+
+
                   <input
                     className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
                       }`}
@@ -755,7 +769,7 @@ export default function SiteBuilder() {
               ? { id: uid(), type: "img", cid: "", alt: "" }
               : type === "cols2"
                 ? { id: uid(), type: "cols2", title: "Заголовок", text: "Текст…", img: "", alt: "", ratio: "6-6", reverse: false }
-                : { id: uid(), type: "btn", label: "Кнопка", href: "#" };
+                : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
 
     setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
   }, []);
@@ -820,8 +834,8 @@ export default function SiteBuilder() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }, [doc]);
 
-// HTML-оболочка для live-предпросмотра (с responsive-панелью)
-const buildLiveShellHtml = (id: string) => `<!doctype html>
+  // HTML-оболочка для live-предпросмотра (с responsive-панелью)
+  const buildLiveShellHtml = (id: string) => `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"/>
 <meta name="color-scheme" content="dark light"/>
 <title>AltNet — live-предпросмотр</title>
