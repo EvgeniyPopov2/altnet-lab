@@ -863,8 +863,91 @@ export default function SiteBuilder() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }, [doc]);
 
+  // HTML-оболочка для live-предпросмотра (слушает канал и заливает HTML в iframe)
+  const buildLiveShellHtml = (id: string) => `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"/>
+<meta name="color-scheme" content="dark light"/>
+<title>AltNet — live-предпросмотр</title>
+<style>
+  html,body{height:100%;margin:0;background:#0b0f17;color:#e6e9f4}
+  #bar{position:fixed;top:8px;left:8px;right:8px;font:14px/1.4 system-ui;
+       background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+       border-radius:10px;padding:8px 12px;z-index:10}
+  iframe{position:absolute;inset:0;border:0;width:100%;height:100%}
+</style></head>
+<body>
+  <div id="bar">Live-предпросмотр • канал ${id} • ждём контент…</div>
+  <iframe id="stage" sandbox="allow-same-origin"></iframe>
+  <script>
+    (function(){
+      const ch = new BroadcastChannel("altnet_live_preview:${id}");
+      const stage = document.getElementById("stage");
+      ch.onmessage = function(e){
+        if(!e || !e.data) return;
+        if(e.data.type === "html" && typeof e.data.html === "string"){
+          const doc = stage.contentWindow.document;
+          doc.open();
+          doc.write(e.data.html);
+          doc.close();
+        }
+      };
+    })();
+  </script>
+</body></html>`;
+
+  const onOpenLivePreview = useCallback(async () => {
+    // генерируем id канала на сессию
+    const id = `s${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    livePreviewIdRef.current = id;
+
+    // поднимем канал
+    if (livePreviewChannelRef.current) {
+      try { livePreviewChannelRef.current.close(); } catch { }
+    }
+    livePreviewChannelRef.current = new BroadcastChannel(`altnet_live_preview:${id}`);
+
+    // откроем вкладку-оболочку
+    const shell = buildLiveShellHtml(id);
+    const shellBlob = new Blob([shell], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(shellBlob);
+    livePreviewWindowRef.current = window.open(url, "_blank", "noopener,noreferrer") || null;
+
+    // первый залив контента
+    setTimeout(async () => {
+      try {
+        const model = adaptFromSiteBuilderDoc(doc);
+        const blob = await exportSingleHtml(model, { bundleAssets: true });
+        const html = await blob.text();
+        livePreviewChannelRef.current?.postMessage({ type: "html", html });
+      } catch (e) {
+        console.error("Live preview first paint error:", e);
+      }
+    }, 200);
+  }, [doc]);
+
+  const onRefreshLivePreview = useCallback(async () => {
+    if (!livePreviewChannelRef.current || !livePreviewIdRef.current) {
+      // если еще не открывали live-вкладку — просто откроем
+      await onOpenLivePreview();
+      return;
+    }
+    try {
+      const model = adaptFromSiteBuilderDoc(doc);
+      const blob = await exportSingleHtml(model, { bundleAssets: true });
+      const html = await blob.text();
+      livePreviewChannelRef.current.postMessage({ type: "html", html });
+    } catch (e) {
+      console.error("Live preview refresh error:", e);
+    }
+  }, [doc, onOpenLivePreview]);
+
   // Импорт модели из JSON
   const importJsonInputRef = useRef<HTMLInputElement>(null);
+  
+  // Live-preview: окно, канал и id канала
+  const livePreviewWindowRef = useRef<Window | null>(null);
+  const livePreviewChannelRef = useRef<BroadcastChannel | null>(null);
+  const livePreviewIdRef = useRef<string>("");
 
   const onImportJsonClick = () => {
     importJsonInputRef.current?.click();
@@ -1139,6 +1222,22 @@ export default function SiteBuilder() {
             title="Открыть предпросмотр сайта в новой вкладке"
           >
             👁 Предпросмотр в новой вкладке
+          </button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#1f2336]"
+            onClick={onOpenLivePreview}
+            title="Открыть live-предпросмотр (обновляется через канал)"
+          >
+            ⚡ Открыть live-предпросмотр
+          </button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#1f2336]"
+            onClick={onRefreshLivePreview}
+            title="Отправить текущую версию сайта во вкладку live-предпросмотра"
+          >
+            ↻ Обновить live-предпросмотр
           </button>
 
           <button
