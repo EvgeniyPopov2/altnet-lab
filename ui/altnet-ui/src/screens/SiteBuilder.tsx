@@ -823,7 +823,7 @@ export default function SiteBuilder() {
 </style></head>
 <body>
   <div id="bar">
-    <div class="title">Live-предпросмотр • канал ${id}</div>
+    <div class="title" title="ID: ${id}">Live-предпросмотр</div>
     <div class="sp"></div>
     <div role="group" aria-label="Размер устройства">
       <button id="btnDesk" aria-pressed="true" title="Desktop: 100%">Desktop</button>
