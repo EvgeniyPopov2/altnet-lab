@@ -210,6 +210,17 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
 }
 /* Реверс колонок (унифицировано с SafePreview) */
 .row.row-reverse{flex-direction:row-reverse}
+/* Устойчивые ширины через класс на .row — фикс для предпросмотра */
+@media (min-width:640px){
+  .row.cols-5-7  > .left  { width:41.6667% }
+  .row.cols-5-7  > .right { width:58.3333% }
+
+  .row.cols-6-6  > .left,
+  .row.cols-6-6  > .right { width:50% }
+
+  .row.cols-7-5  > .left  { width:58.3333% }
+  .row.cols-7-5  > .right { width:41.6667% }
+}
 `.trim();
   const accent = (doc as any)?.theme?.accent?.trim() || "#5865F2";
   const container = Number((doc as any)?.theme?.container) || 960;
@@ -255,7 +266,7 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
 </div>`.trim();
 
           // Всегда left+right, порядок управляем классом .row.reverse (см. PREVIEW_CSS)
-          return `<section class="section"><div class="container"><div class="row${isRev ? " row-reverse" : ""}">${left}${right}</div></div></section>`;
+          return `<section class="section"><div class="container"><div class="row cols-${l}-${r}${isRev ? " row-reverse" : ""}">${left}${right}</div></div></section>`;
         }
 
         case "btn":
