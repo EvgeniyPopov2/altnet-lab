@@ -203,6 +203,9 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
   .c-md-5{width:41.6667%}
   .c-md-6{width:50%}
   .c-md-7{width:58.3333%}
+  /* reverse работает и на мобильном (stack) */
+  .row.reverse .left{order:2}
+  .row.reverse .right{order:1}
 }
 `.trim();
   const accent = (doc as any)?.theme?.accent?.trim() || "#5865F2";
@@ -235,20 +238,21 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
           const ratio = String((b as any).ratio || "6-6").split("-");
           const l = ratio[0] || "6";
           const r = ratio[1] || "6";
-          const reverse = Boolean((b as any).reverse);
+          const isRev = Boolean((b as any).reverse);
 
           const left = `
-<div class="col c-xs-12 c-md-${l}">
+<div class="col left c-xs-12 c-md-${l}">
   <h2>${escapeHtml((b as any).title || "")}</h2>
   <p>${escapeHtml((b as any).text || "")}</p>
 </div>`.trim();
 
           const right = `
-<div class="col c-xs-12 c-md-${r}">
-  <img class="responsive" src="${escapeAttr((b as any).img || "")}" alt="${escapeAttr((b as any).alt || "")}" />
+<div class="col right c-xs-12 c-md-${r}">
+  <img class="responsive" src="${escapeAttr((b as any).img || "")}" alt="${escapeAttr((b as any).alt || "")}"/>
 </div>`.trim();
 
-          return `<section class="section"><div class="row${reverse ? " row-reverse" : ""}">${left}${right}</div></section>`;
+          // Всегда left+right, порядок управляем классом .row.reverse (см. PREVIEW_CSS)
+          return `<section class="section"><div class="row${isRev ? " reverse" : ""}">${left}${right}</div></section>`;
         }
 
         case "btn":

@@ -94,14 +94,16 @@ header.container{padding-top:12px;padding-bottom:0}
 .col{padding-left:8px;padding-right:8px;margin-bottom:16px}
 .row.row-reverse{flex-direction:row-reverse}
 .c-xs-12{width:100%}
-@media(min-width:768px){
+@media(min-width:640px){
   .c-md-5{width:41.6667%}
   .c-md-6{width:50%}
   .c-md-7{width:58.3333%}
 }
 .order-1{order:1}
 .order-2{order:2}
-@media(max-width:767px){.order-1,.order-2{order:initial}}  
+@media(max-width:767px){.order-1,.order-2{order:initial}} 
+.row.reverse .left{order:2}
+.row.reverse .right{order:1} 
 `.trim();
 }
 
