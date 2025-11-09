@@ -49,7 +49,7 @@ const Hero: BlockSpec = {
           { className: "mt-16" },
           React.createElement(
             "a",
-            { 
+            {
               className: "btn",
               href: p.ctaHref,
               rel: p.ctaRel,
@@ -88,7 +88,8 @@ const H1: BlockSpec = {
   },
   serialize: (props) => {
     const p = { ...H1.defaults, ...props };
-    return `<section class="section"><h1>${esc(p.text)}</h1></section>`;
+    const cls = p.align === "center" ? " t-center" : p.align === "right" ? " t-right" : "";
+    return `<section class="section${cls}"><h1>${esc(p.text)}</h1></section>`;
   },
 };
 
@@ -107,7 +108,8 @@ const Text: BlockSpec = {
   },
   serialize: (props) => {
     const p = { ...Text.defaults, ...props };
-    return `<section class="section"><p>${nl2br(p.text)}</p></section>`;
+    const cls = p.align === "center" ? " t-center" : p.align === "right" ? " t-right" : "";
+    return `<section class="section${cls}"><p>${nl2br(p.text)}</p></section>`;
   },
 };
 
@@ -133,7 +135,7 @@ const Image: BlockSpec = {
   },
   serialize: (props) => {
     const p = { ...Image.defaults, ...props };
-    return `<section class="section"><img class="responsive" src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"/></section>`; 
+    return `<section class="section"><img class="responsive" src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"/></section>`;
   },
 };
 
@@ -150,11 +152,11 @@ const Button: BlockSpec = {
       React.createElement(
         "a",
         {
-           className: cls,
-           href: p.href,
-           rel: p.rel,
-           target: p.target, 
-          },
+          className: cls,
+          href: p.href,
+          rel: p.rel,
+          target: p.target,
+        },
         String(p.label)
       )
     );

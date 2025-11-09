@@ -28,6 +28,7 @@ type H1Block = {
   id: string;
   hidden?: boolean;
   locked?: boolean;
+  align?: "left" | "center" | "right";
   type: "h1";
   text: string;
 };
@@ -36,6 +37,7 @@ type PBlock = {
   id: string;
   hidden?: boolean;
   locked?: boolean;
+  align?: "left" | "center" | "right";
   type: "p";
   text: string;
 };
@@ -383,38 +385,72 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
         )}
 
         {b.type === "h1" && (
-          <Field label="Текст заголовка">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={b.text}
-              onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll}
-              onKeyDownCapture={stopAll}
-              onClickCapture={stopAll}
-              onDragStart={preventDrag}
-              draggable={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Текст заголовка">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.text}
+                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+            <Field label="Выравнивание">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).align || "left"}
+                onChange={(e) => onChange({ align: e.target.value } as any)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+              >
+                <option value="left">Слева</option>
+                <option value="center">По центру</option>
+                <option value="right">Справа</option>
+              </select>
+            </Field>
+          </div>
         )}
 
+
         {b.type === "p" && (
-          <Field label="Параграф">
-            <textarea
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
-              value={b.text}
-              onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll}
-              onKeyDownCapture={stopAll}
-              onClickCapture={stopAll}
-              onDragStart={preventDrag}
-              draggable={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Параграф">
+              <textarea
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
+                value={b.text}
+                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+            <Field label="Выравнивание">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).align || "left"}
+                onChange={(e) => onChange({ align: e.target.value } as any)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+              >
+                <option value="left">Слева</option>
+                <option value="center">По центру</option>
+                <option value="right">Справа</option>
+              </select>
+            </Field>
+          </div>
         )}
+
 
         {b.type === "img" && (
           <div className="grid gap-3">

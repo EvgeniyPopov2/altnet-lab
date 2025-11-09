@@ -103,7 +103,10 @@ header.container{padding-top:12px;padding-bottom:0}
 .order-2{order:2}
 @media(max-width:767px){.order-1,.order-2{order:initial}} 
 .row.reverse .left{order:2}
-.row.reverse .right{order:1} 
+.row.reverse .right{order:1}
+.t-left{text-align:left}
+.t-center{text-align:center}
+.t-right{text-align:right} 
 `.trim();
 }
 
@@ -442,7 +445,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
         const target = href.startsWith("http") ? "_blank" : undefined; // ДОБАВКА
         return { type: "button", props: { label: String(b.label || "Кнопка"), href, ...(rel ? { rel } : {}), ...(target ? { target } : {}), } };
       }
-      
+
       case "cols2":
         return {
           type: "cols2",
