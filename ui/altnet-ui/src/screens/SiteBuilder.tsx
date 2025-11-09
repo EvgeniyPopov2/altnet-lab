@@ -767,32 +767,87 @@ export default function SiteBuilder() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }, [doc]);
 
-  // HTML-оболочка для live-предпросмотра (слушает канал и заливает HTML в iframe)
+  // HTML-оболочка для live-предпросмотра (с переключателем ширины: Desktop/Tablet/Mobile)
   const buildLiveShellHtml = (id: string) => `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"/>
 <meta name="color-scheme" content="dark light"/>
 <title>AltNet — live-предпросмотр</title>
 <style>
-  html,body{height:100%;margin:0;background:#0b0f17;color:#e6e9f4}
-  #bar{position:fixed;top:8px;left:8px;right:8px;font:14px/1.4 system-ui;
-       background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
-       border-radius:10px;padding:8px 12px;z-index:10}
-  iframe{position:absolute;inset:0;border:0;width:100%;height:100%}
+  :root{ --vw: 100%; }
+  html,body{height:100%;margin:0;background:#0b0f17;color:#e6e9f4;font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu;}
+  #bar{
+    position:fixed; top:8px; left:8px; right:8px; z-index:10;
+    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+    border-radius:12px; padding:8px 12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    backdrop-filter: blur(6px);
+  }
+  #bar .title{ opacity:.9 }
+  #bar .sp{ flex:1 1 auto }
+  #bar button{
+    appearance:none; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.03);
+    color:#e6e9f4; border-radius:10px; padding:6px 10px; cursor:pointer;
+  }
+  #bar button:hover{ background:rgba(255,255,255,.06); }
+  #bar button[aria-pressed="true"]{
+    border-color:#5865F2; box-shadow:0 0 0 1px rgba(88,101,242,.35) inset; background:rgba(88,101,242,.12);
+  }
+
+  /* Область прокрутки с центровкой «устройства» */
+  #wrap{
+    position:absolute; inset:56px 0 0;        /* 56px — место для панели сверху */
+    display:flex; justify-content:center; align-items:flex-start;
+    overflow:auto;
+  }
+  /* Сам iframe — это «устройство»; ширину задаём через var(--vw) */
+  #stage{
+    border:0; width:var(--vw); min-height:100%;
+    background:#0b0f17;
+  }
 </style></head>
 <body>
-  <div id="bar">Live-предпросмотр • канал ${id} • ждём контент…</div>
-  <iframe id="stage" sandbox="allow-same-origin"></iframe>
+  <div id="bar">
+    <div class="title">Live-предпросмотр • канал ${id}</div>
+    <div class="sp"></div>
+    <div role="group" aria-label="Размер устройства">
+      <button id="btnDesk" aria-pressed="true" title="Desktop: 100%">Desktop</button>
+      <button id="btnTab" aria-pressed="false" title="Tablet: 768px">Tablet</button>
+      <button id="btnMob" aria-pressed="false" title="Mobile: 375px">Mobile</button>
+    </div>
+  </div>
+
+  <div id="wrap">
+    <iframe id="stage" sandbox="allow-same-origin"></iframe>
+  </div>
+
   <script>
     (function(){
+      const root = document.documentElement;
       const ch = new BroadcastChannel("altnet_live_preview:${id}");
       const stage = document.getElementById("stage");
+
+      function setWidth(mode){
+        const btnDesk = document.getElementById("btnDesk");
+        const btnTab  = document.getElementById("btnTab");
+        const btnMob  = document.getElementById("btnMob");
+        btnDesk.setAttribute("aria-pressed", mode === "desk");
+        btnTab .setAttribute("aria-pressed", mode === "tab");
+        btnMob .setAttribute("aria-pressed", mode === "mob");
+
+        if(mode === "desk") root.style.setProperty("--vw", "100%");
+        if(mode === "tab")  root.style.setProperty("--vw", "768px");
+        if(mode === "mob")  root.style.setProperty("--vw", "375px");
+      }
+
+      document.getElementById("btnDesk").addEventListener("click", ()=> setWidth("desk"));
+      document.getElementById("btnTab").addEventListener("click",  ()=> setWidth("tab"));
+      document.getElementById("btnMob").addEventListener("click",  ()=> setWidth("mob"));
+
+      // Приход нового HTML — перерисовываем содержимое iframe
       ch.onmessage = function(e){
         if(!e || !e.data) return;
         if(e.data.type === "html" && typeof e.data.html === "string"){
           const doc = stage.contentWindow.document;
-          doc.open();
-          doc.write(e.data.html);
-          doc.close();
+          doc.open(); doc.write(e.data.html); doc.close();
         }
       };
     })();
