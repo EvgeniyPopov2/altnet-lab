@@ -210,7 +210,7 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
 
   return (
     <div
-      className="rounded-2xl bg-[#0f111a] border border-[#1c2030] p-4 mb-3 select-text"
+      className={`rounded-2xl bg-[#0f111a] border border-[#1c2030] p-4 mb-3 select-text ${ (b as any).hidden ? "opacity-50" : "" }`}
       onDragOver={(e) => onDragOverCard(e, b.id)}
       onDrop={(e) => onDropOnCard(e, b.id)}
     >
@@ -247,7 +247,6 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
             aria-label="Скрыть/показать блок"
           >
             {(b as any).hidden ? "👁‍🗨 Показать" : "👁 Скрыть"}
-            className={`rounded-2xl bg-[#0f111a] border border-[#1c2030] p-4 mb-3 select-text ${ (b as any).hidden ? "opacity-50" : "" }`}
           </button>
 
           <button
