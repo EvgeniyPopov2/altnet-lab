@@ -803,6 +803,38 @@ export default function SiteBuilder() {
     }
   }, [doc, onOpenLivePreview]);
 
+  
+  // Авто-обновление live-вкладки при изменении документа (debounce 400 мс)
+  useEffect(() => {
+    // если live-канал не поднят — ничего не делаем
+    if (!livePreviewChannelRef.current) return;
+
+    // сбросить предыдущий таймер
+    if (liveDebounceRef.current) {
+      window.clearTimeout(liveDebounceRef.current);
+    }
+
+    // отложить сборку и отправку HTML
+    liveDebounceRef.current = window.setTimeout(async () => {
+      try {
+        const model = adaptFromSiteBuilderDoc(doc);
+        const blob = await exportSingleHtml(model, { bundleAssets: true });
+        const html = await blob.text();
+        livePreviewChannelRef.current?.postMessage({ type: "html", html });
+      } catch (e) {
+        console.error("Live preview auto refresh error:", e);
+      }
+    }, 400);
+
+    // очистка
+    return () => {
+      if (liveDebounceRef.current) {
+        window.clearTimeout(liveDebounceRef.current);
+        liveDebounceRef.current = null;
+      }
+    };
+  }, [doc]);
+  
   // Импорт модели из JSON
   const importJsonInputRef = useRef<HTMLInputElement>(null);
   
@@ -810,6 +842,8 @@ export default function SiteBuilder() {
   const livePreviewWindowRef = useRef<Window | null>(null);
   const livePreviewChannelRef = useRef<BroadcastChannel | null>(null);
   const livePreviewIdRef = useRef<string>("");
+  // debounce-таймер для автообновления live-вкладки
+  const liveDebounceRef = useRef<number | null>(null);
 
   const onImportJsonClick = () => {
     importJsonInputRef.current?.click();
