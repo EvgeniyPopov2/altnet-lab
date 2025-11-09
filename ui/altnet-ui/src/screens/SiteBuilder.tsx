@@ -194,19 +194,18 @@ p{margin:8px 0}
 .btn.secondary{background:#2a2e45}
 img.responsive{max-width:100%;height:auto;border-radius:12px}
 
-/* Сетка для cols2 */
+/* Мини-сетка */
 .row{display:flex;flex-wrap:wrap;margin-left:-8px;margin-right:-8px}
-.row.row-reverse{flex-direction:row-reverse}
-.col{padding-left:8px;padding-right:8px;margin-bottom:16px}
+.col{padding-left:8px;padding-right:8px;margin-bottom:16px;flex:0 0 auto}
 .c-xs-12{width:100%}
-@media (min-width:640px){
+@media(min-width:768px){
   .c-md-5{width:41.6667%}
   .c-md-6{width:50%}
   .c-md-7{width:58.3333%}
-  /* reverse работает и на мобильном (stack) */
-  .row.reverse .left{order:2}
-  .row.reverse .right{order:1}
 }
+/* Реверс через order — работает и когда колонки складываются в столбец */
+.row.reverse .left{order:2}
+.row.reverse .right{order:1}
 `.trim();
   const accent = (doc as any)?.theme?.accent?.trim() || "#5865F2";
   const container = Number((doc as any)?.theme?.container) || 960;
@@ -252,7 +251,7 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
 </div>`.trim();
 
           // Всегда left+right, порядок управляем классом .row.reverse (см. PREVIEW_CSS)
-          return `<section class="section"><div class="row${isRev ? " reverse" : ""}">${left}${right}</div></section>`;
+          return `<section class="section"><div class="container"><div class="row${isRev ? " reverse" : ""}">${left}${right}</div></div></section>`;
         }
 
         case "btn":
@@ -1227,7 +1226,8 @@ export default function SiteBuilder() {
           </div>
         </div>
 
-        {/* Скроллируемый холст: даёт H/V скролл при зуме.
+        {
+        /* Скроллируемый холст: даёт H/V скролл при зуме.
             Важное: высота = 100% панели; iframe внутри SafePreview тоже 100% высоты. */}
         <div className="w-full h-[calc(100%-44px)] overflow-auto rounded-xl bg-[#0b0f1a] border border-[#1c2030]">
           {/* «Холст» шириной 960*zoom создаёт горизонтальный скролл */}
