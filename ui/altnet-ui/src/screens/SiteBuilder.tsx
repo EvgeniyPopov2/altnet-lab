@@ -854,6 +854,15 @@ export default function SiteBuilder() {
     downloadBlob(blob, prettyFileName(doc.title || "site", "html"));
   }, [doc]);
 
+  const onOpenPreviewTab = useCallback(async () => {
+    const model = adaptFromSiteBuilderDoc(doc);
+    const blob = await exportSingleHtml(model, { bundleAssets: true });
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener,noreferrer");
+    // на всякий случай почистим URL через минуту
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }, [doc]);
+
   // Импорт модели из JSON
   const importJsonInputRef = useRef<HTMLInputElement>(null);
 
@@ -1122,6 +1131,14 @@ export default function SiteBuilder() {
             title="Скачать один HTML-файл (всё внутри, без JS)"
           >
             📄 Экспорт одним файлом (HTML)
+          </button>
+          
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#1f2336]"
+            onClick={onOpenPreviewTab}
+            title="Открыть предпросмотр сайта в новой вкладке"
+          >
+            👁 Предпросмотр в новой вкладке
           </button>
 
           <button
