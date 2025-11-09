@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import SafePreview from "../components/SafePreview";
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
 
 
@@ -173,143 +172,6 @@ function prettyFileName(title: string, ext: string) {
     .trim()
     .slice(0, 60); // не длиннее ~60 символов, чтобы не было проблем
   return (base || "site") + "." + ext;
-}
-
-/* =========================
- * Рендер HTML для предпросмотра
- * ========================= */
-function renderDocToHTML(doc: Doc): string {
-  // Базовый CSS для предпросмотра (привязан к var(--accent))
-  const PREVIEW_CSS = `
-:root{--accent:#5865F2}
-body{background:#0b0f1a;color:#e6e9f4;font:16px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
-.container{max-width:960px;margin:0 auto;padding:24px}
-.section{padding:32px 0;border-bottom:1px solid rgba(255,255,255,0.06)}
-h1{font-size:40px;line-height:1.2;margin:0 0 16px}
-p{margin:8px 0}
-.muted{color:#9aa3b2}
-.hero{text-align:center}
-.btn{display:inline-block;padding:10px 16px;border-radius:10px;background:var(--accent);color:#fff;font-weight:600}
-.btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
-.btn.secondary{background:#2a2e45}
-img.responsive{max-width:100%;height:auto;border-radius:12px}
-
-/* Мини-сетка */
-.row{display:flex;flex-wrap:wrap;margin-left:-8px;margin-right:-8px}
-.col{padding-left:8px;padding-right:8px;margin-bottom:16px;flex:0 0 auto}
-.c-xs-12{width:100%}
-@media(min-width:640px){
-  .c-sm-5{width:41.6667%}
-  .c-sm-6{width:50%}
-  .c-sm-7{width:58.3333%}
-}
-@media(min-width:768px){
-  .c-md-5{width:41.6667%}
-  .c-md-6{width:50%}
-  .c-md-7{width:58.3333%}
-}
-/* Реверс колонок (унифицировано с SafePreview) */
-.row.row-reverse{flex-direction:row-reverse}
-/* Устойчивые ширины через класс на .row — фикс для предпросмотра */
-@media (min-width:640px){
-  .row.cols-5-7  > .left  { width:41.6667% }
-  .row.cols-5-7  > .right { width:58.3333% }
-
-  .row.cols-6-6  > .left,
-  .row.cols-6-6  > .right { width:50% }
-
-  .row.cols-7-5  > .left  { width:58.3333% }
-  .row.cols-7-5  > .right { width:41.6667% }
-}
-`.trim();
-  const accent = (doc as any)?.theme?.accent?.trim() || "#5865F2";
-  const container = Number((doc as any)?.theme?.container) || 960;
-  // ВАЖНО: !important — чтобы перебить дефолт 960px из PREVIEW_CSS
-  const themeStyle = `<style id="altnet-theme">:root{--accent:${accent}} .container{max-width:${container}px !important}</style>`;
-  const blocks = doc.blocks
-    .map((b) => {
-      switch (b.type) {
-        case "hero":
-          return `
-<section class="container" style="padding:64px 24px; text-align:center;">
-  <h1 style="font-size:40px; line-height:1.1; margin:0 0 12px;">${escapeHtml(b.title || "")}</h1>
-  <p style="font-size:18px; color:#9aa3b2; margin:0 0 20px;">${escapeHtml(b.subtitle || "")}</p>
-  ${
-    b.ctaText
-      ? `<div class="mt-16"><a class="btn" href="${escapeAttr(b.ctaLink || "#")}" rel="noopener noreferrer nofollow">${escapeHtml(
-          b.ctaText
-        )}</a>`
-      : ""
-  }
-</section>`.trim();
-        case "h1":
-          return `<h1 style="font-size:32px; line-height:1.2; margin:24px 0;">${escapeHtml(b.text)}</h1>`;
-        case "p":
-          return `<p style="font-size:16px; color:#c7cfdd; margin:12px 0;">${escapeHtml(b.text)}</p>`;
-        case "img":
-          return `<img src="${escapeAttr(b.cid)}" alt="${escapeAttr(b.alt || "")}" style="max-width:100%; border-radius:12px; margin:12px 0;" />`;
-        case "cols2": {
-          const ratio = String((b as any).ratio || "6-6").split("-");
-          const l = ratio[0] || "6";
-          const r = ratio[1] || "6";
-          const isRev = Boolean((b as any).reverse);
-
-          const left = `
-<div class="col left c-xs-12 c-sm-${l} c-md-${l}">
-  <h2>${escapeHtml((b as any).title || "")}</h2>
-  <p>${escapeHtml((b as any).text || "")}</p>
-</div>`.trim();
-
-          const right = `
-<div class="col right c-xs-12 c-sm-${r} c-md-${r}">
-  <img class="responsive" src="${escapeAttr((b as any).img || "")}" alt="${escapeAttr((b as any).alt || "")}"/>
-</div>`.trim();
-
-          // Всегда left+right, порядок управляем классом .row.reverse (см. PREVIEW_CSS)
-          return `<section class="section"><div class="container"><div class="row cols-${l}-${r}${isRev ? " row-reverse" : ""}">${left}${right}</div></div></section>`;
-        }
-
-        case "btn":
-          return `<a class="btn${b.variant === "secondary" ? " secondary" : ""}" href="${escapeAttr(b.href)}" rel="noopener noreferrer nofollow">${escapeHtml(
-            b.label
-          )}</a>`;
-      }
-    })
-    .join("\n");
-
-  const siteTitle = doc.title
-    ? `<header class="container">
-         <h1 style="font-size:28px; line-height:1.2; margin:16px 0 12px; opacity:.85;">${escapeHtml(doc.title)}</h1>
-       </header>`
-    : "";
-
-  return `<!doctype html>
-<html lang="ru"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(doc.title || "Сайт")}</title>
-<style id="altnet-preview-css">${PREVIEW_CSS}</style>
-${themeStyle}
-</head>
-<body style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0f1a; color:#e6e9f4; padding:24px;">
-  ${siteTitle}
-  <main class="container">
-    ${blocks}
-  </main>
-</body></html>`;
-}
-
-
-
-function escapeHtml(s: string) {
-  return s
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-function escapeAttr(s?: string) {
-  return (s || "").replaceAll('"', "&quot;");
 }
 
 /* =========================
@@ -732,7 +594,7 @@ function isSafeImageSrc(src?: string): boolean {
  * ========================= */
 export default function SiteBuilder() {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
-  const html = useMemo(() => renderDocToHTML(doc), [doc]);
+  // Снятие предупреждений TS о неиспользуемых сущностях после отключения старого превью
   const checks = useMemo(() => validateDoc(doc), [doc]);
   const okCount = useMemo(() => checks.filter(c => c.ok).length, [checks]);
   const [showChecklist, setShowChecklist] = useState(false);
@@ -1069,28 +931,6 @@ export default function SiteBuilder() {
     } catch {}
   }, []);
 
-  const handlePreviewClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const el = e.target as HTMLElement | null;
-    const link = el?.closest?.("a") as HTMLAnchorElement | null;
-    if (!link) return;
-
-    const isNewTab = e.ctrlKey || e.metaKey || e.button === 1;
-    if (isNewTab && link.href) {
-      window.open(link.href, "_blank", "noopener,noreferrer");
-    }
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-
-  // Зум предпросмотра (горизонтальный скролл обеспечим «холстом»)
-  const [zoom, setZoom] = useState(1);
-  const decZoom = () => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)));
-  const incZoom = () => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)));
-  const resetZoom = () => setZoom(1);
-
-  const CONTENT_WIDTH = Math.max(640, Number(doc?.theme?.container) || 960); // ширина макета предпросмотра
-
   return (
     <div className="h-full grid grid-cols-1 md:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)] gap-4">
       {/* Левая панель */}
@@ -1330,55 +1170,13 @@ export default function SiteBuilder() {
         </div>
       </div>
 
-      {/* Предпросмотр */}
-      <div
-        className="md:col-[2] rounded-2xl p-4 bg-[#0f111a] border border-[#1c2030]"
-        onClick={handlePreviewClick}
-        style={{ minHeight: "calc(100vh - 96px)" }}
-      >
-        {/* Панель зума */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-sm text-[#9aa3b2]">
-            Предпросмотр
-            <button
-              className={`ml-2 px-2 py-0.5 rounded-md border ${okCount === checks.length ? "bg-[#0e2e1f] border-[#14532d] text-[#a7f3d0]" : "bg-[#2a1212] border-[#7f1d1d] text-[#fecaca]"}`}
-              onClick={() => setShowChecklist(v => !v)}
-              title="Открыть проверки качества"
-            >
-              {okCount}/{checks.length}
-            </button>
-          </div>
-          <div className="flex items-center gap-2"></div>
-        
-          <div className="flex items-center gap-2">
-            <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45]" onClick={decZoom}>−</button>
-            <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45]" onClick={resetZoom}>{Math.round(zoom * 100)}%</button>
-            <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45]" onClick={incZoom}>+</button>
-          </div>
+      {/* Предпросмотр (отключён) */}
+      <div className="md:col-[2] rounded-2xl p-6 bg-[#0f111a] border border-[#1c2030]">
+        <div className="text-sm text-[#9aa3b2] mb-2">
+          Встроенный предпросмотр отключён.
         </div>
-
-        {
-        /* Скроллируемый холст: даёт H/V скролл при зуме.
-            Важное: высота = 100% панели; iframe внутри SafePreview тоже 100% высоты. */}
-        <div className="w-full h-[calc(100%-44px)] overflow-auto rounded-xl bg-[#0b0f1a] border border-[#1c2030]">
-          {/* «Холст» шириной 960*zoom создаёт горизонтальный скролл */}
-          <div
-            className="relative"
-            style={{ width: `${CONTENT_WIDTH * zoom}px`, height: "100%" }}
-          >
-            {/* Масштабируем содержимое от левого верхнего края */}
-            <div
-              className="absolute top-0 left-0"
-              style={{
-                width: `${CONTENT_WIDTH}px`,
-                transform: `scale(${zoom})`,
-                transformOrigin: "top left",
-                height: "100%",
-              }}
-            >
-              <SafePreview html={html} />
-            </div>
-          </div>
+        <div className="text-sm text-[#9aa3b2]">
+          Используйте кнопки слева: <b>«Предпросмотр в новой вкладке»</b> или <b>«Открыть live-предпросмотр»</b>, затем <b>«↻ Обновить live-предпросмотр»</b>.
         </div>
       </div>
     </div>
