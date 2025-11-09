@@ -197,16 +197,16 @@ const Cols2: BlockSpec = {
   serialize: (props) => {
     const p = { ...Cols2.defaults, ...props };
     const [l, r] = String(p.ratio || "6-6").split("-");
-    const left = `
-<div class="col c-xs-12 c-md-${l}">
+    const textCol = `
+<div class="col c-xs-12 c-md-${l} ${p.reverse ? "order-2" : "order-1"}">
   <h2>${esc(p.title)}</h2>
   <p>${esc(p.text)}</p>
 </div>`.trim();
-    const right = `
-<div class="col c-xs-12 c-md-${r}">
+    const imageCol = `
+<div class="col c-xs-12 c-md-${r} ${p.reverse ? "order-1" : "order-2"}">
   <img class="responsive" src="${esc(p.img)}" alt="${esc(p.alt)}"/>
 </div>`.trim();
-    return `<section class="section"><div class="row">${p.reverse ? right + left : left + right}</div></section>`;
+    return `<section class="section"><div class="row">${textCol}${imageCol}</div></section>`;
   }
 };
 
