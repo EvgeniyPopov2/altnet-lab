@@ -10,15 +10,16 @@ export default function SafePreview({ html }: { html: string }) {
   }, [html]);
 
   // 2) Санитайзим уже "задебоунсенный" HTML
-  const clean = useMemo(() => DOMPurify.sanitize(deb, {
-    USE_PROFILES: { html: true },
-    ADD_TAGS: ['style'],
-    ADD_ATTR: ['id'],
-    FORBID_TAGS: ["script", "iframe", "object", "embed", "link"],
-    FORBID_ATTR: ["onerror", "onload", "onclick", "style"],
-    ALLOWED_URI_REGEXP: /^(?:(?:https?:|data:image\/|altfs:\/\/|cid:|ipfs:\/\/))/i,
-    KEEP_CONTENT: false,
-  }), [deb]);
+  const clean = useMemo(() =>
+    DOMPurify.sanitize(deb, {
+      USE_PROFILES: { html: true },
+      ADD_TAGS: ["style"],
+      FORBID_TAGS: ["script", "iframe", "object", "embed", "link"],
+      FORBID_ATTR: ["onerror", "onload", "onclick", "style"],
+      ALLOWED_URI_REGEXP: /^(?:(?:https?:|data:image\/|altfs:\/\/|cid:))/i,
+      KEEP_CONTENT: false,
+    }), [deb]
+  );
 
   // 3) Не даём iframe уводить фокус
   const iframeRef = useRef<HTMLIFrameElement>(null);
