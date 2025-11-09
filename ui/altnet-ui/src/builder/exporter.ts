@@ -433,10 +433,19 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
           },
         };
       }
-      case "h1":
-        return { type: "h1", props: { text: String(b.text || "") } };
-      case "p":
-        return { type: "text", props: { text: String(b.text || "") } };
+      case "h1": {
+        const a = ["left", "center", "right"].includes(String((b as any).align))
+          ? String((b as any).align)
+          : "left";
+        return { type: "h1", props: { text: String(b.text || ""), align: a } };
+      }
+
+      case "p": {
+        const a = ["left", "center", "right"].includes(String((b as any).align))
+          ? String((b as any).align)
+          : "left";
+        return { type: "text", props: { text: String(b.text || ""), align: a } };
+      }
       case "img":
         return { type: "image", props: { src: sanitizeUrl(b.cid || ""), alt: String(b.alt || "") } };
       case "btn": {

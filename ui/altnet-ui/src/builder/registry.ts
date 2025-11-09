@@ -77,39 +77,38 @@ const Hero: BlockSpec = {
 const H1: BlockSpec = {
   id: "h1",
   name: "Заголовок H1",
-  defaults: { text: "Заголовок раздела" },
+  defaults: { text: "Заголовок раздела", align: "left" },
   render: ({ props }) => {
     const p = { ...H1.defaults, ...props };
     return React.createElement(
       "section",
       { className: "section" },
-      React.createElement("h1", null, p.text)
+      React.createElement("h1", { style: { textAlign: p.align || "left" } }, p.text)
     );
   },
   serialize: (props) => {
     const p = { ...H1.defaults, ...props };
-    const cls = p.align === "center" ? " t-center" : p.align === "right" ? " t-right" : "";
-    return `<section class="section${cls}"><h1>${esc(p.text)}</h1></section>`;
+    const alignAttr = p.align && p.align !== "left" ? ` style="text-align:${p.align}"` : "";
+    return `<section class="section"><h1${alignAttr}>${esc(p.text)}</h1></section>`;
   },
 };
 
 const Text: BlockSpec = {
   id: "text",
   name: "Текст",
-  defaults: { text: "Здесь может быть ваш текст.\nМного текста." },
+  defaults: { text: "Здесь может быть ваш текст.\nМного текста.", align: "left" },
   render: ({ props }) => {
     const p = { ...Text.defaults, ...props };
-    // Для предпросмотра: просто <p> без nl2br — предпросмотр у тебя свой (SafePreview).
     return React.createElement(
       "section",
       { className: "section" },
-      React.createElement("p", null, p.text)
+      React.createElement("p", { style: { textAlign: p.align || "left" } }, p.text)
     );
   },
   serialize: (props) => {
     const p = { ...Text.defaults, ...props };
-    const cls = p.align === "center" ? " t-center" : p.align === "right" ? " t-right" : "";
-    return `<section class="section${cls}"><p>${nl2br(p.text)}</p></section>`;
+    const alignAttr = p.align && p.align !== "left" ? ` style="text-align:${p.align}"` : "";
+    return `<section class="section"><p${alignAttr}>${nl2br(p.text)}</p></section>`;
   },
 };
 
