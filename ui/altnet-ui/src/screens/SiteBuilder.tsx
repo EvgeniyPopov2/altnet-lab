@@ -191,14 +191,15 @@ p{margin:8px 0}
 .hero{text-align:center}
 .btn{display:inline-block;padding:10px 16px;border-radius:10px;background:var(--accent);color:#fff;font-weight:600}
 .btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.btn.secondary{background:#2a2e45}
 img.responsive{max-width:100%;height:auto;border-radius:12px}
 
-/* мини-сетка для cols2 — паритет с export styles.css */
+/* Сетка для cols2 */
 .row{display:flex;flex-wrap:wrap;margin-left:-8px;margin-right:-8px}
-.col{padding-left:8px;padding-right:8px;margin-bottom:16px}
 .row.row-reverse{flex-direction:row-reverse}
+.col{padding-left:8px;padding-right:8px;margin-bottom:16px}
 .c-xs-12{width:100%}
-@media(min-width:768px){
+@media (min-width:640px){
   .c-md-5{width:41.6667%}
   .c-md-6{width:50%}
   .c-md-7{width:58.3333%}
@@ -213,7 +214,7 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
       switch (b.type) {
         case "hero":
           return `
-<section style="padding:64px 24px; text-align:center; max-width:960px; margin:0 auto;">
+<section class="container" style="padding:64px 24px; text-align:center;">
   <h1 style="font-size:40px; line-height:1.1; margin:0 0 12px;">${escapeHtml(b.title || "")}</h1>
   <p style="font-size:18px; color:#9aa3b2; margin:0 0 20px;">${escapeHtml(b.subtitle || "")}</p>
   ${
@@ -232,8 +233,9 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
           return `<img src="${escapeAttr(b.cid)}" alt="${escapeAttr(b.alt || "")}" style="max-width:100%; border-radius:12px; margin:12px 0;" />`;
         case "cols2": {
           const ratio = String((b as any).ratio || "6-6").split("-");
-          const l = (ratio[0] || "6").trim();
-          const r = (ratio[1] || "6").trim();
+          const l = ratio[0] || "6";
+          const r = ratio[1] || "6";
+          const reverse = Boolean((b as any).reverse);
 
           const left = `
 <div class="col c-xs-12 c-md-${l}">
@@ -243,11 +245,10 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
 
           const right = `
 <div class="col c-xs-12 c-md-${r}">
-  <img class="responsive" src="${escapeAttr((b as any).img || "")}" alt="${escapeAttr((b as any).alt || "")}"/>
+  <img class="responsive" src="${escapeAttr((b as any).img || "")}" alt="${escapeAttr((b as any).alt || "")}" />
 </div>`.trim();
 
-          const rowClass = (b as any).reverse ? "row row-reverse" : "row";
-          return `<section class="section"><div class="${rowClass}">${left}${right}</div></section>`;
+          return `<section class="section"><div class="row${reverse ? " row-reverse" : ""}">${left}${right}</div></section>`;
         }
 
         case "btn":
@@ -978,7 +979,7 @@ export default function SiteBuilder() {
   const incZoom = () => setZoom((z) => Math.min(1.5, +(z + 0.1).toFixed(2)));
   const resetZoom = () => setZoom(1);
 
-  const CONTENT_WIDTH = 960; // ширина макета предпросмотра
+  const CONTENT_WIDTH = Math.max(640, Number(doc?.theme?.container) || 960); // ширина макета предпросмотра
 
   return (
     <div className="h-full grid grid-cols-1 md:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)] gap-4">
@@ -1228,7 +1229,7 @@ export default function SiteBuilder() {
           {/* «Холст» шириной 960*zoom создаёт горизонтальный скролл */}
           <div
             className="relative"
-            style={{ width: `${960 * zoom}px`, height: "100%" }}
+            style={{ width: `${CONTENT_WIDTH * zoom}px`, height: "100%" }}
           >
             {/* Масштабируем содержимое от левого верхнего края */}
             <div
