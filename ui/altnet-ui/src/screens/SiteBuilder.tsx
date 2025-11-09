@@ -155,7 +155,7 @@ function validateDoc(doc: Doc): CheckItem[] {
     text: hasAnyImage ? "Есть изображение для превью (OG)." : "Добавьте хотя бы одну «Картинку» — пригодится для превью в соцсетях.",
   });
 
-  
+
   return checks;
 }
 
@@ -216,7 +216,7 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
 
   return (
     <div
-      className={`rounded-2xl bg-[#0f111a] border border-[#1c2030] p-4 mb-3 select-text ${ (b as any).hidden ? "opacity-50" : "" }`}
+      className={`rounded-2xl bg-[#0f111a] border border-[#1c2030] p-4 mb-3 select-text ${(b as any).hidden ? "opacity-50" : ""}`}
       onDragOver={(e) => onDragOverCard(e, b.id)}
       onDrop={(e) => onDropOnCard(e, b.id)}
     >
@@ -225,36 +225,43 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           {index + 1}. {labelOf(b.type)}
         </div>
         <div className="flex items-center gap-2">
+          {/* Хэндл перетаскивания: выключен при замке */}
           <button
-            title="Перетащи для сортировки"
-            disabled={isLocked}
-            className="px-2 py-1 rounded-md bg-[#111427] border border-[#1f2751] text-[#b8c1ff] cursor-grab active:cursor-grabbing opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            title={isLocked ? "Блок заблокирован" : "Перетащи для сортировки"}
+            className={`px-2 py-1 rounded-md bg-[#111427] border border-[#1f2751] ${isLocked ? "opacity-40 cursor-not-allowed" : "text-[#b8c1ff]"}`}
             draggable={!isLocked}
-            onDragStart={(e) => onDragStartByHandle(e, b.id)}
+            onDragStart={(e) => {
+              if (isLocked) { e.preventDefault(); e.stopPropagation(); return; }
+              onDragStartByHandle(e, b.id);
+            }}
             onMouseDown={(e) => e.stopPropagation()}
+            disabled={isLocked}
+            aria-disabled={isLocked}
           >
             ≡
           </button>
-           
+
+          {/* Дублировать — запрещено при замке */}
           <button
+            onClick={(e) => { e.stopPropagation(); if (!isLocked) onDuplicate(); }}
+            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "opacity-40 cursor-not-allowed" : "text-[#b8ffc1] hover:bg-[#1a2e1f]"}`}
+            title={isLocked ? "Разблокируйте, чтобы дублировать" : "Создать копию блока ниже"}
             disabled={isLocked}
-            onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8ffc1] hover:bg-[#1a2e1f] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Создать копию блока ниже"
           >
             Дублировать
-          </button> 
+          </button>
 
+          {/* Скрыть/показать — можно всегда */}
           <button
-            disabled={isLocked}
             onClick={(e) => { e.stopPropagation(); onChange({ hidden: !(b as any).hidden } as any); }}
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#9aa3b2] hover:bg-[#1f2336] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#9aa3b2] hover:bg-[#1f2336]"
             title={(b as any).hidden ? "Показать блок" : "Скрыть блок"}
             aria-label="Скрыть/показать блок"
           >
             {(b as any).hidden ? "👁‍🗨 Показать" : "👁 Скрыть"}
           </button>
 
+          {/* Замок — можно всегда (переключатель) */}
           <button
             onClick={(e) => { e.stopPropagation(); onChange({ locked: !isLocked } as any); }}
             className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "text-[#a7f3d0]" : "text-[#b8c1ff]"} hover:bg-[#1f2336]`}
@@ -264,35 +271,38 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
             {isLocked ? "🔓 Разблок." : "🔒 Замок"}
           </button>
 
+          {/* Удалить — запрещено при замке */}
           <button
+            onClick={(e) => { e.stopPropagation(); if (!isLocked) onRemove(); }}
+            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "opacity-40 cursor-not-allowed text-[#ffb3a8]" : "text-[#ffb3a8] hover:bg-[#221f2e]"}`}
+            title={isLocked ? "Разблокируйте, чтобы удалить" : "Удалить блок"}
             disabled={isLocked}
-            onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#ffb3a8] hover:bg-[#221f2e] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Удалить
           </button>
-          
+
+          {/* Двигать вверх/вниз — запрещено при замке */}
           <button
-            disabled={isLocked}
-            title="Переместить вверх"
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={(e) => { e.stopPropagation(); onMoveUp(b.id); }}
+            title={isLocked ? "Разблокируйте, чтобы переместить" : "Переместить вверх"}
+            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "opacity-40 cursor-not-allowed" : "text-[#b8c1ff] hover:bg-[#1f2336]"}`}
+            onClick={(e) => { e.stopPropagation(); if (!isLocked) onMoveUp(b.id); }}
             aria-label="Переместить блок вверх"
+            disabled={isLocked}
           >
             ↑
           </button>
 
           <button
-            disabled={isLocked}
-            title="Переместить вниз"
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
-            onClick={(e) => { e.stopPropagation(); onMoveDown(b.id); }}
+            title={isLocked ? "Разблокируйте, чтобы переместить" : "Переместить вниз"}
+            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "opacity-40 cursor-not-allowed" : "text-[#b8c1ff] hover:bg-[#1f2336]"}`}
+            onClick={(e) => { e.stopPropagation(); if (!isLocked) onMoveDown(b.id); }}
             aria-label="Переместить блок вниз"
+            disabled={isLocked}
           >
             ↓
           </button>
-
         </div>
+
       </div>
 
       {/* Редакторы блоков, инпуты защищены от всплытия/drag */}
@@ -369,9 +379,9 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                 );
               })()}
             </div>
-          </div> 
-          )}
-        
+          </div>
+        )}
+
         {b.type === "h1" && (
           <Field label="Текст заголовка">
             <input
@@ -575,7 +585,7 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
         )}
       </div>
     </div>
-    );
+  );
 });
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -600,7 +610,7 @@ function labelOf(t: BlockType) {
     case "btn":
       return "кнопка";
     case "cols2":
-      return "две колонки";  
+      return "две колонки";
   }
 }
 
@@ -635,7 +645,7 @@ export default function SiteBuilder() {
     () => ({ ...doc, blocks: doc.blocks.filter(b => !(b as any).hidden) }),
     [doc]
   );
-  
+
   // Снятие предупреждений TS о неиспользуемых сущностях после отключения старого превью
   const checks = useMemo(() => validateDoc(doc), [doc]);
   const okCount = useMemo(() => checks.filter(c => c.ok).length, [checks]);
@@ -657,7 +667,7 @@ export default function SiteBuilder() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
-    } catch {}
+    } catch { }
   }, [doc]);
 
   // DnD состояние
@@ -684,11 +694,18 @@ export default function SiteBuilder() {
       const from = arr.findIndex((x) => x.id === fromId);
       const to = arr.findIndex((x) => x.id === toId);
       if (from < 0 || to < 0) return prev;
+
+      // 🚫 запрет: если источник или цель — «замок», не двигаем
+      const fromLocked = Boolean((arr[from] as any).locked);
+      const toLocked = Boolean((arr[to] as any).locked);
+      if (fromLocked || toLocked) return prev;
+
       const [moved] = arr.splice(from, 1);
       arr.splice(to, 0, moved);
       return { ...prev, blocks: arr };
     });
   }, []);
+
 
   const addBlock = useCallback((type: BlockType) => {
     const block: Block =
@@ -751,7 +768,7 @@ export default function SiteBuilder() {
     const fname = prettyFileName(doc.title || "site", "zip");
     downloadBlob(blob, fname);
   }, [doc]);
-  
+
   const onExportSingle = useCallback(async () => {
     const model = adaptFromSiteBuilderDoc(docForBuild);
     const blob = await exportSingleHtml(model, { bundleAssets: true });
@@ -900,7 +917,7 @@ export default function SiteBuilder() {
     }
   }, [doc, onOpenLivePreview]);
 
-  
+
   // Авто-обновление live-вкладки при изменении документа (debounce 400 мс)
   useEffect(() => {
     // если live-канал не поднят — ничего не делаем
@@ -934,7 +951,7 @@ export default function SiteBuilder() {
 
   // Импорт модели из JSON
   const importJsonInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Live-preview: окно, канал и id канала
   const livePreviewWindowRef = useRef<Window | null>(null);
   const livePreviewChannelRef = useRef<BroadcastChannel | null>(null);
@@ -1053,13 +1070,13 @@ export default function SiteBuilder() {
     const blob = new Blob([JSON.stringify(model, null, 2)], { type: "application/json" });
     const fname = prettyFileName(doc.title || "site", "json");
     downloadBlob(blob, fname);
-  }, [doc]); 
+  }, [doc]);
 
   const resetDoc = useCallback(() => {
     setDoc(DEFAULT_DOC);
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    } catch { }
   }, []);
 
   return (
@@ -1178,7 +1195,7 @@ export default function SiteBuilder() {
           >
             ⬇️ Экспорт статического сайта (ZIP)
           </button>
-          
+
           <button
             className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#93e5ab] hover:bg-[#1f2336]"
             onClick={onExportSingle}
@@ -1186,7 +1203,7 @@ export default function SiteBuilder() {
           >
             📄 Экспорт одним файлом (HTML)
           </button>
-          
+
           <button
             className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#1f2336]"
             onClick={onOpenPreviewTab}
@@ -1233,7 +1250,7 @@ export default function SiteBuilder() {
             accept="application/json"
             className="hidden"
             onChange={onImportJsonChange}
-          /> 
+          />
 
           <button
             className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
@@ -1276,9 +1293,9 @@ export default function SiteBuilder() {
           <button
             className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
             onClick={() => addBlock("cols2")}
->
-  + Две колонки
-</button>
+          >
+            + Две колонки
+          </button>
         </div>
 
         {/* Список блоков */}
