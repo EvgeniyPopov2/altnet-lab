@@ -820,82 +820,98 @@ export default function SiteBuilder() {
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }, [doc]);
 
-  // HTML-оболочка для live-предпросмотра (с переключателем ширины: Desktop/Tablet/Mobile)
-  const buildLiveShellHtml = (id: string) => `<!doctype html>
+// HTML-оболочка для live-предпросмотра (с responsive-панелью)
+const buildLiveShellHtml = (id: string) => `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"/>
 <meta name="color-scheme" content="dark light"/>
 <title>AltNet — live-предпросмотр</title>
 <style>
-  :root{ --vw: 100%; }
-  html,body{height:100%;margin:0;background:#0b0f17;color:#e6e9f4;font:14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu;}
+  :root{--bg:#0b0f17;--fg:#e6e9f4;--muted:#9aa3b2;--bar:#151a25;--bd:#22283a}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,Segoe UI,Roboto,Arial}
   #bar{
-    position:fixed; top:8px; left:8px; right:8px; z-index:10;
-    background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
-    border-radius:12px; padding:8px 12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-    backdrop-filter: blur(6px);
+    position:fixed;top:8px;left:8px;right:8px;z-index:10;
+    background:var(--bar);border:1px solid var(--bd);
+    border-radius:12px;padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap
   }
-  #bar .title{ opacity:.9 }
-  #bar .sp{ flex:1 1 auto }
+  #bar .tag{opacity:.8}
   #bar button{
-    appearance:none; border:1px solid rgba(255,255,255,.12); background:rgba(255,255,255,.03);
-    color:#e6e9f4; border-radius:10px; padding:6px 10px; cursor:pointer;
+    border:1px solid var(--bd);background:#0f1420;color:#cfd5e6;
+    padding:6px 10px;border-radius:8px;cursor:pointer
   }
-  #bar button:hover{ background:rgba(255,255,255,.06); }
-  #bar button[aria-pressed="true"]{
-    border-color:#5865F2; box-shadow:0 0 0 1px rgba(88,101,242,.35) inset; background:rgba(88,101,242,.12);
+  #bar button.active{outline:2px solid #5865F2}
+  #bar input[type="number"]{
+    width:92px;padding:6px 8px;border:1px solid var(--bd);border-radius:8px;background:#0f1420;color:#cfd5e6
   }
-
-  /* Область прокрутки с центровкой «устройства» */
-  #wrap{
-    position:absolute; inset:56px 0 0;        /* 56px — место для панели сверху */
-    display:flex; justify-content:center; align-items:flex-start;
-    overflow:auto;
+  #viewport{
+    position:absolute;inset:0;display:flex;justify-content:center;align-items:stretch;
+    overflow:auto;padding:56px 16px 16px
   }
-  /* Сам iframe — это «устройство»; ширину задаём через var(--vw) */
-  #stage{
-    border:0; width:var(--vw); min-height:100%;
-    background:#0b0f17;
+  iframe#stage{
+    border:0;height:100%;width:100%; /* режим Fit по умолчанию */
+    background:#0b0f17;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35)
   }
+  .sep{width:1px;height:24px;background:var(--bd);margin:0 4px}
 </style></head>
 <body>
   <div id="bar">
-    <div class="title" title="ID: ${id}">Live-предпросмотр</div>
-    <div class="sp"></div>
-    <div role="group" aria-label="Размер устройства">
-      <button id="btnDesk" aria-pressed="true" title="Desktop: 100%">Desktop</button>
-      <button id="btnTab" aria-pressed="false" title="Tablet: 768px">Tablet</button>
-      <button id="btnMob" aria-pressed="false" title="Mobile: 375px">Mobile</button>
-    </div>
+    <span class="tag">Live-предпросмотр</span>
+    <div class="sep"></div>
+    <button data-w="fit" class="active">Fit</button>
+    <button data-w="1280">Desktop 1280</button>
+    <button data-w="834">Tablet 834</button>
+    <button data-w="390">Mobile 390</button>
+    <div class="sep"></div>
+    <span>Ширина:</span><input id="w" type="number" min="320" max="1920" step="10" placeholder="px"/>
   </div>
 
-  <div id="wrap">
+  <div id="viewport">
     <iframe id="stage" sandbox="allow-same-origin"></iframe>
   </div>
 
   <script>
     (function(){
-      const root = document.documentElement;
       const ch = new BroadcastChannel("altnet_live_preview:${id}");
       const stage = document.getElementById("stage");
+      const buttons = Array.from(document.querySelectorAll("#bar button[data-w]"));
+      const input = document.getElementById("w");
+      const LS_KEY = "altnet_live_w:${id}";
 
-      function setWidth(mode){
-        const btnDesk = document.getElementById("btnDesk");
-        const btnTab  = document.getElementById("btnTab");
-        const btnMob  = document.getElementById("btnMob");
-        btnDesk.setAttribute("aria-pressed", mode === "desk");
-        btnTab .setAttribute("aria-pressed", mode === "tab");
-        btnMob .setAttribute("aria-pressed", mode === "mob");
-
-        if(mode === "desk") root.style.setProperty("--vw", "100%");
-        if(mode === "tab")  root.style.setProperty("--vw", "768px");
-        if(mode === "mob")  root.style.setProperty("--vw", "375px");
+      function applyWidth(mode){
+        buttons.forEach(b => b.classList.toggle("active", b.dataset.w === mode || (mode==="fit" && b.dataset.w==="fit")));
+        if(mode === "fit"){
+          stage.style.width = "100%";
+          localStorage.setItem(LS_KEY, "fit");
+          input.value = "";
+        }else{
+          const px = parseInt(mode, 10);
+          if(!isFinite(px)) return;
+          stage.style.width = px + "px";
+          localStorage.setItem(LS_KEY, String(px));
+          input.value = String(px);
+        }
       }
 
-      document.getElementById("btnDesk").addEventListener("click", ()=> setWidth("desk"));
-      document.getElementById("btnTab").addEventListener("click",  ()=> setWidth("tab"));
-      document.getElementById("btnMob").addEventListener("click",  ()=> setWidth("mob"));
+      // init from LS
+      (function(){
+        const saved = localStorage.getItem(LS_KEY) || "fit";
+        const isFit = saved === "fit";
+        applyWidth(isFit ? "fit" : saved);
+      })();
 
-      // Приход нового HTML — перерисовываем содержимое iframe
+      // buttons
+      buttons.forEach(b => {
+        b.addEventListener("click", () => applyWidth(b.dataset.w));
+      });
+
+      // manual input
+      input.addEventListener("change", () => {
+        const px = parseInt(input.value, 10);
+        if(isFinite(px) && px >= 320 && px <= 1920){
+          applyWidth(String(px));
+        }
+      });
+
+      // paint on messages
       ch.onmessage = function(e){
         if(!e || !e.data) return;
         if(e.data.type === "html" && typeof e.data.html === "string"){
@@ -906,6 +922,7 @@ export default function SiteBuilder() {
     })();
   </script>
 </body></html>`;
+
 
   const onOpenLivePreview = useCallback(async () => {
     // генерируем id канала на сессию
