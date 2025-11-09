@@ -99,6 +99,9 @@ header.container{padding-top:12px;padding-bottom:0}
   .c-md-6{width:50%}
   .c-md-7{width:58.3333%}
 }
+.order-1{order:1}
+.order-2{order:2}
+@media(max-width:767px){.order-1,.order-2{order:initial}}  
 `.trim();
 }
 
