@@ -15,6 +15,7 @@ type BlockType = "hero" | "h1" | "p" | "img" | "btn" | "cols2";
 
 type HeroBlock = {
   id: string;
+  hidden?: boolean;
   type: "hero";
   title: string;
   subtitle?: string;
@@ -24,18 +25,21 @@ type HeroBlock = {
 
 type H1Block = {
   id: string;
+  hidden?: boolean;
   type: "h1";
   text: string;
 };
 
 type PBlock = {
   id: string;
+  hidden?: boolean;
   type: "p";
   text: string;
 };
 
 type ImgBlock = {
   id: string;
+  hidden?: boolean;
   type: "img";
   cid: string; // altfs://CID или http(s)
   alt?: string;
@@ -43,6 +47,7 @@ type ImgBlock = {
 
 type BtnBlock = {
   id: string;
+  hidden?: boolean;
   type: "btn";
   label: string;
   href: string;
@@ -53,6 +58,7 @@ type ColsRatio = "5-7" | "6-6" | "7-5";
 
 type Cols2Block = {
   id: string;
+  hidden?: boolean;
   type: "cols2";
   title: string;
   text: string;
@@ -233,6 +239,16 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           >
             Дублировать
           </button> 
+
+          <button
+            onClick={(e) => { e.stopPropagation(); onChange({ hidden: !(b as any).hidden } as any); }}
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#9aa3b2] hover:bg-[#1f2336]"
+            title={(b as any).hidden ? "Показать блок" : "Скрыть блок"}
+            aria-label="Скрыть/показать блок"
+          >
+            {(b as any).hidden ? "👁‍🗨 Показать" : "👁 Скрыть"}
+            className={`rounded-2xl bg-[#0f111a] border border-[#1c2030] p-4 mb-3 select-text ${ (b as any).hidden ? "opacity-50" : "" }`}
+          </button>
 
           <button
             onClick={(e) => {
@@ -594,6 +610,12 @@ function isSafeImageSrc(src?: string): boolean {
  * ========================= */
 export default function SiteBuilder() {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
+
+  const docForBuild = useMemo(
+    () => ({ ...doc, blocks: doc.blocks.filter(b => !(b as any).hidden) }),
+    [doc]
+  );
+  
   // Снятие предупреждений TS о неиспользуемых сущностях после отключения старого превью
   const checks = useMemo(() => validateDoc(doc), [doc]);
   const okCount = useMemo(() => checks.filter(c => c.ok).length, [checks]);
@@ -704,20 +726,20 @@ export default function SiteBuilder() {
   }, []);
 
   const onExportZip = useCallback(async () => {
-    const model = adaptFromSiteBuilderDoc(doc);
+    const model = adaptFromSiteBuilderDoc(docForBuild);
     const blob = await exportSiteZip(model, { bundleAssets: true });
     const fname = prettyFileName(doc.title || "site", "zip");
     downloadBlob(blob, fname);
   }, [doc]);
   
   const onExportSingle = useCallback(async () => {
-    const model = adaptFromSiteBuilderDoc(doc);
+    const model = adaptFromSiteBuilderDoc(docForBuild);
     const blob = await exportSingleHtml(model, { bundleAssets: true });
     downloadBlob(blob, prettyFileName(doc.title || "site", "html"));
   }, [doc]);
 
   const onOpenPreviewTab = useCallback(async () => {
-    const model = adaptFromSiteBuilderDoc(doc);
+    const model = adaptFromSiteBuilderDoc(docForBuild);
     const blob = await exportSingleHtml(model, { bundleAssets: true });
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank", "noopener,noreferrer");
@@ -777,7 +799,7 @@ export default function SiteBuilder() {
     // первый залив контента
     setTimeout(async () => {
       try {
-        const model = adaptFromSiteBuilderDoc(doc);
+        const model = adaptFromSiteBuilderDoc(docForBuild);
         const blob = await exportSingleHtml(model, { bundleAssets: true });
         const html = await blob.text();
         livePreviewChannelRef.current?.postMessage({ type: "html", html });
@@ -794,7 +816,7 @@ export default function SiteBuilder() {
       return;
     }
     try {
-      const model = adaptFromSiteBuilderDoc(doc);
+      const model = adaptFromSiteBuilderDoc(docForBuild);
       const blob = await exportSingleHtml(model, { bundleAssets: true });
       const html = await blob.text();
       livePreviewChannelRef.current.postMessage({ type: "html", html });
@@ -817,7 +839,7 @@ export default function SiteBuilder() {
     // отложить сборку и отправку HTML
     liveDebounceRef.current = window.setTimeout(async () => {
       try {
-        const model = adaptFromSiteBuilderDoc(doc);
+        const model = adaptFromSiteBuilderDoc(docForBuild);
         const blob = await exportSingleHtml(model, { bundleAssets: true });
         const html = await blob.text();
         livePreviewChannelRef.current?.postMessage({ type: "html", html });
@@ -834,7 +856,7 @@ export default function SiteBuilder() {
       }
     };
   }, [doc]);
-  
+
   // Импорт модели из JSON
   const importJsonInputRef = useRef<HTMLInputElement>(null);
   
@@ -952,7 +974,7 @@ export default function SiteBuilder() {
   };
 
   const onExportJson = useCallback(() => {
-    const model = adaptFromSiteBuilderDoc(doc);
+    const model = adaptFromSiteBuilderDoc(docForBuild);
     const blob = new Blob([JSON.stringify(model, null, 2)], { type: "application/json" });
     const fname = prettyFileName(doc.title || "site", "json");
     downloadBlob(blob, fname);
