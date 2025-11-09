@@ -16,6 +16,7 @@ type BlockType = "hero" | "h1" | "p" | "img" | "btn" | "cols2";
 type HeroBlock = {
   id: string;
   hidden?: boolean;
+  locked?: boolean;
   type: "hero";
   title: string;
   subtitle?: string;
@@ -26,6 +27,7 @@ type HeroBlock = {
 type H1Block = {
   id: string;
   hidden?: boolean;
+  locked?: boolean;
   type: "h1";
   text: string;
 };
@@ -33,6 +35,7 @@ type H1Block = {
 type PBlock = {
   id: string;
   hidden?: boolean;
+  locked?: boolean;
   type: "p";
   text: string;
 };
@@ -40,6 +43,7 @@ type PBlock = {
 type ImgBlock = {
   id: string;
   hidden?: boolean;
+  locked?: boolean;
   type: "img";
   cid: string; // altfs://CID или http(s)
   alt?: string;
@@ -48,6 +52,7 @@ type ImgBlock = {
 type BtnBlock = {
   id: string;
   hidden?: boolean;
+  locked?: boolean;
   type: "btn";
   label: string;
   href: string;
@@ -59,6 +64,7 @@ type ColsRatio = "5-7" | "6-6" | "7-5";
 type Cols2Block = {
   id: string;
   hidden?: boolean;
+  locked?: boolean;
   type: "cols2";
   title: string;
   text: string;
@@ -199,7 +205,7 @@ type BlockCardProps = {
 const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
   const { block: b, index, onChange, onRemove, onDuplicate, onDragStartByHandle, onDragOverCard, onDropOnCard, onMoveUp, onMoveDown } =
     props;
-
+  const isLocked = Boolean((b as any).locked);
   const stopAll = useCallback((e: React.SyntheticEvent) => {
     e.stopPropagation();
   }, []);
@@ -221,8 +227,9 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
         <div className="flex items-center gap-2">
           <button
             title="Перетащи для сортировки"
-            className="px-2 py-1 rounded-md bg-[#111427] border border-[#1f2751] text-[#b8c1ff] cursor-grab active:cursor-grabbing"
-            draggable
+            disabled={isLocked}
+            className="px-2 py-1 rounded-md bg-[#111427] border border-[#1f2751] text-[#b8c1ff] cursor-grab active:cursor-grabbing opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            draggable={!isLocked}
             onDragStart={(e) => onDragStartByHandle(e, b.id)}
             onMouseDown={(e) => e.stopPropagation()}
           >
@@ -230,19 +237,18 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           </button>
            
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDuplicate();
-            }}
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8ffc1] hover:bg-[#1a2e1f]"
+            disabled={isLocked}
+            onClick={(e) => { e.stopPropagation(); onDuplicate(); }}
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8ffc1] hover:bg-[#1a2e1f] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Создать копию блока ниже"
           >
             Дублировать
           </button> 
 
           <button
+            disabled={isLocked}
             onClick={(e) => { e.stopPropagation(); onChange({ hidden: !(b as any).hidden } as any); }}
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#9aa3b2] hover:bg-[#1f2336]"
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#9aa3b2] hover:bg-[#1f2336] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
             title={(b as any).hidden ? "Показать блок" : "Скрыть блок"}
             aria-label="Скрыть/показать блок"
           >
@@ -250,18 +256,26 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           </button>
 
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
-            }}
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#ffb3a8] hover:bg-[#221f2e]"
+            onClick={(e) => { e.stopPropagation(); onChange({ locked: !isLocked } as any); }}
+            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "text-[#a7f3d0]" : "text-[#b8c1ff]"} hover:bg-[#1f2336]`}
+            title={isLocked ? "Разблокировать блок" : "Заблокировать блок"}
+            aria-label="Заблокировать/разблокировать блок"
+          >
+            {isLocked ? "🔓 Разблок." : "🔒 Замок"}
+          </button>
+
+          <button
+            disabled={isLocked}
+            onClick={(e) => { e.stopPropagation(); onRemove(); }}
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#ffb3a8] hover:bg-[#221f2e] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Удалить
           </button>
           
           <button
+            disabled={isLocked}
             title="Переместить вверх"
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={(e) => { e.stopPropagation(); onMoveUp(b.id); }}
             aria-label="Переместить блок вверх"
           >
@@ -269,8 +283,9 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           </button>
 
           <button
+            disabled={isLocked}
             title="Переместить вниз"
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336] opacity-100 disabled:opacity-50 disabled:cursor-not-allowed"
             onClick={(e) => { e.stopPropagation(); onMoveDown(b.id); }}
             aria-label="Переместить блок вниз"
           >
@@ -281,42 +296,14 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
       </div>
 
       {/* Редакторы блоков, инпуты защищены от всплытия/drag */}
-      {b.type === "hero" && (
-        <div className="grid gap-3">
-          <Field label="Заголовок">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={b.title}
-              onChange={(e) => onChange({ title: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll}
-              onKeyDownCapture={stopAll}
-              onClickCapture={stopAll}
-              onDragStart={preventDrag}
-              draggable={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
-          <Field label="Подзаголовок">
-            <textarea
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
-              value={b.subtitle || ""}
-              onChange={(e) => onChange({ subtitle: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll}
-              onKeyDownCapture={stopAll}
-              onClickCapture={stopAll}
-              onDragStart={preventDrag}
-              draggable={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Текст кнопки">
+      <div className={isLocked ? "pointer-events-none opacity-60" : ""}>
+        {b.type === "hero" && (
+          <div className="grid gap-3">
+            <Field label="Заголовок">
               <input
                 className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.ctaText || ""}
-                onChange={(e) => onChange({ ctaText: e.target.value } as Partial<Block>)}
+                value={b.title}
+                onChange={(e) => onChange({ title: e.target.value } as Partial<Block>)}
                 onMouseDownCapture={stopAll}
                 onKeyDownCapture={stopAll}
                 onClickCapture={stopAll}
@@ -326,16 +313,246 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                 spellCheck={false}
               />
             </Field>
+            <Field label="Подзаголовок">
+              <textarea
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
+                value={b.subtitle || ""}
+                onChange={(e) => onChange({ subtitle: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Текст кнопки">
+                <input
+                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.ctaText || ""}
+                  onChange={(e) => onChange({ ctaText: e.target.value } as Partial<Block>)}
+                  onMouseDownCapture={stopAll}
+                  onKeyDownCapture={stopAll}
+                  onClickCapture={stopAll}
+                  onDragStart={preventDrag}
+                  draggable={false}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </Field>
+              {(() => {
+                const link = b.ctaLink || "";
+                const ok = isSafeLink(link);
+                return (
+                  <Field label="Ссылка">
+                    <input
+                      className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
+                        }`}
+                      value={link}
+                      onChange={(e) => onChange({ ctaLink: e.target.value } as Partial<Block>)}
+                      onMouseDownCapture={stopAll}
+                      onKeyDownCapture={stopAll}
+                      onClickCapture={stopAll}
+                      onDragStart={preventDrag}
+                      draggable={false}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    {!ok && (
+                      <div className="text-xs text-[#ff9b9b] mt-1">
+                        Разрешено: #якорь, /путь, ./относительный, http(s)://, altfs://, ipfs://
+                      </div>
+                    )}
+                  </Field>
+                );
+              })()}
+            </div>
+          </div> 
+          )}
+        
+        {b.type === "h1" && (
+          <Field label="Текст заголовка">
+            <input
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={b.text}
+              onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll}
+              onKeyDownCapture={stopAll}
+              onClickCapture={stopAll}
+              onDragStart={preventDrag}
+              draggable={false}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+        )}
+
+        {b.type === "p" && (
+          <Field label="Параграф">
+            <textarea
+              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
+              value={b.text}
+              onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
+              onMouseDownCapture={stopAll}
+              onKeyDownCapture={stopAll}
+              onClickCapture={stopAll}
+              onDragStart={preventDrag}
+              draggable={false}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+        )}
+
+        {b.type === "img" && (
+          <div className="grid gap-3">
             {(() => {
-              const link = b.ctaLink || "";
+              const src = b.cid || "";
+              const ok = isSafeImageSrc(src);
+              return (
+                <Field label="CID / URL">
+                  <input
+                    className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
+                      }`}
+                    value={src}
+                    onChange={(e) => onChange({ cid: e.target.value } as Partial<Block>)}
+                    onMouseDownCapture={stopAll}
+                    onKeyDownCapture={stopAll}
+                    onClickCapture={stopAll}
+                    onDragStart={preventDrag}
+                    draggable={false}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="altfs://<CID> или https://..."
+                  />
+                  {!ok && (
+                    <div className="text-xs text-[#ff9b9b] mt-1">
+                      Разрешено: data:image/*, http(s)://, altfs://, ipfs://
+                    </div>
+                  )}
+                </Field>
+              );
+            })()}
+            <Field label="Описание (alt)">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.alt || ""}
+                onChange={(e) => onChange({ alt: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+          </div>
+        )}
+
+        {b.type === "cols2" && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Заголовок">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).title || ""}
+                onChange={(e) => onChange({ title: e.target.value } as any)}
+              />
+            </Field>
+
+            <Field label="Доля колонок">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).ratio || "6-6"}
+                onChange={(e) => onChange({ ratio: e.target.value } as any)}
+              >
+                <option value="5-7">5-7</option>
+                <option value="6-6">6-6</option>
+                <option value="7-5">7-5</option>
+              </select>
+            </Field>
+
+            <Field label="Текст">
+              <textarea
+                className="w-full px-3 py-2 h-24 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).text || ""}
+                onChange={(e) => onChange({ text: e.target.value } as any)}
+              />
+            </Field>
+
+            <Field label="Картинка (CID/URL)">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).img || ""}
+                onChange={(e) => onChange({ img: e.target.value } as any)}
+              />
+            </Field>
+
+            <Field label="Alt">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).alt || ""}
+                onChange={(e) => onChange({ alt: e.target.value } as any)}
+              />
+            </Field>
+
+            <Field label="Поменять местами">
+              <label className="inline-flex items-center gap-2 select-none">
+                <input
+                  type="checkbox"
+                  checked={Boolean((b as any).reverse)}
+                  onChange={(e) => onChange({ reverse: e.target.checked } as any)}
+                />
+                <span>Картинка слева, текст справа</span>
+              </label>
+            </Field>
+          </div>
+        )}
+
+        {b.type === "btn" && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Текст кнопки">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.label}
+                onChange={(e) => onChange({ label: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+
+
+            {(() => {
+              const link = b.href || "";
               const ok = isSafeLink(link);
               return (
                 <Field label="Ссылка">
+                  <Field label="Вариант">
+                    <select
+                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                      value={(b as any).variant || "primary"}
+                      onChange={(e) => onChange({ variant: e.target.value } as any)}
+                      onMouseDownCapture={stopAll}
+                      onKeyDownCapture={stopAll}
+                      onClickCapture={stopAll}
+                    >
+                      <option value="primary">Основная</option>
+                      <option value="secondary">Вторичная</option>
+                    </select>
+                  </Field>
+
                   <input
                     className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
                       }`}
                     value={link}
-                    onChange={(e) => onChange({ ctaLink: e.target.value } as Partial<Block>)}
+                    onChange={(e) => onChange({ href: e.target.value } as Partial<Block>)}
                     onMouseDownCapture={stopAll}
                     onKeyDownCapture={stopAll}
                     onClickCapture={stopAll}
@@ -344,6 +561,8 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                     autoComplete="off"
                     spellCheck={false}
                   />
+
+
                   {!ok && (
                     <div className="text-xs text-[#ff9b9b] mt-1">
                       Разрешено: #якорь, /путь, ./относительный, http(s)://, altfs://, ipfs://
@@ -353,208 +572,10 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
               );
             })()}
           </div>
-        </div>
-      )}
-
-      {b.type === "h1" && (
-        <Field label="Текст заголовка">
-          <input
-            className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-            value={b.text}
-            onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
-            onMouseDownCapture={stopAll}
-            onKeyDownCapture={stopAll}
-            onClickCapture={stopAll}
-            onDragStart={preventDrag}
-            draggable={false}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </Field>
-      )}
-
-      {b.type === "p" && (
-        <Field label="Параграф">
-          <textarea
-            className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
-            value={b.text}
-            onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
-            onMouseDownCapture={stopAll}
-            onKeyDownCapture={stopAll}
-            onClickCapture={stopAll}
-            onDragStart={preventDrag}
-            draggable={false}
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </Field>
-      )}
-
-      {b.type === "img" && (
-        <div className="grid gap-3">
-          {(() => {
-            const src = b.cid || "";
-            const ok = isSafeImageSrc(src);
-            return (
-              <Field label="CID / URL">
-                <input
-                  className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
-                    }`}
-                  value={src}
-                  onChange={(e) => onChange({ cid: e.target.value } as Partial<Block>)}
-                  onMouseDownCapture={stopAll}
-                  onKeyDownCapture={stopAll}
-                  onClickCapture={stopAll}
-                  onDragStart={preventDrag}
-                  draggable={false}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="altfs://<CID> или https://..."
-                />
-                {!ok && (
-                  <div className="text-xs text-[#ff9b9b] mt-1">
-                    Разрешено: data:image/*, http(s)://, altfs://, ipfs://
-                  </div>
-                )}
-              </Field>
-            );
-          })()}
-          <Field label="Описание (alt)">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={b.alt || ""}
-              onChange={(e) => onChange({ alt: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll}
-              onKeyDownCapture={stopAll}
-              onClickCapture={stopAll}
-              onDragStart={preventDrag}
-              draggable={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
-        </div>
-      )}
-
-      {b.type === "cols2" && (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Заголовок">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={(b as any).title || ""}
-              onChange={(e) => onChange({ title: e.target.value } as any)}
-            />
-          </Field>
-
-          <Field label="Доля колонок">
-            <select
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={(b as any).ratio || "6-6"}
-              onChange={(e) => onChange({ ratio: e.target.value } as any)}
-            >
-              <option value="5-7">5-7</option>
-              <option value="6-6">6-6</option>
-              <option value="7-5">7-5</option>
-            </select>
-          </Field>
-
-          <Field label="Текст">
-            <textarea
-              className="w-full px-3 py-2 h-24 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={(b as any).text || ""}
-              onChange={(e) => onChange({ text: e.target.value } as any)}
-            />
-          </Field>
-
-          <Field label="Картинка (CID/URL)">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={(b as any).img || ""}
-              onChange={(e) => onChange({ img: e.target.value } as any)}
-            />
-          </Field>
-
-          <Field label="Alt">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={(b as any).alt || ""}
-              onChange={(e) => onChange({ alt: e.target.value } as any)}
-            />
-          </Field>
-
-          <Field label="Поменять местами">
-            <label className="inline-flex items-center gap-2 select-none">
-              <input
-                type="checkbox"
-                checked={Boolean((b as any).reverse)}
-                onChange={(e) => onChange({ reverse: e.target.checked } as any)}
-              />
-              <span>Картинка слева, текст справа</span>
-            </label>
-          </Field>
-        </div>
-      )}
-
-      {b.type === "btn" && (
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Текст кнопки">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={b.label}
-              onChange={(e) => onChange({ label: e.target.value } as Partial<Block>)}
-              onMouseDownCapture={stopAll}
-              onKeyDownCapture={stopAll}
-              onClickCapture={stopAll}
-              onDragStart={preventDrag}
-              draggable={false}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
-          {(() => {
-            const link = b.href || "";
-            const ok = isSafeLink(link);
-            return (
-              <Field label="Ссылка">
-                <Field label="Вариант">
-                  <select
-                    className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                    value={(b as any).variant || "primary"}
-                    onChange={(e) => onChange({ variant: e.target.value } as any)}
-                    onMouseDownCapture={stopAll}
-                    onKeyDownCapture={stopAll}
-                    onClickCapture={stopAll}
-                  >
-                    <option value="primary">Основная</option>
-                    <option value="secondary">Вторичная</option>
-                  </select>
-                </Field>
-
-                <input
-                  className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
-                    }`}
-                  value={link}
-                  onChange={(e) => onChange({ href: e.target.value } as Partial<Block>)}
-                  onMouseDownCapture={stopAll}
-                  onKeyDownCapture={stopAll}
-                  onClickCapture={stopAll}
-                  onDragStart={preventDrag}
-                  draggable={false}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                {!ok && (
-                  <div className="text-xs text-[#ff9b9b] mt-1">
-                    Разрешено: #якорь, /путь, ./относительный, http(s)://, altfs://, ipfs://
-                  </div>
-                )}
-              </Field>
-            );
-          })()}
-        </div>
-      )}
+        )}
+      </div>
     </div>
-  );
+    );
 });
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
