@@ -198,14 +198,18 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
 .row{display:flex;flex-wrap:wrap;margin-left:-8px;margin-right:-8px}
 .col{padding-left:8px;padding-right:8px;margin-bottom:16px;flex:0 0 auto}
 .c-xs-12{width:100%}
+@media(min-width:640px){
+  .c-sm-5{width:41.6667%}
+  .c-sm-6{width:50%}
+  .c-sm-7{width:58.3333%}
+}
 @media(min-width:768px){
   .c-md-5{width:41.6667%}
   .c-md-6{width:50%}
   .c-md-7{width:58.3333%}
 }
-/* Реверс через order — работает и когда колонки складываются в столбец */
-.row.reverse .left{order:2}
-.row.reverse .right{order:1}
+/* Реверс колонок (унифицировано с SafePreview) */
+.row.row-reverse{flex-direction:row-reverse}
 `.trim();
   const accent = (doc as any)?.theme?.accent?.trim() || "#5865F2";
   const container = Number((doc as any)?.theme?.container) || 960;
@@ -240,18 +244,18 @@ img.responsive{max-width:100%;height:auto;border-radius:12px}
           const isRev = Boolean((b as any).reverse);
 
           const left = `
-<div class="col left c-xs-12 c-md-${l}">
+<div class="col left c-xs-12 c-sm-${l} c-md-${l}">
   <h2>${escapeHtml((b as any).title || "")}</h2>
   <p>${escapeHtml((b as any).text || "")}</p>
 </div>`.trim();
 
           const right = `
-<div class="col right c-xs-12 c-md-${r}">
+<div class="col right c-xs-12 c-sm-${r} c-md-${r}">
   <img class="responsive" src="${escapeAttr((b as any).img || "")}" alt="${escapeAttr((b as any).alt || "")}"/>
 </div>`.trim();
 
           // Всегда left+right, порядок управляем классом .row.reverse (см. PREVIEW_CSS)
-          return `<section class="section"><div class="container"><div class="row${isRev ? " reverse" : ""}">${left}${right}</div></div></section>`;
+          return `<section class="section"><div class="container"><div class="row${isRev ? " row-reverse" : ""}">${left}${right}</div></div></section>`;
         }
 
         case "btn":
