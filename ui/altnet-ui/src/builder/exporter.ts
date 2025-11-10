@@ -417,7 +417,7 @@ export function downloadBlob(blob: Blob, filename: string = "altnet-site.zip") {
   a.remove();
   URL.revokeObjectURL(href);
 }
-// Адаптер из твоего конструктора → модель экспорта с маппингом типов и фильтрацией URL
+
 export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
   const rawBlocks: any[] = Array.isArray(builderDoc?.blocks) ? builderDoc.blocks : [];
 
@@ -464,7 +464,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
       case "text":
         return {
           id,
-          type: "p",
+          type: "text",
           props: {
             text: String(b?.text ?? ""),
             align: ["left", "center", "right"].includes(b?.align) ? b.align : "left",
@@ -475,7 +475,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
       case "image":
         return {
           id,
-          type: "img",
+          type: "image",
           props: {
             src: sanitizeUrl(b?.cid ?? b?.src ?? ""),
             alt: String(b?.alt ?? ""),
@@ -489,7 +489,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
         const rel = externalLinkRels(href);
         return {
           id,
-          type: "btn",
+          type: "button",
           props: {
             label: String(b?.label ?? b?.ctaText ?? "Кнопка"),
             href,
@@ -541,4 +541,3 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
     blocks,
   };
 }
-
