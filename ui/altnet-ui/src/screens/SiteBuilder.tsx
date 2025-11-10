@@ -11,7 +11,8 @@ const notEmpty = (s?: string) => !!(s && s.trim().length > 0);
 /* =========================
  * Типы документа и блоков
  * ========================= */
-type BlockType = "hero" | "h1" | "p" | "img" | "btn" | "cols2";
+type BlockType = "hero" | "h1" | "p" | "img" | "btn" | "cols2" | "spacer" | "divider";
+
 
 type HeroBlock = {
   id: string;
@@ -77,7 +78,23 @@ type Cols2Block = {
   reverse?: boolean;
 };
 
-type Block = HeroBlock | H1Block | PBlock | ImgBlock | BtnBlock | Cols2Block;
+type SpacerBlock = {
+  id: string;
+  hidden?: boolean;
+  locked?: boolean;
+  type: "spacer";
+  size?: "xs" | "sm" | "md" | "lg" | "xl";
+};
+
+type DividerBlock = {
+  id: string;
+  hidden?: boolean;
+  locked?: boolean;
+  type: "divider";
+};
+
+
+type Block = HeroBlock | H1Block | PBlock | ImgBlock | BtnBlock | Cols2Block | SpacerBlock | DividerBlock;
 
 type Doc = {
   title: string;
@@ -326,6 +343,7 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                 spellCheck={false}
               />
             </Field>
+
             <Field label="Подзаголовок">
               <textarea
                 className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
@@ -340,6 +358,7 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                 spellCheck={false}
               />
             </Field>
+
             <div className="grid grid-cols-2 gap-3">
               <Field label="Текст кнопки">
                 <input
@@ -418,7 +437,6 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           </div>
         )}
 
-
         {b.type === "p" && (
           <div className="grid grid-cols-2 gap-3">
             <Field label="Параграф">
@@ -451,7 +469,6 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
             </Field>
           </div>
         )}
-
 
         {b.type === "img" && (
           <div className="grid gap-3">
@@ -575,7 +592,6 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
               />
             </Field>
 
-
             {(() => {
               const link = b.href || "";
               const ok = isSafeLink(link);
@@ -607,7 +623,6 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                     </select>
                   </Field>
 
-
                   <input
                     className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
                       }`}
@@ -622,7 +637,6 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                     spellCheck={false}
                   />
 
-
                   {!ok && (
                     <div className="text-xs text-[#ff9b9b] mt-1">
                       Разрешено: #якорь, /путь, ./относительный, http(s)://, altfs://, ipfs://
@@ -631,6 +645,32 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                 </Field>
               );
             })()}
+          </div>
+        )}
+
+        {/* Новые самостоятельные ветки: spacer/divider */}
+        {b.type === "spacer" && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Размер">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).size || "md"}
+                onChange={(e) => onChange({ size: e.target.value } as any)}
+              >
+                <option value="xs">XS (8px)</option>
+                <option value="sm">SM (16px)</option>
+                <option value="md">MD (24px)</option>
+                <option value="lg">LG (40px)</option>
+                <option value="xl">XL (64px)</option>
+              </select>
+            </Field>
+          </div>
+        )}
+
+        {b.type === "divider" && (
+          <div className="grid gap-2">
+            <div className="h-px bg-[#2a2f45]" />
+            <div className="text-[#9aa3b2] text-xs">Тонкая линия-разделитель</div>
           </div>
         )}
       </div>
@@ -661,8 +701,13 @@ function labelOf(t: BlockType) {
       return "кнопка";
     case "cols2":
       return "две колонки";
+    case "spacer":
+      return "отступ";
+    case "divider":
+      return "разделитель";
   }
 }
+
 
 // ── Валидация URL'ов для полей
 function isSafeLink(href?: string): boolean {
@@ -769,7 +814,12 @@ export default function SiteBuilder() {
               ? { id: uid(), type: "img", cid: "", alt: "" }
               : type === "cols2"
                 ? { id: uid(), type: "cols2", title: "Заголовок", text: "Текст…", img: "", alt: "", ratio: "6-6", reverse: false }
-                : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
+                : type === "spacer"
+                  ? { id: uid(), type: "spacer", size: "md" }
+                  : type === "divider"
+                    ? { id: uid(), type: "divider" }
+                    : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
+
 
     setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
   }, []);
@@ -1045,7 +1095,8 @@ export default function SiteBuilder() {
         throw new Error("Ожидался объект с массивом blocks.");
       }
 
-      const okTypes = new Set<BlockType>(["hero", "h1", "p", "img", "btn", "cols2"]);
+      const okTypes = new Set<BlockType>(["hero", "h1", "p", "img", "btn", "cols2", "spacer", "divider"]);
+
 
       const title = typeof (data as any).title === "string" ? (data as any).title : "Мой сайт";
       const description = typeof (data as any).description === "string" ? (data as any).description : "";
@@ -1363,6 +1414,22 @@ export default function SiteBuilder() {
           >
             + Две колонки
           </button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("spacer")}
+          >
+            + Spacer
+          </button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("divider")}
+          >
+            + Divider
+          </button>
+
+
         </div>
 
         {/* Список блоков */}

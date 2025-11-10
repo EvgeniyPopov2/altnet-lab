@@ -209,6 +209,31 @@ const Cols2: BlockSpec = {
   }
 };
 
+// === Spacer (пустой отступ)
+const Spacer: BlockSpec = {
+  id: "spacer",
+  name: "Пустой отступ",
+  defaults: { size: "md" as "xs" | "sm" | "md" | "lg" | "xl" },
+  render: ({ props }) => {
+    const p = { ...Spacer.defaults, ...props };
+    return React.createElement("div", { className: `spacer spacer-${p.size || "md"}` });
+  },
+  serialize: (props) => {
+    const p = { ...Spacer.defaults, ...props };
+    return `<div class="spacer spacer-${esc(p.size || "md")}"></div>`;
+  },
+};
+
+// === Divider (тонкая линия)
+const Divider: BlockSpec = {
+  id: "divider",
+  name: "Разделитель",
+  defaults: {},
+  render: () => React.createElement("hr", { className: "divider" }),
+  serialize: () => `<hr class="divider"/>`,
+};
+
+
 // Регистр
 const BLOCKS: Record<string, BlockSpec> = {
   [Hero.id]: Hero,
@@ -217,6 +242,8 @@ const BLOCKS: Record<string, BlockSpec> = {
   [Image.id]: Image,
   [Button.id]: Button,
   [Cols2.id]: Cols2,
+  [Spacer.id]: Spacer,
+  [Divider.id]: Divider,
 };
 
 // API реестра

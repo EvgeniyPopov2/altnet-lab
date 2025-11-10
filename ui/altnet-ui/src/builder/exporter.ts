@@ -106,7 +106,13 @@ header.container{padding-top:12px;padding-bottom:0}
 .row.reverse .right{order:1}
 .t-left{text-align:left}
 .t-center{text-align:center}
-.t-right{text-align:right} 
+.t-right{text-align:right}
+.spacer-xs{height:8px}
+.spacer-sm{height:16px}
+.spacer-md{height:24px}
+.spacer-lg{height:40px}
+.spacer-xl{height:64px}
+.divider{height:1px;border:0;background:rgba(255,255,255,0.08);margin:16px 0} 
 `.trim();
 }
 
@@ -411,89 +417,128 @@ export function downloadBlob(blob: Blob, filename: string = "altnet-site.zip") {
   a.remove();
   URL.revokeObjectURL(href);
 }
-
 // Адаптер из твоего конструктора → модель экспорта с маппингом типов и фильтрацией URL
 export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
-  const blocksRaw: any[] = Array.isArray(builderDoc?.blocks) ? builderDoc.blocks : [];
-  const blocks: BlockInstance[] = blocksRaw.map((b) => {
-    switch (b?.type) {
+  const rawBlocks: any[] = Array.isArray(builderDoc?.blocks) ? builderDoc.blocks : [];
+
+  const blocks: BlockInstance[] = rawBlocks.map((b: any): BlockInstance => {
+    const id = typeof b?.id === "string" ? b.id : undefined;
+    const t = String(b?.type || "").toLowerCase();
+
+    switch (t) {
       case "hero": {
-        const href = sanitizeUrl(b.ctaLink || "#");
+        const href = sanitizeUrl(b?.ctaLink ?? b?.ctaHref ?? "#");
+        const target = href.startsWith("http") ? "_blank" : "_self";
         const rel = externalLinkRels(href);
-        const target = href.startsWith("http") ? "_blank" : undefined; // ДОБАВКА
+        const align = ["left", "center", "right"].includes(b?.align) ? b.align : "left";
+        const src = typeof b?.src === "string" ? b.src : (typeof b?.img === "string" ? b.img : "");
         return {
+          id,
           type: "hero",
           props: {
-            title: String(b.title || ""),
-            subtitle: String(b.subtitle || ""),
-            ctaLabel: String(b.ctaText || "Подробнее"),
+            title: String(b?.title ?? ""),
+            subtitle: String(b?.subtitle ?? ""),
+            text: String(b?.text ?? ""),
+            align,
+            src,
+            alt: String(b?.alt ?? ""),
+            ctaLabel: String(b?.ctaText ?? b?.ctaLabel ?? "Подробнее"),
             ctaHref: href,
-            ...(rel ? { ctaRel: rel } : {}),
-            ...(target ? { ctaTarget: target } : {}), // ДОБАВКА
+            ctaTarget: target,
+            ctaRel: rel,
           },
         };
       }
+
       case "h1":
         return {
+          id,
           type: "h1",
           props: {
-            text: String(b.text || ""),
-            align: (["left", "center", "right"].includes(b.align) ? b.align : "left"),
+            text: String(b?.text ?? ""),
+            align: ["left", "center", "right"].includes(b?.align) ? b.align : "left",
           },
         };
 
       case "p":
+      case "text":
         return {
-          type: "text",
+          id,
+          type: "p",
           props: {
-            text: String(b.text || ""),
-            align: (["left", "center", "right"].includes(b.align) ? b.align : "left"),
+            text: String(b?.text ?? ""),
+            align: ["left", "center", "right"].includes(b?.align) ? b.align : "left",
           },
         };
+
       case "img":
-        return { type: "image", props: { src: sanitizeUrl(b.cid || ""), alt: String(b.alt || "") } };
-      case "btn": {
-        const href = sanitizeUrl(b.href || "#");
-        const rel = externalLinkRels(href);
-        const target = href.startsWith("http") ? "_blank" : undefined; // ДОБАВКА
+      case "image":
         return {
-          type: "button",
+          id,
+          type: "img",
           props: {
-            label: String(b.label || "Кнопка"),
+            src: sanitizeUrl(b?.cid ?? b?.src ?? ""),
+            alt: String(b?.alt ?? ""),
+          },
+        };
+
+      case "btn":
+      case "button": {
+        const href = sanitizeUrl(b?.href ?? b?.ctaHref ?? "#");
+        const target = href.startsWith("http") ? "_blank" : "_self";
+        const rel = externalLinkRels(href);
+        return {
+          id,
+          type: "btn",
+          props: {
+            label: String(b?.label ?? b?.ctaText ?? "Кнопка"),
             href,
-            ...(rel ? { rel } : {}),
-            ...(target ? { target } : {}),
-            align: (["left", "center", "right"].includes(b.align) ? b.align : "center"),
+            target,
+            rel,
+            align: ["left", "center", "right"].includes(b?.align) ? b.align : "center",
           },
         };
       }
 
-      case "cols2":
+      case "cols2": {
+        const ratio = ["5-7", "6-6", "7-5"].includes(b?.ratio) ? b.ratio : "6-6";
         return {
+          id,
           type: "cols2",
           props: {
-            title: String((b as any).title ?? ""),
-            text: String((b as any).text ?? ""),
-            img: sanitizeUrl((b as any).img ?? ""),
-            alt: String((b as any).alt ?? ""),
-            ratio: (["5-7", "6-6", "7-5"].includes((b as any).ratio) ? (b as any).ratio : "6-6"),
-            reverse: Boolean((b as any).reverse),
+            title: String(b?.title ?? ""),
+            text: String(b?.text ?? ""),
+            img: sanitizeUrl(b?.img ?? ""),
+            alt: String(b?.alt ?? ""),
+            ratio,
+            reverse: Boolean(b?.reverse),
           },
         };
+      }
+
+      case "spacer": {
+        const size = ["xs", "sm", "md", "lg", "xl"].includes(b?.size) ? b.size : "md";
+        return { id, type: "spacer", props: { size } };
+      }
+
+      case "divider":
+        return { id, type: "divider", props: {} };
 
       default:
-        return { type: "unknown", props: { raw: b } };
+        // Фейл-сейф: пусть отрендерится диагностический блок, но не ломаем экспорт
+        return { id, type: "unknown", props: { raw: b } };
     }
   });
 
   return {
-    title: builderDoc?.title || "Мой сайт",
-    description: builderDoc?.description || "",
-    ogImage: builderDoc?.ogImage || "",
+    title: String(builderDoc?.title ?? "Мой сайт"),
+    description: String(builderDoc?.description ?? ""),
+    ogImage: typeof builderDoc?.ogImage === "string" ? builderDoc.ogImage : "",
     theme: {
       accent: typeof builderDoc?.theme?.accent === "string" ? builderDoc.theme.accent : undefined,
       container: Number.isFinite(builderDoc?.theme?.container) ? Number(builderDoc.theme.container) : undefined,
     },
     blocks,
   };
-}  
+}
+
