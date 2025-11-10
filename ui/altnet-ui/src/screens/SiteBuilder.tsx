@@ -297,6 +297,143 @@ export default function SiteBuilder() {
     });
   }, []);
 
+  // ── Превью блоков на канвасе + инлайн-правка для текста ─────────────────────
+  const previewOf = useCallback((b: Block) => {
+    const commonWrap = (children: React.ReactNode, pad = true) => (
+      <div className={pad ? "p-3" : ""}>
+        {children}
+      </div>
+    );
+
+    if ((b as any).hidden) {
+      return commonWrap(
+        <div className="text-xs text-[#9aa3b2] italic">Блок скрыт</div>
+      );
+    }
+
+    switch (b.type) {
+      case "hero": {
+        const hb = b as HeroBlock;
+        return (
+          <div className="rounded-xl border border-[#2a2f45] bg-gradient-to-br from-[#0e1327] to-[#0c0f1a] p-6">
+            <div
+              className="text-2xl font-bold text-[#e6e9f4] mb-1"
+              contentEditable
+              suppressContentEditableWarning
+              onBlur={(e) => patchBlock(b.id, { title: e.currentTarget.innerText })}
+              onDoubleClick={() => setSelId(b.id)}
+            >
+              {hb.title || "Заголовок героя"}
+            </div>
+            <div
+              className="text-sm text-[#9aa3b2] mb-3"
+              contentEditable
+              suppressContentEditableWarning
+              onBlur={(e) => patchBlock(b.id, { subtitle: e.currentTarget.innerText })}
+              onDoubleClick={() => setSelId(b.id)}
+            >
+              {hb.subtitle || "Подзаголовок или краткое описание секции"}
+            </div>
+            {(hb.ctaText || hb.ctaLink) && (
+              <a
+                href={hb.ctaLink || "#"}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-[#1a203b] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                rel="noopener noreferrer nofollow"
+                onClick={(e) => e.preventDefault()}
+                title="Кнопка (клик в предпросмотре заблокирован)"
+              >
+                {hb.ctaText || "Кнопка"}
+              </a>
+            )}
+          </div>
+        );
+      }
+
+      case "h1": {
+        const h = b as H1Block;
+        const align = h.align || "left";
+        return commonWrap(
+          <div
+            className={`text-2xl font-semibold text-[#e6e9f4] text-${align}`}
+            contentEditable
+            suppressContentEditableWarning
+            onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
+            onDoubleClick={() => setSelId(b.id)}
+          >
+            {h.text || "Заголовок H1"}
+          </div>
+        );
+      }
+
+      case "p": {
+        const p = b as PBlock;
+        const align = p.align || "left";
+        return commonWrap(
+          <div
+            className={`text-sm leading-6 text-[#cfd5e6] whitespace-pre-wrap text-${align}`}
+            contentEditable
+            suppressContentEditableWarning
+            onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
+            onDoubleClick={() => setSelId(b.id)}
+          >
+            {p.text || "Текстовый абзац. Дважды кликните, чтобы отредактировать."}
+          </div>
+        );
+      }
+
+      case "img": {
+        const im = b as ImgBlock;
+        const src = im.cid || "";
+        return commonWrap(
+          <figure className="grid gap-2">
+            {/* Предпросмотр изображения (без внешних запросов при клике) */}
+            <img
+              src={src}
+              alt={im.alt || ""}
+              className="max-w-full rounded-lg border border-[#2a2f45] bg-[#0b0e18] object-contain"
+              onDoubleClick={() => setSelId(b.id)}
+              draggable={false}
+            />
+            <figcaption className="text-xs text-[#9aa3b2]">{im.alt || "alt-текст"}</figcaption>
+          </figure>
+        );
+      }
+
+      case "btn": {
+        const bt = b as BtnBlock;
+        const align = bt.align || "left";
+        return commonWrap(
+          <div className={`text-${align}`}>
+            <a
+              href={bt.href || "#"}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${bt.variant === "secondary"
+                ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
+                : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                }`}
+              rel="noopener noreferrer nofollow"
+              onClick={(e) => e.preventDefault()}
+              title="Кнопка (клик в предпросмотре заблокирован)"
+              onDoubleClick={() => setSelId(b.id)}
+            >
+              {bt.label || "Кнопка"}
+            </a>
+          </div>
+        );
+      }
+
+      case "divider": {
+        return commonWrap(<hr className="border-t border-[#2a2f45]" />, false);
+      }
+
+      case "spacer": {
+        return <div className="h-8" />;
+      }
+
+      default:
+        return commonWrap(<div className="text-xs text-[#9aa3b2]">[Превью для типа «{(b as any).type}» пока нет]</div>);
+    }
+  }, [patchBlock, setSelId]);   
+
   // Вставка нового блока по типу из «слота» (канвас)
   const handleInsertAt = useCallback((
     index: number,
@@ -1502,7 +1639,7 @@ export default function SiteBuilder() {
                     type="button"
                     onClick={() => setSelId(b.id)}
                     className={[
-                      "w-full text-left rounded-2xl p-4 bg-[#0c0f1a] border transition",
+                      "w-full text-left rounded-2xl p-4 bg-[#0c0f1a] border transition relative group",
                       selected ? "border-indigo-500/70 ring-2 ring-indigo-500/20" : "border-[#1f2751] hover:border-[#2a2f45]"
                     ].join(" ")}
                   >
@@ -1510,39 +1647,59 @@ export default function SiteBuilder() {
                       {labelOf(b)}
                     </div>
                     <div className="prose-invert">
-                      {renderPreviewBlock(b)}
+                      {previewOf(b)}
                     </div>
 
                     {/* Быстрые действия */}
-                    <div className="mt-3 flex gap-2 text-xs">
-                      <button
-                        type="button"
-                        className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#b8c1ff]"
-                        onClick={(e) => { e.stopPropagation(); duplicateBlock(b.id); }}
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="text-xs text-[#9aa3b2]">
+                        {String(b.type || "").toUpperCase()} <span className="opacity-60">· {String(b.id || "").slice(0, 6)}</span>
+                      </div>
+
+                      {/* Быстрые действия (overlay), не мешают DnD */}
+                      <div
+                        className="flex gap-1 opacity-0 group-hover:opacity-100 transition"
+                        onMouseDownCapture={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        Дублировать
-                      </button>
-                      <button
-                        type="button"
-                        className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4]/80"
-                        onClick={(e) => { e.stopPropagation(); moveBlock(b.id, -1); }}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4]/80"
-                        onClick={(e) => { e.stopPropagation(); moveBlock(b.id, +1); }}
-                      >
-                        ↓
-                      </button>
-                      <button
-                        type="button"
-                        className="ml-auto px-2 py-1 rounded bg-[#2a1220] border border-[#442239] text-[#ffb8c1]"
-                        onClick={(e) => { e.stopPropagation(); removeBlock(b.id); }}
-                      >
-                        Удалить
-                      </button>
+                        <button
+                          type="button"
+                          className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
+                          title={(b as any).hidden ? "Показать" : "Скрыть"}
+                          onClick={() => patchBlock(b.id, { hidden: !((b as any).hidden) })}
+                        >
+                          {(b as any).hidden ? "👁" : "👁‍🗨"}
+                        </button>
+                        <button
+                          type="button"
+                          className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
+                          title={(b as any).locked ? "Разблокировать" : "Заблокировать"}
+                          onClick={() => patchBlock(b.id, { locked: !((b as any).locked) })}
+                        >
+                          {(b as any).locked ? "🔓" : "🔒"}
+                        </button>
+                        <button
+                          type="button"
+                          className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
+                          title="Дублировать"
+                          onClick={() => duplicateBlock(b.id)}
+                        >
+                          ⧉
+                        </button>
+                        <button
+                          type="button"
+                          className="px-1.5 py-0.5 rounded bg-[#2a1220] border border-[#442239] text-[11px] text-[#ffb8c1] hover:bg-[#2b1f2b]"
+                          title="Удалить"
+                          onClick={() => removeBlock(b.id)}
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Живая превью блока (реальный рендер сайта в миниатюре) */}
+                    <div className="rounded-lg border border-[#1f2751] bg-[#0b0e18]">
+                      {renderPreviewBlock(b)}
                     </div>
                   </button>
                 );
