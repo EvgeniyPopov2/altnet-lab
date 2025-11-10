@@ -284,6 +284,19 @@ export default function SiteBuilder() {
     });
   }, []);
 
+  const moveBlock = useCallback((id: string, dir: -1 | 1) => {
+    setDoc(d => {
+      const i = d.blocks.findIndex(b => b.id === id);
+      if (i < 0) return d;
+      const j = i + dir;
+      if (j < 0 || j >= d.blocks.length) return d;
+      const next = d.blocks.slice();
+      const [it] = next.splice(i, 1);
+      next.splice(j, 0, it);
+      return { ...d, blocks: next };
+    });
+  }, []);
+
   const labelOf = useCallback((b: Block): string => {
     switch (b.type) {
       case "hero": return "Hero";
@@ -728,6 +741,39 @@ export default function SiteBuilder() {
       localStorage.removeItem(STORAGE_KEY);
     } catch { }
   }, []);
+
+  // — Навигатор (Outline) —
+  const Navigator = useCallback(() => (
+    <div className="grid gap-2">
+      {doc.blocks.map((b, idx) => (
+        <div
+          key={b.id}
+          className={`group flex items-center justify-between gap-2 rounded-lg border ${selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
+            } px-2 py-1`}
+        >
+          <button
+            onClick={() => setSelId(b.id)}
+            className="flex-1 text-left text-xs text-[#cfd5e6] truncate"
+            title={labelOf(b)}
+          >
+            <span className="opacity-60 mr-1">#{idx + 1}</span>{labelOf(b)}
+          </button>
+          <div className="flex items-center gap-1">
+            <button title="Вверх" onClick={() => moveBlock(b.id, -1)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">↑</button>
+            <button title="Вниз" onClick={() => moveBlock(b.id, 1)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">↓</button>
+            <button title={(b as any).hidden ? "Показать" : "Скрыть"} onClick={() => patchBlock(b.id, { hidden: !((b as any).hidden) })} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">
+              {(b as any).hidden ? "👁" : "👁‍🗨"}
+            </button>
+            <button title={(b as any).locked ? "Разблокировать" : "Заблокировать"} onClick={() => patchBlock(b.id, { locked: !((b as any).locked) })} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">
+              {(b as any).locked ? "🔓" : "🔒"}
+            </button>
+            <button title="Дублировать" onClick={() => duplicateBlock(b.id)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">⧉</button>
+            <button title="Удалить" onClick={() => removeBlock(b.id)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs text-[#ffb3a8]">🗑</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  ), [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock]);
 
   // — Редактор свойств выбранного блока —
   const Editor = useCallback(() => {
@@ -1292,6 +1338,12 @@ export default function SiteBuilder() {
             onReorder={(next) => setDoc(prev => ({ ...prev, blocks: next }))}
           />
         </div>
+
+        <div className="mt-4 rounded-2xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
+          <div className="mb-2 text-sm text-[#cfd5e6]">Навигатор</div>
+          <Navigator />
+        </div>
+
         <div className="mt-4 rounded-2xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
           <div className="mb-2 text-sm text-[#cfd5e6]">Редактор блока</div>
           {sel && (
