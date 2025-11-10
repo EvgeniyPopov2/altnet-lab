@@ -899,7 +899,7 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
 
                   <div className="md:col-span-3 flex justify-end">
                     <button
-                      className="px-3 py-1.5 rounded-lg bg-[#151a2e] hover:bg-[#1b2240] border border-[#2a2f45] text-red-400"
+                      className="px-3 py-2 rounded-lg border text-white bg-[#5865F2] hover:bg-[#6E59F2] border-[#6E59F2]"
                       onClick={(e) => {
                         e.preventDefault();
                         const items = [...(b as any).items];
@@ -915,7 +915,7 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
 
               <div className="flex justify-end">
                 <button
-                  className="px-3 py-1.5 rounded-lg bg-[#151a2e] hover:bg-[#1b2240] border border-[#2a2f45] text-[#e6e9f4]"
+                  className="px-3 py-2 rounded-lg border text-white bg-[#5865F2] hover:bg-[#6E59F2] border-[#6E59F2]"
                   onClick={(e) => {
                     e.preventDefault();
                     const items = Array.isArray((b as any).items) ? [...(b as any).items] : [];

@@ -637,13 +637,15 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
 
       case "grid": {
         const cols = [1, 2, 3, 4].includes(Number(b?.cols)) ? (Number(b.cols) as 1 | 2 | 3 | 4) : 3;
+        const gx = Number.isFinite(Number(b?.gapX)) ? Number(b.gapX) : 16;
+        const gy = Number.isFinite(Number(b?.gapY)) ? Number(b.gapY) : 16;
         const itemsSrc = Array.isArray(b?.items) ? b.items : [];
         const items = itemsSrc.map((it: any) => ({
           src: sanitizeUrl(String(it?.src ?? "")),
           alt: String(it?.alt ?? ""),
           caption: String(it?.caption ?? ""),
         }));
-        return { id, type: "grid", props: { cols, items } };
+        return { id, type: "grid", props: { cols, gapX: gx, gapY: gy, items } };
       }
 
       default:
