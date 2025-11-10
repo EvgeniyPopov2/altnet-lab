@@ -1499,7 +1499,79 @@ export default function SiteBuilder() {
             onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "spacer"); e.dataTransfer.effectAllowed = "copy"; }}
           >+ Интервал</button>
         </div>
+        {/* ───────────────── Канвас (живой предпросмотр + сортировка) ──────────────── */}
+        <div className="mt-6">
+          <div
+            className="mx-auto"
+            style={{ maxWidth: `${Number(doc.theme?.container ?? 960)}px` }}
+          >
+            <div className="p-4">
+              <SortableCanvas
+                cols={canvasCols}
+                gapX={canvasGapX}
+                gapY={canvasGapY}
+                blocks={doc.blocks}
+                onReorder={(next) => setDoc(d => ({ ...d, blocks: next as any }))}
+                onInsertAt={handleInsertAt}
+                renderBlock={(b: any) => {
+                  const selected = selId === b.id;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setSelId(b.id)}
+                      className={[
+                        "w-full text-left rounded-2xl p-4 bg-[#0c0f1a] border transition",
+                        selected
+                          ? "border-indigo-500/70 ring-2 ring-indigo-500/20"
+                          : "border-[#1f2751] hover:border-[#2a2f45]"
+                      ].join(" ")}
+                    >
+                      <div className="text-[11px] uppercase tracking-wide text-[#9aa3b2] mb-1">
+                        {labelOf(b)}
+                      </div>
 
+                      {/* Живая превью блока, редактируется инлайн */}
+                      <div className="prose-invert">{previewOf(b)}</div>
+
+                      {/* Быстрые действия */}
+                      <div className="mt-3 flex gap-2 text-xs">
+                        <button
+                          type="button"
+                          className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#b8c1ff]"
+                          onClick={(e) => { e.stopPropagation(); duplicateBlock(b.id); }}
+                        >
+                          Дублировать
+                        </button>
+                        <button
+                          type="button"
+                          className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4]/80"
+                          onClick={(e) => { e.stopPropagation(); moveBlock(b.id, -1); }}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4]/80"
+                          onClick={(e) => { e.stopPropagation(); moveBlock(b.id, +1); }}
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          className="ml-auto px-2 py-1 rounded bg-[#2a1220] border border-[#442239] text-[#ffb8c1]"
+                          onClick={(e) => { e.stopPropagation(); removeBlock(b.id); }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </button>
+                  );
+                }}
+              />
+            </div>
+          </div>
+        </div>
+        {/* ─────────────────────────────────────────────────────────────────────────── */}
         <div className="flex items-center gap-2">
           <label className="text-xs opacity-80">Колонки</label>
           <select
