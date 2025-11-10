@@ -432,7 +432,7 @@ export default function SiteBuilder() {
       default:
         return commonWrap(<div className="text-xs text-[#9aa3b2]">[Превью для типа «{(b as any).type}» пока нет]</div>);
     }
-  }, [patchBlock, setSelId]);   
+  }, [patchBlock, setSelId]);
 
   // Вставка нового блока по типу из «слота» (канвас)
   const handleInsertAt = useCallback((
@@ -1432,233 +1432,38 @@ export default function SiteBuilder() {
             </ul>
           </div>
         )}
+        <div className="mt-4 rounded-2xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
+          <div className="mb-2 text-sm text-[#cfd5e6]">Сетка канваса</div>
+          <div className="flex items-center gap-2">
+            <label className="text-xs opacity-80">Колонки</label>
+            <select
+              className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751]"
+              value={canvasCols}
+              onChange={(e) => setCanvasCols(Number(e.target.value) as 1 | 2 | 3 | 4)}
+            >
+              <option value={1}>1</option>
+              <option value={2}>2</option>
+              <option value={3}>3</option>
+              <option value={4}>4</option>
+            </select>
 
-        <div className="mb-3 text-sm text-[#9aa3b2]">Палитра</div>
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          {/* Палитра: кнопки теперь ещё и draggable, чтобы перетаскивать на слоты канваса */}
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("hero")}
-            title="Клик — добавить; Перетащите на канвас"
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "hero"); e.dataTransfer.effectAllowed = "copy"; }}
-          >+ Hero</button>
+            <label className="text-xs opacity-80 ml-3">gap X</label>
+            <input
+              type="number"
+              className="w-16 px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751]"
+              value={canvasGapX}
+              onChange={(e) => setCanvasGapX(Math.max(0, Number(e.target.value) || 0))}
+            />
 
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("h1")}
-            title="Клик — добавить; Перетащите на канвас"
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "h1"); e.dataTransfer.effectAllowed = "copy"; }}
-          >+ Заголовок</button>
-
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("heading")}
-            title="Клик — добавить; Перетащите на канвас"
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "heading"); e.dataTransfer.effectAllowed = "copy"; }}
-          >+ Заголовок (H2–H4)</button>
-
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("p")}
-            title="Клик — добавить; Перетащите на канвас"
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "p"); e.dataTransfer.effectAllowed = "copy"; }}
-          >+ Текст</button>
-
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("img")}
-            title="Клик — добавить; Перетащите на канвас"
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "img"); e.dataTransfer.effectAllowed = "copy"; }}
-          >+ Картинка</button>
-
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("btn")}
-            title="Клик — добавить; Перетащите на канвас"
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "btn"); e.dataTransfer.effectAllowed = "copy"; }}
-          >+ Кнопка</button>
-
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("divider")}
-            title="Клик — добавить; Перетащите на канвас"
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "divider"); e.dataTransfer.effectAllowed = "copy"; }}
-          >+ Разделитель</button>
-
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("spacer")}
-            title="Клик — добавить; Перетащите на канвас"
-            draggable
-            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "spacer"); e.dataTransfer.effectAllowed = "copy"; }}
-          >+ Интервал</button>
-        </div>
-        {/* ───────────────── Канвас (живой предпросмотр + сортировка) ──────────────── */}
-        <div className="mt-6">
-          <div
-            className="mx-auto"
-            style={{ maxWidth: `${Number(doc.theme?.container ?? 960)}px` }}
-          >
-            <div className="p-4">
-              <SortableCanvas
-                cols={canvasCols}
-                gapX={canvasGapX}
-                gapY={canvasGapY}
-                blocks={doc.blocks}
-                onReorder={(next) => setDoc(d => ({ ...d, blocks: next as any }))}
-                onInsertAt={handleInsertAt}
-                renderBlock={(b: any) => {
-                  const selected = selId === b.id;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => setSelId(b.id)}
-                      className={[
-                        "w-full text-left rounded-2xl p-4 bg-[#0c0f1a] border transition",
-                        selected
-                          ? "border-indigo-500/70 ring-2 ring-indigo-500/20"
-                          : "border-[#1f2751] hover:border-[#2a2f45]"
-                      ].join(" ")}
-                    >
-                      <div className="text-[11px] uppercase tracking-wide text-[#9aa3b2] mb-1">
-                        {labelOf(b)}
-                      </div>
-
-                      {/* Живая превью блока, редактируется инлайн */}
-                      <div className="prose-invert">{previewOf(b)}</div>
-
-                      {/* Быстрые действия */}
-                      <div className="mt-3 flex gap-2 text-xs">
-                        <button
-                          type="button"
-                          className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#b8c1ff]"
-                          onClick={(e) => { e.stopPropagation(); duplicateBlock(b.id); }}
-                        >
-                          Дублировать
-                        </button>
-                        <button
-                          type="button"
-                          className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4]/80"
-                          onClick={(e) => { e.stopPropagation(); moveBlock(b.id, -1); }}
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4]/80"
-                          onClick={(e) => { e.stopPropagation(); moveBlock(b.id, +1); }}
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          className="ml-auto px-2 py-1 rounded bg-[#2a1220] border border-[#442239] text-[#ffb8c1]"
-                          onClick={(e) => { e.stopPropagation(); removeBlock(b.id); }}
-                        >
-                          Удалить
-                        </button>
-                      </div>
-                    </button>
-                  );
-                }}
-              />
-            </div>
+            <label className="text-xs opacity-80">gap Y</label>
+            <input
+              type="number"
+              className="w-16 px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751]"
+              value={canvasGapY}
+              onChange={(e) => setCanvasGapY(Math.max(0, Number(e.target.value) || 0))}
+            />
           </div>
         </div>
-        {/* ─────────────────────────────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs opacity-80">Колонки</label>
-          <select
-            className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751]"
-            value={canvasCols}
-            onChange={(e) => setCanvasCols(Number(e.target.value) as 1 | 2 | 3 | 4)}
-          >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-            <option value={3}>3</option>
-            <option value={4}>4</option>
-          </select>
-
-          <label className="text-xs opacity-80 ml-3">gap X</label>
-          <input
-            type="number"
-            className="w-16 px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751]"
-            value={canvasGapX}
-            onChange={(e) => setCanvasGapX(Math.max(0, Number(e.target.value) || 0))}
-          />
-          <label className="text-xs opacity-80">gap Y</label>
-          <input
-            type="number"
-            className="w-16 px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751]"
-            value={canvasGapY}
-            onChange={(e) => setCanvasGapY(Math.max(0, Number(e.target.value) || 0))}
-          />
-        </div>
-
-        {/* Список блоков */}
-        <div>
-          <SortableCanvas
-            cols={canvasCols}
-            gapX={canvasGapX}
-            gapY={canvasGapY}
-            blocks={doc.blocks}
-            renderBlock={(b) => (
-              <div
-                onClick={() => setSelId(b.id)}
-                className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2] ring-2 ring-[#6E59F2]/50" : "border-[#2a2f45]"} bg-[#0c0f1a] p-3 cursor-pointer`}
-                title={labelOf(b)}
-              >
-                {/* ── Быстрые действия на карточке (overlay), не всплывают в DnD */}
-                <div
-                  className="absolute right-2 top-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition"
-                  onMouseDownCapture={(e) => e.stopPropagation()}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <button
-                    className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
-                    title={(b as any).hidden ? 'Показать' : 'Скрыть'}
-                    onClick={() => patchBlock(b.id, { hidden: !((b as any).hidden) })}
-                  >
-                    {(b as any).hidden ? '👁' : '👁‍🗨'}
-                  </button>
-                  <button
-                    className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
-                    title={(b as any).locked ? 'Разблокировать' : 'Заблокировать'}
-                    onClick={() => patchBlock(b.id, { locked: !((b as any).locked) })}
-                  >
-                    {(b as any).locked ? '🔓' : '🔒'}
-                  </button>
-                  <button
-                    className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
-                    title="Дублировать"
-                    onClick={() => duplicateBlock(b.id)}
-                  >
-                    ⧉
-                  </button>
-                  <button
-                    className="px-1.5 py-0.5 rounded bg-[#241a24] border border-[#442a45] text-[11px] text-[#ffb3a8] hover:bg-[#2a1c2a]"
-                    title="Удалить"
-                    onClick={() => removeBlock(b.id)}
-                  >
-                    🗑
-                  </button>
-                </div>
-                <div className="text-xs text-[#9aa3b2] mb-1">{labelOf(b)}</div>
-                {renderPreviewBlock(b)}
-              </div>
-            )}
-            onReorder={(next) => setDoc(prev => ({ ...prev, blocks: next }))}
-            onInsertAt={handleInsertAt}
-          />
-        </div>
-
         <div className="mt-4 rounded-2xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
           <div className="mb-2 text-sm text-[#cfd5e6]">Навигатор</div>
           <Navigator />
@@ -1666,153 +1471,163 @@ export default function SiteBuilder() {
 
         <div className="mt-4 rounded-2xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
           <div className="mb-2 text-sm text-[#cfd5e6]">Редактор блока</div>
-          {sel && (
-            <div className="flex items-center gap-2 mb-3">
-              <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-xs"
-                onClick={() => patchBlock(sel.id, { hidden: !((sel as any).hidden) })}>
-                {(sel as any).hidden ? "👁 Показать" : "👁‍🗨 Скрыть"}
-              </button>
-              <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-xs"
-                onClick={() => patchBlock(sel.id, { locked: !((sel as any).locked) })}>
-                {(sel as any).locked ? "🔓 Разблокировать" : "🔒 Заблокировать"}
-              </button>
-              <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-xs"
-                onClick={() => duplicateBlock(sel.id)}>
-                ⧉ Дублировать
-              </button>
-              <button className="px-2 py-1 rounded bg-[#241a24] border border-[#442a45] text-xs text-[#ffb3a8]"
-                onClick={() => removeBlock(sel.id)}>
-                🗑 Удалить
-              </button>
-            </div>
-          )}
           <Editor />
         </div>
+        <div className="mt-4 rounded-2xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
+          <div className="mb-2 text-sm text-[#cfd5e6]">Палитра</div>
+          <div className="grid grid-cols-1 gap-2">
+            {[
+              ["hero", "+ Hero"],
+              ["h1", "+ Заголовок (H1)"],
+              ["heading", "+ Заголовок (H2–H4)"],
+              ["p", "+ Текст"],
+              ["img", "+ Картинка"],
+              ["btn", "+ Кнопка"],
+              ["divider", "+ Разделитель"],
+              ["spacer", "+ Интервал"],
+            ].map(([t, label]) => (
+              <button
+                key={t}
+                className="w-full text-left px-3 py-2 rounded-lg border border-[#1f2751] bg-[#0c0f1a] hover:border-[#2a2f45] transition"
+                onClick={() => addBlock(t as any)}
+                title="Клик — добавить; Перетащите на слот канваса"
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData("application/x-block", String(t));
+                  e.dataTransfer.effectAllowed = "copy";
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        {/* Центр: Канвас (SortableCanvas) */}
-<div className="hidden md:block md:col-[2] h-full overflow-y-auto bg-[#0b0e18] border-r border-[#1c2030]">
-  <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 border-b border-[#1c2030] bg-[#0b0e18]">
-    <div className="text-[#e6e9f4]/90 font-semibold">Канвас</div>
-    <div className="text-xs text-[#9aa3b2]">
-      Колонки: {canvasCols} · gapX: {canvasGapX}px · gapY: {canvasGapY}px
+  {/* Центр: Канвас (SortableCanvas) */ }
+  <div className="hidden md:block md:col-[2] h-full overflow-y-auto bg-[#0b0e18] border-r border-[#1c2030]">
+    <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 border-b border-[#1c2030] bg-[#0b0e18]">
+      <div className="text-[#e6e9f4]/90 font-semibold">Канвас</div>
+      <div className="text-xs text-[#9aa3b2]">
+        Колонки: {canvasCols} · gapX: {canvasGapX}px · gapY: {canvasGapY}px
+      </div>
+    </div>
+
+    <div className="p-4">
+      <SortableCanvas
+        cols={canvasCols}
+        gapX={canvasGapX}
+        gapY={canvasGapY}
+        blocks={doc.blocks}
+        onReorder={(next) => setDoc(d => ({ ...d, blocks: next as any }))}
+        onInsertAt={handleInsertAt}
+        renderBlock={(b: any) => {
+          const selected = selId === b.id;
+          return (
+            <button
+              type="button"
+              onClick={() => setSelId(b.id)}
+              className={[
+                "w-full text-left rounded-2xl p-4 bg-[#0c0f1a] border transition relative group",
+                selected ? "border-indigo-500/70 ring-2 ring-indigo-500/20" : "border-[#1f2751] hover:border-[#2a2f45]"
+              ].join(" ")}
+            >
+              <div className="text-[11px] uppercase tracking-wide text-[#9aa3b2] mb-1">
+                {labelOf(b)}
+              </div>
+              <div className="prose-invert">
+                {previewOf(b)}
+              </div>
+
+              {/* Быстрые действия */}
+              <div className="mb-2 flex items-center justify-between">
+                <div className="text-xs text-[#9aa3b2]">
+                  {String(b.type || "").toUpperCase()} <span className="opacity-60">· {String(b.id || "").slice(0, 6)}</span>
+                </div>
+
+                {/* Быстрые действия (overlay), не мешают DnD */}
+                <div
+                  className="flex gap-1 opacity-0 group-hover:opacity-100 transition"
+                  onMouseDownCapture={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
+                    title={(b as any).hidden ? "Показать" : "Скрыть"}
+                    onClick={() => patchBlock(b.id, { hidden: !((b as any).hidden) })}
+                  >
+                    {(b as any).hidden ? "👁" : "👁‍🗨"}
+                  </button>
+                  <button
+                    type="button"
+                    className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
+                    title={(b as any).locked ? "Разблокировать" : "Заблокировать"}
+                    onClick={() => patchBlock(b.id, { locked: !((b as any).locked) })}
+                  >
+                    {(b as any).locked ? "🔓" : "🔒"}
+                  </button>
+                  <button
+                    type="button"
+                    className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
+                    title="Дублировать"
+                    onClick={() => duplicateBlock(b.id)}
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    type="button"
+                    className="px-1.5 py-0.5 rounded bg-[#2a1220] border border-[#442239] text-[11px] text-[#ffb8c1] hover:bg-[#2b1f2b]"
+                    title="Удалить"
+                    onClick={() => removeBlock(b.id)}
+                  >
+                    🗑
+                  </button>
+                </div>
+              </div>
+
+              {/* Живая превью блока (реальный рендер сайта в миниатюре) */}
+              <div className="rounded-lg border border-[#1f2751] bg-[#0b0e18]">
+                {renderPreviewBlock(b)}
+              </div>
+            </button>
+          );
+        }}
+      />
     </div>
   </div>
 
-          <div className="p-4">
-            <SortableCanvas
-              cols={canvasCols}
-              gapX={canvasGapX}
-              gapY={canvasGapY}
-              blocks={doc.blocks}
-              onReorder={(next) => setDoc(d => ({ ...d, blocks: next as any }))}
-              renderBlock={(b: any) => {
-                const selected = selId === b.id;
-                return (
-                  <button
-                    type="button"
-                    onClick={() => setSelId(b.id)}
-                    className={[
-                      "w-full text-left rounded-2xl p-4 bg-[#0c0f1a] border transition relative group",
-                      selected ? "border-indigo-500/70 ring-2 ring-indigo-500/20" : "border-[#1f2751] hover:border-[#2a2f45]"
-                    ].join(" ")}
-                  >
-                    <div className="text-[11px] uppercase tracking-wide text-[#9aa3b2] mb-1">
-                      {labelOf(b)}
-                    </div>
-                    <div className="prose-invert">
-                      {previewOf(b)}
-                    </div>
-
-                    {/* Быстрые действия */}
-                    <div className="mb-2 flex items-center justify-between">
-                      <div className="text-xs text-[#9aa3b2]">
-                        {String(b.type || "").toUpperCase()} <span className="opacity-60">· {String(b.id || "").slice(0, 6)}</span>
-                      </div>
-
-                      {/* Быстрые действия (overlay), не мешают DnD */}
-                      <div
-                        className="flex gap-1 opacity-0 group-hover:opacity-100 transition"
-                        onMouseDownCapture={(e) => e.stopPropagation()}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
-                          title={(b as any).hidden ? "Показать" : "Скрыть"}
-                          onClick={() => patchBlock(b.id, { hidden: !((b as any).hidden) })}
-                        >
-                          {(b as any).hidden ? "👁" : "👁‍🗨"}
-                        </button>
-                        <button
-                          type="button"
-                          className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
-                          title={(b as any).locked ? "Разблокировать" : "Заблокировать"}
-                          onClick={() => patchBlock(b.id, { locked: !((b as any).locked) })}
-                        >
-                          {(b as any).locked ? "🔓" : "🔒"}
-                        </button>
-                        <button
-                          type="button"
-                          className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
-                          title="Дублировать"
-                          onClick={() => duplicateBlock(b.id)}
-                        >
-                          ⧉
-                        </button>
-                        <button
-                          type="button"
-                          className="px-1.5 py-0.5 rounded bg-[#2a1220] border border-[#442239] text-[11px] text-[#ffb8c1] hover:bg-[#2b1f2b]"
-                          title="Удалить"
-                          onClick={() => removeBlock(b.id)}
-                        >
-                          🗑
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Живая превью блока (реальный рендер сайта в миниатюре) */}
-                    <div className="rounded-lg border border-[#1f2751] bg-[#0b0e18]">
-                      {renderPreviewBlock(b)}
-                    </div>
-                  </button>
-                );
-              }}
-            />
-          </div>
-        </div>
-
-      </div> {/* конец левой панели */}
-      {/* ПРАВАЯ ПАНЕЛЬ: Канвас-предпросмотр */}
-      <div className="md:col-[3] h-full overflow-y-auto">
-        <div className="h-full rounded-2xl border border-[#1c2030] bg-[#0b0e18] overflow-hidden flex flex-col">
-          <div className="px-3 py-2 border-b border-[#1c2030] flex items-center gap-2 text-[#cfd5e6]">
-            <span className="text-sm opacity-80">Предпросмотр (sandbox)</span>
-            <label className="ml-auto flex items-center gap-1 text-xs opacity-80">
-              <input
-                type="checkbox"
-                checked={autoPreview}
-                onChange={(e) => setAutoPreview(e.target.checked)}
-              />
-              автообновление
-            </label>
-            <button
-              className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] hover:bg-[#1f2336] text-xs"
-              onClick={() => void buildPreview()}
-              disabled={isBuilding}
-              title="Пересобрать предпросмотр"
-            >
-              {isBuilding ? "Сборка…" : "Обновить"}
-            </button>
-          </div>
-          <iframe
-            title="preview"
-            sandbox="allow-same-origin"
-            className="flex-1 w-full"
-            // srcDoc используется без внешних скриптов — соответствует доктрине
-            srcDoc={previewHtml}
+      </div > 
+  {/* ПРАВАЯ ПАНЕЛЬ: Канвас-предпросмотр */ }
+  <div className="md:col-[3] h-full overflow-y-auto">
+    <div className="h-full rounded-2xl border border-[#1c2030] bg-[#0b0e18] overflow-hidden flex flex-col">
+      <div className="px-3 py-2 border-b border-[#1c2030] flex items-center gap-2 text-[#cfd5e6]">
+        <span className="text-sm opacity-80">Предпросмотр (sandbox)</span>
+        <label className="ml-auto flex items-center gap-1 text-xs opacity-80">
+          <input
+            type="checkbox"
+            checked={autoPreview}
+            onChange={(e) => setAutoPreview(e.target.checked)}
           />
-        </div>
+          автообновление
+        </label>
+        <button
+          className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] hover:bg-[#1f2336] text-xs"
+          onClick={() => void buildPreview()}
+          disabled={isBuilding}
+          title="Пересобрать предпросмотр"
+        >
+          {isBuilding ? "Сборка…" : "Обновить"}
+        </button>
       </div>
+      <iframe
+        title="preview"
+        sandbox="allow-same-origin"
+        className="flex-1 w-full"
+        // srcDoc используется без внешних скриптов — соответствует доктрине
+        srcDoc={previewHtml}
+      />
     </div>
+  </div>
+    </div >
   );
 }  
