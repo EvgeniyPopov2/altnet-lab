@@ -93,6 +93,33 @@ const H1: BlockSpec = {
   },
 };
 
+// === Heading (H2–H4)
+const Heading: BlockSpec = {
+  id: "heading",
+  name: "Заголовок (H2–H4)",
+  defaults: {
+    text: "Заголовок секции",
+    level: "h2",                 // h2 | h3 | h4
+    align: "left" as "left" | "center" | "right",
+  },
+  render: ({ props }) => {
+    const p = { ...Heading.defaults, ...(props || {}) };
+    const lvl = p.level === "h3" || p.level === "h4" ? p.level : "h2";
+    const Tag: any = lvl;
+    return React.createElement(
+      "section",
+      { className: `section t-${p.align || "left"}` },
+      React.createElement(Tag, null, String(p.text || ""))
+    );
+  },
+  serialize: (props) => {
+    const p = { ...Heading.defaults, ...(props || {}) };
+    const lvl = p.level === "h3" || p.level === "h4" ? p.level : "h2";
+    const align = p.align || "left";
+    return `<section class="section t-${esc(align)}"><${lvl}>${esc(String(p.text || ""))}</${lvl}></section>`;
+  },
+};
+
 const Text: BlockSpec = {
   id: "text",
   name: "Текст",
@@ -238,6 +265,7 @@ const Divider: BlockSpec = {
 const BLOCKS: Record<string, BlockSpec> = {
   [Hero.id]: Hero,
   [H1.id]: H1,
+  [Heading.id]: Heading,
   [Text.id]: Text,
   [Image.id]: Image,
   [Button.id]: Button,

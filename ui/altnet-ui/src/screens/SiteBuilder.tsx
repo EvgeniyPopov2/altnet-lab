@@ -11,7 +11,7 @@ const notEmpty = (s?: string) => !!(s && s.trim().length > 0);
 /* =========================
  * Типы документа и блоков
  * ========================= */
-type BlockType = "hero" | "h1" | "p" | "img" | "btn" | "cols2" | "spacer" | "divider";
+type BlockType = "hero" | "h1" | "p" | "img" | "btn" | "cols2" | "spacer" | "divider" | "heading";
 
 
 type HeroBlock = {
@@ -94,7 +94,17 @@ type DividerBlock = {
 };
 
 
-type Block = HeroBlock | H1Block | PBlock | ImgBlock | BtnBlock | Cols2Block | SpacerBlock | DividerBlock;
+type HeadingBlock = {
+  id: string;
+  hidden?: boolean;
+  locked?: boolean;
+  type: "heading";
+  text: string;
+  level?: "h2" | "h3" | "h4";
+  align?: "left" | "center" | "right";
+};
+
+type Block = HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock | Cols2Block | SpacerBlock | DividerBlock;
 
 type Doc = {
   title: string;
@@ -648,6 +658,60 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           </div>
         )}
 
+        {b.type === "heading" && (
+          <div className="grid gap-3">
+            <Field label="Текст заголовка">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.text || ""}
+                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </Field>
+
+            <Field label="Уровень (H2–H4)">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.level || "h2"}
+                onChange={(e) => onChange({ level: e.target.value as any } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+              >
+                <option value="h2">H2</option>
+                <option value="h3">H3</option>
+                <option value="h4">H4</option>
+              </select>
+            </Field>
+
+            <Field label="Выравнивание">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.align || "left"}
+                onChange={(e) => onChange({ align: e.target.value as any } as Partial<Block>)}
+                onMouseDownCapture={stopAll}
+                onKeyDownCapture={stopAll}
+                onClickCapture={stopAll}
+                onDragStart={preventDrag}
+                draggable={false}
+              >
+                <option value="left">Слева</option>
+                <option value="center">По центру</option>
+                <option value="right">Справа</option>
+              </select>
+            </Field>
+          </div>
+        )}
+
+
         {/* Новые самостоятельные ветки: spacer/divider */}
         {b.type === "spacer" && (
           <div className="grid grid-cols-2 gap-3">
@@ -705,6 +769,8 @@ function labelOf(t: BlockType) {
       return "отступ";
     case "divider":
       return "разделитель";
+    case "heading": 
+      return "Заголовок (H2–H4)";  
   }
 }
 
@@ -808,17 +874,19 @@ export default function SiteBuilder() {
         ? { id: uid(), type: "hero", title: "Новый раздел", subtitle: "", ctaText: "", ctaLink: "" }
         : type === "h1"
           ? { id: uid(), type: "h1", text: "Заголовок" }
-          : type === "p"
-            ? { id: uid(), type: "p", text: "Параграф текста…" }
-            : type === "img"
-              ? { id: uid(), type: "img", cid: "", alt: "" }
-              : type === "cols2"
-                ? { id: uid(), type: "cols2", title: "Заголовок", text: "Текст…", img: "", alt: "", ratio: "6-6", reverse: false }
-                : type === "spacer"
-                  ? { id: uid(), type: "spacer", size: "md" }
-                  : type === "divider"
-                    ? { id: uid(), type: "divider" }
-                    : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
+          : type === "heading"
+            ? { id: uid(), type: "heading", text: "Заголовок секции", level: "h2", align: "left" }
+            : type === "p"
+              ? { id: uid(), type: "p", text: "Параграф текста…" }
+              : type === "img"
+                ? { id: uid(), type: "img", cid: "", alt: "" }
+                : type === "cols2"
+                  ? { id: uid(), type: "cols2", title: "Заголовок", text: "Текст…", img: "", alt: "", ratio: "6-6", reverse: false }
+                  : type === "spacer"
+                    ? { id: uid(), type: "spacer", size: "md" }
+                    : type === "divider"
+                      ? { id: uid(), type: "divider" }
+                      : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
 
 
     setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
@@ -1095,7 +1163,7 @@ export default function SiteBuilder() {
         throw new Error("Ожидался объект с массивом blocks.");
       }
 
-      const okTypes = new Set<BlockType>(["hero", "h1", "p", "img", "btn", "cols2", "spacer", "divider"]);
+      const okTypes = new Set<BlockType>(["hero", "h1", "heading", "p", "img", "btn", "cols2", "spacer", "divider"]);
 
 
       const title = typeof (data as any).title === "string" ? (data as any).title : "Мой сайт";
@@ -1405,29 +1473,13 @@ export default function SiteBuilder() {
         <div className="grid grid-cols-2 gap-2 mb-4">
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("hero")}>+ Hero</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("h1")}>+ Заголовок</button>
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("heading")}>+ Заголовок (H2–H4)</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("p")}>+ Текст</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("img")}>+ Картинка</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("btn")}>+ Кнопка</button>
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("cols2")}
-          >
-            + Две колонки
-          </button>
-
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("spacer")}
-          >
-            + Spacer
-          </button>
-
-          <button
-            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
-            onClick={() => addBlock("divider")}
-          >
-            + Divider
-          </button>
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("cols2")}>+ Две колонки</button>
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("spacer")}>+ Spacer</button>
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("divider")}>+ Divider</button>
 
 
         </div>
