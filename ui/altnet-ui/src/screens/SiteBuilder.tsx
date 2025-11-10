@@ -277,7 +277,7 @@ export default function SiteBuilder() {
     setDoc(d => {
       const i = d.blocks.findIndex(b => b.id === id);
       if (i < 0) return d;
-      const copy = { ...d.blocks[i], id: uid() } as any;
+      const copy = { ...(d.blocks[i] as any), id: uid() } as any;
       const next = d.blocks.slice();
       next.splice(i + 1, 0, copy);
       return { ...d, blocks: next };
