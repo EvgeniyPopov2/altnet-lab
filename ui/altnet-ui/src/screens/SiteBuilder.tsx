@@ -437,16 +437,17 @@ export default function SiteBuilder() {
   // Вставка нового блока по типу из «слота» (канвас)
   const handleInsertAt = useCallback((
     index: number,
-    type: "h1" | "p" | "btn" | "img" | "divider" | "spacer"
+    type: "hero" | "h1" | "p" | "btn" | "img" | "divider" | "spacer"
   ) => {
     const id = uid();
     const base: any =
-      type === "h1" ? { id, type: "h1", text: "Новый заголовок", align: "left" } :
-        type === "p" ? { id, type: "p", text: "Новый абзац. Опишите мысль.", align: "left" } :
-          type === "btn" ? { id, type: "btn", label: "Кнопка", href: "#", variant: "primary", align: "left" } :
-            type === "img" ? { id, type: "img", cid: "https://picsum.photos/1200/600", alt: "Изображение" } :
-              type === "divider" ? { id, type: "divider" } :
-                { id, type: "spacer", size: "md" };
+      type === "hero" ? { id, type: "hero", title: "Заголовок героя", subtitle: "Короткий подзаголовок", ctaText: "Подробнее", ctaLink: "#" } :
+        type === "h1" ? { id, type: "h1", text: "Новый заголовок", align: "left" } :
+          type === "p" ? { id, type: "p", text: "Новый абзац. Опишите мысль.", align: "left" } :
+            type === "btn" ? { id, type: "btn", label: "Кнопка", href: "#", variant: "primary", align: "left" } :
+              type === "img" ? { id, type: "img", cid: "https://picsum.photos/1200/600", alt: "Изображение" } :
+                type === "divider" ? { id, type: "divider" } :
+                  { id, type: "spacer", size: "md" };
 
     setDoc(d => {
       const next = d.blocks.slice();

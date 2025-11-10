@@ -6,7 +6,7 @@ import { CSS } from "@dnd-kit/utilities";
 
 type SortableLike = { id: string };
 
-type InsertChoice = "h1" | "p" | "btn" | "img" | "divider" | "spacer";
+type InsertChoice = "hero" | "h1" | "p" | "btn" | "img" | "divider" | "spacer";
 
 type Props<T extends SortableLike> = {
   cols?: 1 | 2 | 3 | 4;
@@ -98,6 +98,7 @@ function InsertSlot({
             <div className="flex flex-wrap items-center gap-2 p-1">
               {(
                 [
+                  ["hero", "Hero"],  
                   ["h1", "Заголовок"],
                   ["p", "Текст"],
                   ["btn", "Кнопка"],
