@@ -305,12 +305,15 @@ const Grid: BlockSpec = {
   name: "Сетка 1–4",
   defaults: {
     cols: 3 as 1 | 2 | 3 | 4,
+    gapX: 16,
+    gapY: 16,
     items: [] as Array<{ src: string; alt?: string; caption?: string }>,
   },
   render: ({ props }) => {
     const p = { ...Grid.defaults, ...(props || {}) };
     const cols = (p.cols >= 1 && p.cols <= 4 ? p.cols : 3) as 1 | 2 | 3 | 4;
     const wrapCls = `grid-wrap gc-${cols}`;
+
     const children = (Array.isArray(p.items) ? p.items : []).map((it, i) =>
       React.createElement(
         "figure",
@@ -324,21 +327,25 @@ const Grid: BlockSpec = {
           : null
       )
     );
+    const style: any = { "--gx": `${Number(p.gapX ?? 16)}px`, "--gy": `${Number(p.gapY ?? 16)}px` };
     return React.createElement("section", { className: "section" },
-      React.createElement("div", { className: wrapCls }, ...children)
+      React.createElement("div", { className: wrapCls, style }, ...children)
     );
   },
   serialize: (props) => {
     const p = { ...Grid.defaults, ...(props || {}) };
     const cols = (p.cols >= 1 && p.cols <= 4 ? p.cols : 3) as 1 | 2 | 3 | 4;
     const wrapCls = `grid-wrap gc-${cols}`;
+
     const items = (Array.isArray(p.items) ? p.items : []).map((it) => {
       const src = esc(String(it?.src || ""));
       const alt = esc(String(it?.alt || ""));
       const caption = it?.caption ? `<figcaption class="body">${esc(String(it.caption))}</figcaption>` : "";
+
       return `<figure class="grid-card"><img src="${src}" alt="${alt}"/>${caption}</figure>`;
     }).join("");
-    return `<section class="section"><div class="${wrapCls}">${items}</div></section>`;
+    const styleAttr = ` style="--gx:${Number(p.gapX ?? 16)}px;--gy:${Number(p.gapY ?? 16)}px"`;
+    return `<section class="section"><div class="${wrapCls}"${styleAttr}>${items}</div></section>`;
   },
 };
 

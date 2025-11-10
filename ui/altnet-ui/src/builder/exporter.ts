@@ -178,7 +178,7 @@ footer{opacity:.8;padding:26px 0;text-align:center;font-size:14px}
 }
 .section-band.bg-accent{background:color-mix(in oklab, var(--accent) 12%, transparent)}
 /* Grid 1–4 */
-.grid-wrap{display:grid;gap:16px}
+.grid-wrap{display:grid;column-gap:var(--gx,16px);row-gap:var(--gy,16px)}
 .grid-wrap.gc-1{grid-template-columns:1fr}
 .grid-wrap.gc-2{grid-template-columns:repeat(2,1fr)}
 .grid-wrap.gc-3{grid-template-columns:repeat(3,1fr)}
@@ -633,7 +633,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
             align, theme, pad, bg,
           },
         };
-      }  
+      }
 
       case "grid": {
         const cols = [1, 2, 3, 4].includes(Number(b?.cols)) ? (Number(b.cols) as 1 | 2 | 3 | 4) : 3;

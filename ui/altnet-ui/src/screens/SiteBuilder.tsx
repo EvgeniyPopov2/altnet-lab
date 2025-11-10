@@ -832,7 +832,25 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
                 <option value={4}>4</option>
               </select>
             </Field>
+            <Field label="Отступ по горизонтали (px)">
+              <input
+                type="number"
+                min={0}
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).gapX ?? 16}
+                onChange={(e) => onChange({ gapX: Math.max(0, Number(e.target.value) || 0) } as any)}
+              />
+            </Field>
 
+            <Field label="Отступ по вертикали (px)">
+              <input
+                type="number"
+                min={0}
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={(b as any).gapY ?? 16}
+                onChange={(e) => onChange({ gapY: Math.max(0, Number(e.target.value) || 0) } as any)}
+              />
+            </Field>
             {/* Список элементов */}
             <div className="grid gap-2">
               {(b.items || []).map((it, idx) => (
@@ -881,15 +899,13 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
 
                   <div className="md:col-span-3 flex justify-end">
                     <button
-                      className="px-3 py-2 rounded-lg bg-[#22172a] border border-[#3a2950] text-[#ff9bb3] hover:bg-[#2a1d35]"
+                      className="px-3 py-1.5 rounded-lg bg-[#151a2e] hover:bg-[#1b2240] border border-[#2a2f45] text-red-400"
                       onClick={(e) => {
                         e.preventDefault();
-                        const items = [...b.items];
+                        const items = [...(b as any).items];
                         items.splice(idx, 1);
-                        onChange({ items } as Partial<Block>);
+                        onChange({ items } as any);
                       }}
-                      onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                      onDragStart={preventDrag} draggable={false}
                     >
                       Удалить карточку
                     </button>
@@ -899,14 +915,13 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
 
               <div className="flex justify-end">
                 <button
-                  className="px-3 py-2 rounded-lg bg-[#1a2e1f] border border-[#2a4f33] text-[#78f2d2] hover:bg-[#1f3a29]"
+                  className="px-3 py-1.5 rounded-lg bg-[#151a2e] hover:bg-[#1b2240] border border-[#2a2f45] text-[#e6e9f4]"
                   onClick={(e) => {
                     e.preventDefault();
-                    const items = [...(b.items || []), { id: uid(), src: "", alt: "", caption: "" }];
-                    onChange({ items } as Partial<Block>);
+                    const items = Array.isArray((b as any).items) ? [...(b as any).items] : [];
+                    items.push({ src: "", alt: "", caption: "" });
+                    onChange({ items } as any);
                   }}
-                  onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                  onDragStart={preventDrag} draggable={false}
                 >
                   + Добавить карточку
                 </button>
@@ -972,12 +987,12 @@ function labelOf(t: BlockType) {
       return "отступ";
     case "divider":
       return "разделитель";
-    case "heading": 
+    case "heading":
       return "Заголовок (H2–H4)";
-    case "section": 
+    case "section":
       return "секция";
-    case "grid": 
-      return "сетка 1–4";      
+    case "grid":
+      return "сетка 1–4";
   }
 }
 
