@@ -774,7 +774,7 @@ export default function SiteBuilder() {
         >
           <button
             onClick={() => setSelId(b.id)}
-            className="flex-1 text-left text-xs text-[#cfd5e6] truncate"
+            className={`rounded-xl border ${selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"} bg-[#0c0f1a] p-3 cursor-pointer`}
             title={labelOf(b)}
           >
             <span className="opacity-60 mr-1">#{idx + 1}</span>{labelOf(b)}
