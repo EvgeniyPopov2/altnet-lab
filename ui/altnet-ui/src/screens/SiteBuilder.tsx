@@ -11,7 +11,7 @@ const notEmpty = (s?: string) => !!(s && s.trim().length > 0);
 /* =========================
  * Типы документа и блоков
  * ========================= */
-type BlockType = "hero" | "h1" | "p" | "img" | "btn" | "cols2" | "spacer" | "divider" | "heading";
+type BlockType = "hero" | "h1" | "heading" | "p" | "img" | "btn" | "cols2" | "spacer" | "divider" | "section";
 
 
 type HeroBlock = {
@@ -104,7 +104,20 @@ type HeadingBlock = {
   align?: "left" | "center" | "right";
 };
 
-type Block = HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock | Cols2Block | SpacerBlock | DividerBlock;
+type SectionBlock = {
+  id: string;
+  hidden?: boolean;
+  locked?: boolean;
+  type: "section";
+  title?: string;
+  text?: string;
+  align?: "left" | "center" | "right";
+  theme?: "auto" | "light" | "dark";
+  pad?: "sm" | "md" | "lg";
+  bg?: "none" | "subtle" | "card" | "accent";
+};
+
+type Block = HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock | Cols2Block | SpacerBlock | DividerBlock | SectionBlock;
 
 type Doc = {
   title: string;
@@ -711,6 +724,86 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           </div>
         )}
 
+        {b.type === "section" && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Заголовок (опц.)">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.title || ""}
+                onChange={(e) => onChange({ title: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
+              />
+            </Field>
+
+            <Field label="Текст (опц.)">
+              <input
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.text || ""}
+                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
+                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
+              />
+            </Field>
+
+            <Field label="Выравнивание">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.align || "left"}
+                onChange={(e) => onChange({ align: e.target.value as any } as Partial<Block>)}
+                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                onDragStart={preventDrag} draggable={false}
+              >
+                <option value="left">Слева</option>
+                <option value="center">По центру</option>
+                <option value="right">Справа</option>
+              </select>
+            </Field>
+
+            <Field label="Тема секции">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.theme || "auto"}
+                onChange={(e) => onChange({ theme: e.target.value as any } as Partial<Block>)}
+                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                onDragStart={preventDrag} draggable={false}
+              >
+                <option value="auto">Auto (по странице)</option>
+                <option value="light">Light (локально)</option>
+                <option value="dark">Dark (локально)</option>
+              </select>
+            </Field>
+
+            <Field label="Отступы">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.pad || "md"}
+                onChange={(e) => onChange({ pad: e.target.value as any } as Partial<Block>)}
+                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                onDragStart={preventDrag} draggable={false}
+              >
+                <option value="sm">Малые</option>
+                <option value="md">Средние</option>
+                <option value="lg">Большие</option>
+              </select>
+            </Field>
+
+            <Field label="Фон">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.bg || "none"}
+                onChange={(e) => onChange({ bg: e.target.value as any } as Partial<Block>)}
+                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                onDragStart={preventDrag} draggable={false}
+              >
+                <option value="none">Нет</option>
+                <option value="subtle">Ненавязчивый градиент</option>
+                <option value="card">Панель (card)</option>
+                <option value="accent">Акцент (оттенок)</option>
+              </select>
+            </Field>
+          </div>
+        )}
 
         {/* Новые самостоятельные ветки: spacer/divider */}
         {b.type === "spacer" && (
@@ -770,7 +863,9 @@ function labelOf(t: BlockType) {
     case "divider":
       return "разделитель";
     case "heading": 
-      return "Заголовок (H2–H4)";  
+      return "Заголовок (H2–H4)";
+    case "section": 
+      return "секция";    
   }
 }
 
@@ -886,7 +981,9 @@ export default function SiteBuilder() {
                     ? { id: uid(), type: "spacer", size: "md" }
                     : type === "divider"
                       ? { id: uid(), type: "divider" }
-                      : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
+                      : type === "section"
+                        ? { id: uid(), type: "section", title: "Секция", text: "", align: "left", theme: "auto", pad: "md", bg: "none" }
+                        : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
 
 
     setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
@@ -1480,7 +1577,7 @@ export default function SiteBuilder() {
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("cols2")}>+ Две колонки</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("spacer")}>+ Spacer</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("divider")}>+ Divider</button>
-
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("section")}>+ Секция</button>
 
         </div>
 

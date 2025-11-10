@@ -260,6 +260,44 @@ const Divider: BlockSpec = {
   serialize: () => `<hr class="divider"/>`,
 };
 
+// === Section (полоса с фоном/отступами/темой/выравниванием)
+const Section: BlockSpec = {
+  id: "section",
+  name: "Секция",
+  defaults: {
+    title: "",
+    text: "",
+    align: "left" as "left" | "center" | "right",
+    theme: "auto" as "auto" | "light" | "dark",
+    pad: "md" as "sm" | "md" | "lg",
+    bg: "none" as "none" | "subtle" | "card" | "accent",
+  },
+  render: ({ props }) => {
+    const p = { ...Section.defaults, ...(props || {}) };
+    // Оборачиваем в section.section-band + модификаторы
+    const cls = [
+      "section-band",
+      `t-${p.align}`,
+      `pad-${p.pad}`,
+      `theme-${p.theme}`,
+      `bg-${p.bg}`,
+    ].join(" ");
+    return React.createElement(
+      "section",
+      { className: cls },
+      // Небольшая универсальная разметка: опц. заголовок + текст
+      p.title ? React.createElement("h2", null, String(p.title)) : null,
+      p.text ? React.createElement("p", { className: "muted" }, String(p.text)) : null
+    );
+  },
+  serialize: (props) => {
+    const p = { ...Section.defaults, ...(props || {}) };
+    const cls = `section-band t-${esc(p.align)} pad-${esc(p.pad)} theme-${esc(p.theme)} bg-${esc(p.bg)}`;
+    const title = p.title ? `<h2>${esc(String(p.title))}</h2>` : "";
+    const text = p.text ? `<p class="muted">${esc(String(p.text))}</p>` : "";
+    return `<section class="${cls}">${title}${text}</section>`;
+  },
+};
 
 // Регистр
 const BLOCKS: Record<string, BlockSpec> = {
@@ -272,6 +310,7 @@ const BLOCKS: Record<string, BlockSpec> = {
   [Cols2.id]: Cols2,
   [Spacer.id]: Spacer,
   [Divider.id]: Divider,
+  [Section.id]: Section,
 };
 
 // API реестра

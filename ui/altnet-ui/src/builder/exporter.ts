@@ -150,6 +150,33 @@ img.responsive{border-radius:var(--radius);box-shadow:var(--shadow-soft)}
 .divider{height:1px;border:0;background:rgba(255,255,255,0.08);margin:16px 0}
 
 footer{opacity:.8;padding:26px 0;text-align:center;font-size:14px}
+/* Section band */
+.section-band{
+  padding:40px 0;
+  border-bottom:1px solid rgba(255,255,255,0.06);
+}
+.section-band.pad-sm{padding:24px 0}
+.section-band.pad-md{padding:40px 0}
+.section-band.pad-lg{padding:64px 0}
+
+/* themes (локальные) */
+.section-band.theme-auto{ /* оставляем фон страницы */ }
+.section-band.theme-light{background:#f5f7fb;color:#0b0d12}
+.section-band.theme-light .muted{color:#586070}
+.section-band.theme-dark{background:#0b0d12;color:#e7e9f0}
+.section-band.theme-dark .muted{color:#9aa3b2}
+
+/* backgrounds */
+.section-band.bg-none{}
+.section-band.bg-subtle{
+  background:linear-gradient(180deg,rgba(88,101,242,0.07),rgba(88,101,242,0.02));
+}
+.section-band.bg-card{
+  background:var(--card);
+  border:1px solid rgba(255,255,255,0.06);
+  border-left:0;border-right:0;
+}
+.section-band.bg-accent{background:color-mix(in oklab, var(--accent) 12%, transparent)}
 `.trim();
 }
 
@@ -575,6 +602,22 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
 
       case "divider":
         return { id, type: "divider", props: {} };
+
+      case "section": {
+        const align = ["left", "center", "right"].includes(b?.align) ? b.align : "left";
+        const theme = ["auto", "light", "dark"].includes(b?.theme) ? b.theme : "auto";
+        const pad = ["sm", "md", "lg"].includes(b?.pad) ? b.pad : "md";
+        const bg = ["none", "subtle", "card", "accent"].includes(b?.bg) ? b.bg : "none";
+        return {
+          id,
+          type: "section",
+          props: {
+            title: String(b?.title ?? ""),
+            text: String(b?.text ?? ""),
+            align, theme, pad, bg,
+          },
+        };
+      }  
 
       default:
         // Фейл-сейф: пусть отрендерится диагностический блок, но не ломаем экспорт
