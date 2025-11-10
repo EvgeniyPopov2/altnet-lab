@@ -297,6 +297,27 @@ export default function SiteBuilder() {
     });
   }, []);
 
+  // Вставка нового блока по типу из «слота» (канвас)
+  const handleInsertAt = useCallback((
+    index: number,
+    type: "h1" | "p" | "btn" | "img" | "divider" | "spacer"
+  ) => {
+    const id = uid();
+    const base: any =
+      type === "h1" ? { id, type: "h1", text: "Новый заголовок", align: "left" } :
+        type === "p" ? { id, type: "p", text: "Новый абзац. Опишите мысль.", align: "left" } :
+          type === "btn" ? { id, type: "btn", label: "Кнопка", href: "#", variant: "primary", align: "left" } :
+            type === "img" ? { id, type: "img", cid: "https://picsum.photos/1200/600", alt: "Изображение" } :
+              type === "divider" ? { id, type: "divider" } :
+                { id, type: "spacer", size: "md" };
+
+    setDoc(d => {
+      const next = d.blocks.slice();
+      next.splice(index, 0, base);
+      return { ...d, blocks: next };
+    });
+  }, []);
+
   const labelOf = useCallback((b: Block): string => {
     switch (b.type) {
       case "hero": return "Hero";
@@ -1336,6 +1357,7 @@ export default function SiteBuilder() {
               </div>
             )}
             onReorder={(next) => setDoc(prev => ({ ...prev, blocks: next }))}
+            onInsertAt={handleInsertAt}
           />
         </div>
 
