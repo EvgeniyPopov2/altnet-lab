@@ -1,8 +1,18 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
-
+import SortableCanvas from "../builder/SortableCanvas";
 
 type CheckItem = { id: string; ok: boolean; text: string };
+
+// ── Небольшая обёртка для подписи + контента поля ввода
+function Field(props: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="grid gap-1">
+      <span className="text-xs text-[#9aa3b2]">{props.label}</span>
+      {props.children}
+    </label>
+  );
+}
 
 const isHttp = (s: string) => /^https?:\/\//i.test(s || "");
 const isHash = (s: string) => (s || "").trim().startsWith("#");
@@ -240,789 +250,15 @@ function prettyFileName(title: string, ext: string) {
   return (base || "site") + "." + ext;
 }
 
-/* =========================
- * Карточка блока (DnD только за «ручку»)
- * ========================= */
-type BlockCardProps = {
-  block: Block;
-  index: number;
-  onChange(patch: Partial<Block>): void;
-  onRemove(): void;
-  onDragStartByHandle(e: React.DragEvent, id: string): void;
-  onDragOverCard(e: React.DragEvent, id: string): void;
-  onDropOnCard(e: React.DragEvent, id: string): void;
-  onDuplicate(): void;
-  onMoveUp(id: string): void;
-  onMoveDown(id: string): void;
-};
-
-const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
-  const { block: b, index, onChange, onRemove, onDuplicate, onDragStartByHandle, onDragOverCard, onDropOnCard, onMoveUp, onMoveDown } =
-    props;
-  const isLocked = Boolean((b as any).locked);
-  const stopAll = useCallback((e: React.SyntheticEvent) => {
-    e.stopPropagation();
-  }, []);
-  const preventDrag = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
-
-  return (
-    <div
-      className={`rounded-2xl bg-[#0f111a] border border-[#1c2030] p-4 mb-3 select-text ${(b as any).hidden ? "opacity-50" : ""}`}
-      onDragOver={(e) => onDragOverCard(e, b.id)}
-      onDrop={(e) => onDropOnCard(e, b.id)}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-xs tracking-wider uppercase text-[#9aa3b2]">
-          {index + 1}. {labelOf(b.type)}
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Хэндл перетаскивания: выключен при замке */}
-          <button
-            title={isLocked ? "Блок заблокирован" : "Перетащи для сортировки"}
-            className={`px-2 py-1 rounded-md bg-[#111427] border border-[#1f2751] ${isLocked ? "opacity-40 cursor-not-allowed" : "text-[#b8c1ff]"}`}
-            draggable={!isLocked}
-            onDragStart={(e) => {
-              if (isLocked) { e.preventDefault(); e.stopPropagation(); return; }
-              onDragStartByHandle(e, b.id);
-            }}
-            onMouseDown={(e) => e.stopPropagation()}
-            disabled={isLocked}
-            aria-disabled={isLocked}
-          >
-            ≡
-          </button>
-
-          {/* Дублировать — запрещено при замке */}
-          <button
-            onClick={(e) => { e.stopPropagation(); if (!isLocked) onDuplicate(); }}
-            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "opacity-40 cursor-not-allowed" : "text-[#b8ffc1] hover:bg-[#1a2e1f]"}`}
-            title={isLocked ? "Разблокируйте, чтобы дублировать" : "Создать копию блока ниже"}
-            disabled={isLocked}
-          >
-            Дублировать
-          </button>
-
-          {/* Скрыть/показать — можно всегда */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onChange({ hidden: !(b as any).hidden } as any); }}
-            className="px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] text-[#9aa3b2] hover:bg-[#1f2336]"
-            title={(b as any).hidden ? "Показать блок" : "Скрыть блок"}
-            aria-label="Скрыть/показать блок"
-          >
-            {(b as any).hidden ? "👁‍🗨 Показать" : "👁 Скрыть"}
-          </button>
-
-          {/* Замок — можно всегда (переключатель) */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onChange({ locked: !isLocked } as any); }}
-            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "text-[#a7f3d0]" : "text-[#b8c1ff]"} hover:bg-[#1f2336]`}
-            title={isLocked ? "Разблокировать блок" : "Заблокировать блок"}
-            aria-label="Заблокировать/разблокировать блок"
-          >
-            {isLocked ? "🔓 Разблок." : "🔒 Замок"}
-          </button>
-
-          {/* Удалить — запрещено при замке */}
-          <button
-            onClick={(e) => { e.stopPropagation(); if (!isLocked) onRemove(); }}
-            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "opacity-40 cursor-not-allowed text-[#ffb3a8]" : "text-[#ffb3a8] hover:bg-[#221f2e]"}`}
-            title={isLocked ? "Разблокируйте, чтобы удалить" : "Удалить блок"}
-            disabled={isLocked}
-          >
-            Удалить
-          </button>
-
-          {/* Двигать вверх/вниз — запрещено при замке */}
-          <button
-            title={isLocked ? "Разблокируйте, чтобы переместить" : "Переместить вверх"}
-            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "opacity-40 cursor-not-allowed" : "text-[#b8c1ff] hover:bg-[#1f2336]"}`}
-            onClick={(e) => { e.stopPropagation(); if (!isLocked) onMoveUp(b.id); }}
-            aria-label="Переместить блок вверх"
-            disabled={isLocked}
-          >
-            ↑
-          </button>
-
-          <button
-            title={isLocked ? "Разблокируйте, чтобы переместить" : "Переместить вниз"}
-            className={`px-2 py-1 rounded-md bg-[#1a1d2e] border border-[#2a2f45] ${isLocked ? "opacity-40 cursor-not-allowed" : "text-[#b8c1ff] hover:bg-[#1f2336]"}`}
-            onClick={(e) => { e.stopPropagation(); if (!isLocked) onMoveDown(b.id); }}
-            aria-label="Переместить блок вниз"
-            disabled={isLocked}
-          >
-            ↓
-          </button>
-        </div>
-
-      </div>
-
-      {/* Редакторы блоков, инпуты защищены от всплытия/drag */}
-      <div className={isLocked ? "pointer-events-none opacity-60" : ""}>
-        {b.type === "hero" && (
-          <div className="grid gap-3">
-            <Field label="Заголовок">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.title}
-                onChange={(e) => onChange({ title: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </Field>
-
-            <Field label="Подзаголовок">
-              <textarea
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
-                value={b.subtitle || ""}
-                onChange={(e) => onChange({ subtitle: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </Field>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Текст кнопки">
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.ctaText || ""}
-                  onChange={(e) => onChange({ ctaText: e.target.value } as Partial<Block>)}
-                  onMouseDownCapture={stopAll}
-                  onKeyDownCapture={stopAll}
-                  onClickCapture={stopAll}
-                  onDragStart={preventDrag}
-                  draggable={false}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              </Field>
-              {(() => {
-                const link = b.ctaLink || "";
-                const ok = isSafeLink(link);
-                return (
-                  <Field label="Ссылка">
-                    <input
-                      className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
-                        }`}
-                      value={link}
-                      onChange={(e) => onChange({ ctaLink: e.target.value } as Partial<Block>)}
-                      onMouseDownCapture={stopAll}
-                      onKeyDownCapture={stopAll}
-                      onClickCapture={stopAll}
-                      onDragStart={preventDrag}
-                      draggable={false}
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    {!ok && (
-                      <div className="text-xs text-[#ff9b9b] mt-1">
-                        Разрешено: #якорь, /путь, ./относительный, http(s)://, altfs://, ipfs://
-                      </div>
-                    )}
-                  </Field>
-                );
-              })()}
-            </div>
-          </div>
-        )}
-
-        {b.type === "h1" && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Текст заголовка">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.text}
-                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </Field>
-            <Field label="Выравнивание">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).align || "left"}
-                onChange={(e) => onChange({ align: e.target.value } as any)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-              >
-                <option value="left">Слева</option>
-                <option value="center">По центру</option>
-                <option value="right">Справа</option>
-              </select>
-            </Field>
-          </div>
-        )}
-
-        {b.type === "p" && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Параграф">
-              <textarea
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#cfd5e6] min-h-[72px] resize-vertical"
-                value={b.text}
-                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </Field>
-            <Field label="Выравнивание">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).align || "left"}
-                onChange={(e) => onChange({ align: e.target.value } as any)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-              >
-                <option value="left">Слева</option>
-                <option value="center">По центру</option>
-                <option value="right">Справа</option>
-              </select>
-            </Field>
-          </div>
-        )}
-
-        {b.type === "img" && (
-          <div className="grid gap-3">
-            {(() => {
-              const src = b.cid || "";
-              const ok = isSafeImageSrc(src);
-              return (
-                <Field label="CID / URL">
-                  <input
-                    className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
-                      }`}
-                    value={src}
-                    onChange={(e) => onChange({ cid: e.target.value } as Partial<Block>)}
-                    onMouseDownCapture={stopAll}
-                    onKeyDownCapture={stopAll}
-                    onClickCapture={stopAll}
-                    onDragStart={preventDrag}
-                    draggable={false}
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder="altfs://<CID> или https://..."
-                  />
-                  {!ok && (
-                    <div className="text-xs text-[#ff9b9b] mt-1">
-                      Разрешено: data:image/*, http(s)://, altfs://, ipfs://
-                    </div>
-                  )}
-                </Field>
-              );
-            })()}
-            <Field label="Описание (alt)">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.alt || ""}
-                onChange={(e) => onChange({ alt: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </Field>
-          </div>
-        )}
-
-        {b.type === "cols2" && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Заголовок">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).title || ""}
-                onChange={(e) => onChange({ title: e.target.value } as any)}
-              />
-            </Field>
-
-            <Field label="Доля колонок">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).ratio || "6-6"}
-                onChange={(e) => onChange({ ratio: e.target.value } as any)}
-              >
-                <option value="5-7">5-7</option>
-                <option value="6-6">6-6</option>
-                <option value="7-5">7-5</option>
-              </select>
-            </Field>
-
-            <Field label="Текст">
-              <textarea
-                className="w-full px-3 py-2 h-24 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).text || ""}
-                onChange={(e) => onChange({ text: e.target.value } as any)}
-              />
-            </Field>
-
-            <Field label="Картинка (CID/URL)">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).img || ""}
-                onChange={(e) => onChange({ img: e.target.value } as any)}
-              />
-            </Field>
-
-            <Field label="Alt">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).alt || ""}
-                onChange={(e) => onChange({ alt: e.target.value } as any)}
-              />
-            </Field>
-
-            <Field label="Поменять местами">
-              <label className="inline-flex items-center gap-2 select-none">
-                <input
-                  type="checkbox"
-                  checked={Boolean((b as any).reverse)}
-                  onChange={(e) => onChange({ reverse: e.target.checked } as any)}
-                />
-                <span>Картинка слева, текст справа</span>
-              </label>
-            </Field>
-          </div>
-        )}
-
-        {b.type === "btn" && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Текст кнопки">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.label}
-                onChange={(e) => onChange({ label: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </Field>
-
-            {(() => {
-              const link = b.href || "";
-              const ok = isSafeLink(link);
-              return (
-                <Field label="Ссылка">
-                  <Field label="Вариант">
-                    <select
-                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                      value={(b as any).variant || "primary"}
-                      onChange={(e) => onChange({ variant: e.target.value } as any)}
-                      onMouseDownCapture={stopAll}
-                      onKeyDownCapture={stopAll}
-                      onClickCapture={stopAll}
-                    >
-                      <option value="primary">Основная</option>
-                      <option value="secondary">Вторичная</option>
-                    </select>
-                  </Field>
-
-                  <Field label="Выравнивание">
-                    <select
-                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                      value={(b as any).align || "center"}
-                      onChange={(e) => onChange({ align: e.target.value } as any)}
-                    >
-                      <option value="left">Слева</option>
-                      <option value="center">По центру</option>
-                      <option value="right">Справа</option>
-                    </select>
-                  </Field>
-
-                  <input
-                    className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#e6e9f4] ${ok ? "border-[#1f2751] focus:border-[#2a3a8f]" : "border-[#ff6b6b] focus:border-[#ff6b6b]"
-                      }`}
-                    value={link}
-                    onChange={(e) => onChange({ href: e.target.value } as Partial<Block>)}
-                    onMouseDownCapture={stopAll}
-                    onKeyDownCapture={stopAll}
-                    onClickCapture={stopAll}
-                    onDragStart={preventDrag}
-                    draggable={false}
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-
-                  {!ok && (
-                    <div className="text-xs text-[#ff9b9b] mt-1">
-                      Разрешено: #якорь, /путь, ./относительный, http(s)://, altfs://, ipfs://
-                    </div>
-                  )}
-                </Field>
-              );
-            })()}
-          </div>
-        )}
-
-        {b.type === "heading" && (
-          <div className="grid gap-3">
-            <Field label="Текст заголовка">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.text || ""}
-                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-                autoComplete="off"
-                spellCheck={false}
-              />
-            </Field>
-
-            <Field label="Уровень (H2–H4)">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.level || "h2"}
-                onChange={(e) => onChange({ level: e.target.value as any } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-              >
-                <option value="h2">H2</option>
-                <option value="h3">H3</option>
-                <option value="h4">H4</option>
-              </select>
-            </Field>
-
-            <Field label="Выравнивание">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.align || "left"}
-                onChange={(e) => onChange({ align: e.target.value as any } as Partial<Block>)}
-                onMouseDownCapture={stopAll}
-                onKeyDownCapture={stopAll}
-                onClickCapture={stopAll}
-                onDragStart={preventDrag}
-                draggable={false}
-              >
-                <option value="left">Слева</option>
-                <option value="center">По центру</option>
-                <option value="right">Справа</option>
-              </select>
-            </Field>
-          </div>
-        )}
-
-        {b.type === "section" && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Заголовок (опц.)">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.title || ""}
-                onChange={(e) => onChange({ title: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
-              />
-            </Field>
-
-            <Field label="Текст (опц.)">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.text || ""}
-                onChange={(e) => onChange({ text: e.target.value } as Partial<Block>)}
-                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
-              />
-            </Field>
-
-            <Field label="Выравнивание">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.align || "left"}
-                onChange={(e) => onChange({ align: e.target.value as any } as Partial<Block>)}
-                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                onDragStart={preventDrag} draggable={false}
-              >
-                <option value="left">Слева</option>
-                <option value="center">По центру</option>
-                <option value="right">Справа</option>
-              </select>
-            </Field>
-
-            <Field label="Тема секции">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.theme || "auto"}
-                onChange={(e) => onChange({ theme: e.target.value as any } as Partial<Block>)}
-                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                onDragStart={preventDrag} draggable={false}
-              >
-                <option value="auto">Auto (по странице)</option>
-                <option value="light">Light (локально)</option>
-                <option value="dark">Dark (локально)</option>
-              </select>
-            </Field>
-
-            <Field label="Отступы">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.pad || "md"}
-                onChange={(e) => onChange({ pad: e.target.value as any } as Partial<Block>)}
-                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                onDragStart={preventDrag} draggable={false}
-              >
-                <option value="sm">Малые</option>
-                <option value="md">Средние</option>
-                <option value="lg">Большие</option>
-              </select>
-            </Field>
-
-            <Field label="Фон">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.bg || "none"}
-                onChange={(e) => onChange({ bg: e.target.value as any } as Partial<Block>)}
-                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                onDragStart={preventDrag} draggable={false}
-              >
-                <option value="none">Нет</option>
-                <option value="subtle">Ненавязчивый градиент</option>
-                <option value="card">Панель (card)</option>
-                <option value="accent">Акцент (оттенок)</option>
-              </select>
-            </Field>
-          </div>
-        )}
-
-        {b.type === "grid" && (
-          <div className="grid gap-3">
-            <Field label="Колонки">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.cols}
-                onChange={(e) => onChange({ cols: Number(e.target.value) as any } as Partial<Block>)}
-                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                onDragStart={preventDrag} draggable={false}
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-                <option value={4}>4</option>
-              </select>
-            </Field>
-            <Field label="Отступ по горизонтали (px)">
-              <input
-                type="number"
-                min={0}
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).gapX ?? 16}
-                onChange={(e) => onChange({ gapX: Math.max(0, Number(e.target.value) || 0) } as any)}
-              />
-            </Field>
-
-            <Field label="Отступ по вертикали (px)">
-              <input
-                type="number"
-                min={0}
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).gapY ?? 16}
-                onChange={(e) => onChange({ gapY: Math.max(0, Number(e.target.value) || 0) } as any)}
-              />
-            </Field>
-            {/* Список элементов */}
-            <div className="grid gap-2">
-              {(b.items || []).map((it, idx) => (
-                <div key={it.id} className="grid md:grid-cols-3 gap-2 p-2 rounded-lg border border-[#1f2751] bg-[#0c0f1a]">
-                  <Field label={`SRC #${idx + 1}`}>
-                    <input
-                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                      value={it.src || ""}
-                      onChange={(e) => {
-                        const items = [...b.items];
-                        items[idx] = { ...items[idx], src: e.target.value };
-                        onChange({ items } as Partial<Block>);
-                      }}
-                      onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                      onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
-                    />
-                  </Field>
-
-                  <Field label="ALT">
-                    <input
-                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                      value={it.alt || ""}
-                      onChange={(e) => {
-                        const items = [...b.items];
-                        items[idx] = { ...items[idx], alt: e.target.value };
-                        onChange({ items } as Partial<Block>);
-                      }}
-                      onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                      onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
-                    />
-                  </Field>
-
-                  <Field label="Подпись">
-                    <input
-                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                      value={it.caption || ""}
-                      onChange={(e) => {
-                        const items = [...b.items];
-                        items[idx] = { ...items[idx], caption: e.target.value };
-                        onChange({ items } as Partial<Block>);
-                      }}
-                      onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
-                      onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
-                    />
-                  </Field>
-
-                  <div className="md:col-span-3 flex justify-end">
-                    <button
-                      className="px-3 py-2 rounded-lg border text-white bg-[#5865F2] hover:bg-[#6E59F2] border-[#6E59F2]"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        const items = [...(b as any).items];
-                        items.splice(idx, 1);
-                        onChange({ items } as any);
-                      }}
-                    >
-                      Удалить карточку
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              <div className="flex justify-end">
-                <button
-                  className="px-3 py-2 rounded-lg border text-white bg-[#5865F2] hover:bg-[#6E59F2] border-[#6E59F2]"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    const items = Array.isArray((b as any).items) ? [...(b as any).items] : [];
-                    items.push({ src: "", alt: "", caption: "" });
-                    onChange({ items } as any);
-                  }}
-                >
-                  + Добавить карточку
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Новые самостоятельные ветки: spacer/divider */}
-        {b.type === "spacer" && (
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Размер">
-              <select
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={(b as any).size || "md"}
-                onChange={(e) => onChange({ size: e.target.value } as any)}
-              >
-                <option value="xs">XS (8px)</option>
-                <option value="sm">SM (16px)</option>
-                <option value="md">MD (24px)</option>
-                <option value="lg">LG (40px)</option>
-                <option value="xl">XL (64px)</option>
-              </select>
-            </Field>
-          </div>
-        )}
-
-        {b.type === "divider" && (
-          <div className="grid gap-2">
-            <div className="h-px bg-[#2a2f45]" />
-            <div className="text-[#9aa3b2] text-xs">Тонкая линия-разделитель</div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="grid gap-1">
-      <span className="text-xs text-[#9aa3b2]">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function labelOf(t: BlockType) {
-  switch (t) {
-    case "hero":
-      return "герой";
-    case "h1":
-      return "заголовок";
-    case "p":
-      return "текст";
-    case "img":
-      return "картинка";
-    case "btn":
-      return "кнопка";
-    case "cols2":
-      return "две колонки";
-    case "spacer":
-      return "отступ";
-    case "divider":
-      return "разделитель";
-    case "heading":
-      return "Заголовок (H2–H4)";
-    case "section":
-      return "секция";
-    case "grid":
-      return "сетка 1–4";
-  }
-}
-
-
-// ── Валидация URL'ов для полей
-function isSafeLink(href?: string): boolean {
-  const s = (href || "").trim();
-  if (!s) return true;                 // пустое не ругаем в редакторе
-  if (s.startsWith("#")) return true;  // якорь
-  if (s.startsWith("/")) return true;  // абсолютный относительный путь
-  if (/^(\.\/|\.\.\/)/.test(s)) return true; // относительный путь
-  if (/^https?:\/\//i.test(s)) return true;  // внешние http/https
-  if (/^(altfs:|ipfs:)/i.test(s)) return true;
-  return false;
-}
-
-function isSafeImageSrc(src?: string): boolean {
-  const s = (src || "").trim();
-  if (!s) return false;                       // для картинки пустое — не ок
-  if (/^data:image\//i.test(s)) return true;  // data: для изображений
-  if (/^https?:\/\//i.test(s)) return true;
-  if (/^(altfs:|ipfs:)/i.test(s)) return true;
-  return false;
-}
 
 /* =========================
  * Основной экран
  * ========================= */
 export default function SiteBuilder() {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
+  const [canvasCols, setCanvasCols] = useState<1 | 2 | 3 | 4>(3);
+  const [canvasGapX, setCanvasGapX] = useState<number>(16);
+  const [canvasGapY, setCanvasGapY] = useState<number>(16);
 
   const docForBuild = useMemo(
     () => ({ ...doc, blocks: doc.blocks.filter(b => !(b as any).hidden) }),
@@ -1052,42 +288,6 @@ export default function SiteBuilder() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
     } catch { }
   }, [doc]);
-
-  // DnD состояние
-  const dragFromId = useRef<string | null>(null);
-
-  const onDragStartByHandle = useCallback((e: React.DragEvent, id: string) => {
-    dragFromId.current = id;
-    e.dataTransfer.effectAllowed = "move";
-    e.stopPropagation();
-  }, []);
-
-  const onDragOverCard = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-  }, []);
-
-  const onDropOnCard = useCallback((e: React.DragEvent, toId: string) => {
-    e.preventDefault();
-    const fromId = dragFromId.current;
-    dragFromId.current = null;
-    if (!fromId || fromId === toId) return;
-
-    setDoc((prev) => {
-      const arr = [...prev.blocks];
-      const from = arr.findIndex((x) => x.id === fromId);
-      const to = arr.findIndex((x) => x.id === toId);
-      if (from < 0 || to < 0) return prev;
-
-      // 🚫 запрет: если источник или цель — «замок», не двигаем
-      const fromLocked = Boolean((arr[from] as any).locked);
-      const toLocked = Boolean((arr[to] as any).locked);
-      if (fromLocked || toLocked) return prev;
-
-      const [moved] = arr.splice(from, 1);
-      arr.splice(to, 0, moved);
-      return { ...prev, blocks: arr };
-    });
-  }, []);
 
 
   const addBlock = useCallback((type: BlockType) => {
@@ -1127,43 +327,7 @@ export default function SiteBuilder() {
     setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
   }, []);
 
-  const updateBlock = useCallback((id: string, patch: Partial<Block>) => {
-    setDoc((prev) => ({
-      ...prev,
-      blocks: prev.blocks.map((b) => (b.id === id ? ({ ...b, ...patch } as Block) : b)),
-    }));
-  }, []);
 
-  const removeBlock = useCallback((id: string) => {
-    setDoc((prev) => ({ ...prev, blocks: prev.blocks.filter((b) => b.id !== id) }));
-  }, []);
-
-  const moveBlock = useCallback((id: string, dir: -1 | 1) => {
-    setDoc((prev) => {
-      const i = prev.blocks.findIndex((x) => x.id === id);
-      if (i < 0) return prev;
-      const j = i + dir;
-      if (j < 0 || j >= prev.blocks.length) return prev;
-      const arr = [...prev.blocks];
-      const [moved] = arr.splice(i, 1);
-      arr.splice(j, 0, moved);
-      return { ...prev, blocks: arr };
-    });
-  }, []);
-
-  const moveUp = useCallback((id: string) => moveBlock(id, -1), [moveBlock]);
-  const moveDown = useCallback((id: string) => moveBlock(id, 1), [moveBlock]);
-
-  const duplicateBlock = useCallback((id: string) => {
-    setDoc((prev) => {
-      const arr = [...prev.blocks];
-      const idx = arr.findIndex((b) => b.id === id);
-      if (idx < 0) return prev;
-      const copy = { ...(arr[idx] as any), id: uid() } as Block; // новый id
-      arr.splice(idx + 1, 0, copy); // вставляем КОПИЮ ниже исходного
-      return { ...prev, blocks: arr };
-    });
-  }, []);
 
   const onExportZip = useCallback(async () => {
     const model = adaptFromSiteBuilderDoc(docForBuild);
@@ -1229,11 +393,11 @@ export default function SiteBuilder() {
     <button data-w="390">Mobile 390</button>
     <div class="sep"></div>
     <span>Ширина:</span><input id="w" type="number" min="320" max="1920" step="10" placeholder="px"/>
-  </div>
+  </div> {/* конец левой панели */}
 
   <div id="viewport">
     <iframe id="stage" sandbox="allow-same-origin"></iframe>
-  </div>
+  </div> {/* конец левой панели */}
 
   <script>
     (function(){
@@ -1500,6 +664,55 @@ export default function SiteBuilder() {
     } catch { }
   }, []);
 
+  // --- Мини-превью блоков для левой канвы (SortableCanvas)
+  const renderPreviewBlock = useCallback((b: Block) => {
+    switch (b.type) {
+      case "h1":
+        return (
+          <h3 className="text-lg font-extrabold tracking-tight">
+            {(b as H1Block).text || "Заголовок"}
+          </h3>
+        );
+      case "heading":
+        return (
+          <h4 className="text-base font-semibold">
+            {(b as HeadingBlock).text || "Заголовок"}
+          </h4>
+        );
+      case "p":
+        return <p className="text-sm opacity-80">{(b as PBlock).text || "Абзац"}</p>;
+      case "img":
+        return (
+          <img
+            className="rounded-xl border border-[#2a2f45]"
+            src={(b as any).src || (b as ImgBlock).cid || ""}
+            alt={(b as ImgBlock).alt || ""}
+          />
+        );
+      case "btn":
+        return <button className="btn">{(b as BtnBlock).label || "Кнопка"}</button>;
+      case "spacer":
+        return <div className="h-6 opacity-40" />;
+      case "divider":
+        return <div className="h-px bg-[#2a2f45]" />;
+      case "cols2":
+        return <div className="grid grid-cols-2 gap-4 opacity-70">Две колонки</div>;
+      case "section":
+        return <div className="section-band pad-md">Секция</div>;
+      case "grid":
+        return <div className="grid grid-cols-3 gap-3 opacity-70">Сетка 1–4</div>;
+      case "hero":
+        return (
+          <div className="hero">
+            <h2>{(b as HeroBlock).title || "Заголовок"}</h2>
+            <p className="muted">{(b as HeroBlock).subtitle || ""}</p>
+          </div>
+        );
+      default:
+        return <div className="text-xs opacity-60">[{(b as any).type}]</div>;
+    }
+  }, []);
+
   return (
     <div className="h-full grid grid-cols-1 md:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)] gap-4">
       {/* Левая панель */}
@@ -1719,35 +932,47 @@ export default function SiteBuilder() {
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("grid")}>+ Сетка 1–4</button>
         </div>
 
+        <div className="flex items-center gap-2">
+          <label className="text-xs opacity-80">Колонки</label>
+          <select
+            className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751]"
+            value={canvasCols}
+            onChange={(e) => setCanvasCols(Number(e.target.value) as 1 | 2 | 3 | 4)}
+          >
+            <option value={1}>1</option>
+            <option value={2}>2</option>
+            <option value={3}>3</option>
+            <option value={4}>4</option>
+          </select>
+
+          <label className="text-xs opacity-80 ml-3">gap X</label>
+          <input
+            type="number"
+            className="w-16 px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751]"
+            value={canvasGapX}
+            onChange={(e) => setCanvasGapX(Math.max(0, Number(e.target.value) || 0))}
+          />
+          <label className="text-xs opacity-80">gap Y</label>
+          <input
+            type="number"
+            className="w-16 px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751]"
+            value={canvasGapY}
+            onChange={(e) => setCanvasGapY(Math.max(0, Number(e.target.value) || 0))}
+          />
+        </div>
+
         {/* Список блоков */}
         <div>
-          {doc.blocks.map((b, i) => (
-            <BlockCard
-              key={b.id}
-              block={b}
-              index={i}
-              onChange={(patch) => updateBlock(b.id, patch)}
-              onRemove={() => removeBlock(b.id)}
-              onDuplicate={() => duplicateBlock(b.id)}    // ← ДОБАВЛЕНО
-              onDragStartByHandle={onDragStartByHandle}
-              onDragOverCard={(e) => onDragOverCard(e)}   // предотвращаем default
-              onDropOnCard={onDropOnCard}
-              onMoveUp={moveUp}
-              onMoveDown={moveDown}
-            />
-          ))}
+          <SortableCanvas
+            cols={canvasCols}
+            gapX={canvasGapX}
+            gapY={canvasGapY}
+            blocks={doc.blocks}
+            renderBlock={renderPreviewBlock}
+            onReorder={(next) => setDoc(prev => ({ ...prev, blocks: next }))}
+          />
         </div>
-      </div>
-
-      {/* Предпросмотр (отключён) */}
-      <div className="md:col-[2] rounded-2xl p-6 bg-[#0f111a] border border-[#1c2030]">
-        <div className="text-sm text-[#9aa3b2] mb-2">
-          Встроенный предпросмотр отключён.
-        </div>
-        <div className="text-sm text-[#9aa3b2]">
-          Используйте кнопки слева: <b>«Предпросмотр в новой вкладке»</b> или <b>«Открыть live-предпросмотр»</b>, затем <b>«↻ Обновить live-предпросмотр»</b>.
-        </div>
-      </div>
+      </div> {/* конец левой панели */}
     </div>
   );
-}
+}  
