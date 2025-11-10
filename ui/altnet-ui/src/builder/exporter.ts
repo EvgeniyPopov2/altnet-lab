@@ -177,6 +177,22 @@ footer{opacity:.8;padding:26px 0;text-align:center;font-size:14px}
   border-left:0;border-right:0;
 }
 .section-band.bg-accent{background:color-mix(in oklab, var(--accent) 12%, transparent)}
+/* Grid 1–4 */
+.grid-wrap{display:grid;gap:16px}
+.grid-wrap.gc-1{grid-template-columns:1fr}
+.grid-wrap.gc-2{grid-template-columns:repeat(2,1fr)}
+.grid-wrap.gc-3{grid-template-columns:repeat(3,1fr)}
+.grid-wrap.gc-4{grid-template-columns:repeat(4,1fr)}
+
+.grid-card{
+  background:var(--card);
+  border:1px solid rgba(255,255,255,0.06);
+  border-radius:var(--radius);
+  overflow:hidden;
+  box-shadow:var(--shadow-soft);
+}
+.grid-card img{display:block;width:100%;height:auto}
+.grid-card .body{padding:12px 14px;color:var(--muted)}
 `.trim();
 }
 
@@ -618,6 +634,17 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
           },
         };
       }  
+
+      case "grid": {
+        const cols = [1, 2, 3, 4].includes(Number(b?.cols)) ? (Number(b.cols) as 1 | 2 | 3 | 4) : 3;
+        const itemsSrc = Array.isArray(b?.items) ? b.items : [];
+        const items = itemsSrc.map((it: any) => ({
+          src: sanitizeUrl(String(it?.src ?? "")),
+          alt: String(it?.alt ?? ""),
+          caption: String(it?.caption ?? ""),
+        }));
+        return { id, type: "grid", props: { cols, items } };
+      }
 
       default:
         // Фейл-сейф: пусть отрендерится диагностический блок, но не ломаем экспорт

@@ -299,6 +299,49 @@ const Section: BlockSpec = {
   },
 };
 
+// === Grid 1–4 (галерея карточек)
+const Grid: BlockSpec = {
+  id: "grid",
+  name: "Сетка 1–4",
+  defaults: {
+    cols: 3 as 1 | 2 | 3 | 4,
+    items: [] as Array<{ src: string; alt?: string; caption?: string }>,
+  },
+  render: ({ props }) => {
+    const p = { ...Grid.defaults, ...(props || {}) };
+    const cols = (p.cols >= 1 && p.cols <= 4 ? p.cols : 3) as 1 | 2 | 3 | 4;
+    const wrapCls = `grid-wrap gc-${cols}`;
+    const children = (Array.isArray(p.items) ? p.items : []).map((it, i) =>
+      React.createElement(
+        "figure",
+        { key: i, className: "grid-card" },
+        React.createElement("img", {
+          src: it?.src || "",
+          alt: String(it?.alt || ""),
+        }),
+        it?.caption
+          ? React.createElement("figcaption", { className: "body" }, String(it.caption))
+          : null
+      )
+    );
+    return React.createElement("section", { className: "section" },
+      React.createElement("div", { className: wrapCls }, ...children)
+    );
+  },
+  serialize: (props) => {
+    const p = { ...Grid.defaults, ...(props || {}) };
+    const cols = (p.cols >= 1 && p.cols <= 4 ? p.cols : 3) as 1 | 2 | 3 | 4;
+    const wrapCls = `grid-wrap gc-${cols}`;
+    const items = (Array.isArray(p.items) ? p.items : []).map((it) => {
+      const src = esc(String(it?.src || ""));
+      const alt = esc(String(it?.alt || ""));
+      const caption = it?.caption ? `<figcaption class="body">${esc(String(it.caption))}</figcaption>` : "";
+      return `<figure class="grid-card"><img src="${src}" alt="${alt}"/>${caption}</figure>`;
+    }).join("");
+    return `<section class="section"><div class="${wrapCls}">${items}</div></section>`;
+  },
+};
+
 // Регистр
 const BLOCKS: Record<string, BlockSpec> = {
   [Hero.id]: Hero,
@@ -311,6 +354,7 @@ const BLOCKS: Record<string, BlockSpec> = {
   [Spacer.id]: Spacer,
   [Divider.id]: Divider,
   [Section.id]: Section,
+  [Grid.id]: Grid,
 };
 
 // API реестра

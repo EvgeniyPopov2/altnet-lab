@@ -11,7 +11,7 @@ const notEmpty = (s?: string) => !!(s && s.trim().length > 0);
 /* =========================
  * Типы документа и блоков
  * ========================= */
-type BlockType = "hero" | "h1" | "heading" | "p" | "img" | "btn" | "cols2" | "spacer" | "divider" | "section";
+type BlockType = "hero" | "h1" | "heading" | "p" | "img" | "btn" | "cols2" | "spacer" | "divider" | "section" | "grid";
 
 
 type HeroBlock = {
@@ -117,7 +117,18 @@ type SectionBlock = {
   bg?: "none" | "subtle" | "card" | "accent";
 };
 
-type Block = HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock | Cols2Block | SpacerBlock | DividerBlock | SectionBlock;
+type GridItem = { id: string; src: string; alt?: string; caption?: string };
+
+type GridBlock = {
+  id: string;
+  hidden?: boolean;
+  locked?: boolean;
+  type: "grid";
+  cols: 1 | 2 | 3 | 4;
+  items: GridItem[];
+};
+
+type Block = HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock | Cols2Block | SpacerBlock | DividerBlock | SectionBlock | GridBlock;
 
 type Doc = {
   title: string;
@@ -805,6 +816,105 @@ const BlockCard = React.memo(function BlockCard(props: BlockCardProps) {
           </div>
         )}
 
+        {b.type === "grid" && (
+          <div className="grid gap-3">
+            <Field label="Колонки">
+              <select
+                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.cols}
+                onChange={(e) => onChange({ cols: Number(e.target.value) as any } as Partial<Block>)}
+                onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                onDragStart={preventDrag} draggable={false}
+              >
+                <option value={1}>1</option>
+                <option value={2}>2</option>
+                <option value={3}>3</option>
+                <option value={4}>4</option>
+              </select>
+            </Field>
+
+            {/* Список элементов */}
+            <div className="grid gap-2">
+              {(b.items || []).map((it, idx) => (
+                <div key={it.id} className="grid md:grid-cols-3 gap-2 p-2 rounded-lg border border-[#1f2751] bg-[#0c0f1a]">
+                  <Field label={`SRC #${idx + 1}`}>
+                    <input
+                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                      value={it.src || ""}
+                      onChange={(e) => {
+                        const items = [...b.items];
+                        items[idx] = { ...items[idx], src: e.target.value };
+                        onChange({ items } as Partial<Block>);
+                      }}
+                      onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                      onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
+                    />
+                  </Field>
+
+                  <Field label="ALT">
+                    <input
+                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                      value={it.alt || ""}
+                      onChange={(e) => {
+                        const items = [...b.items];
+                        items[idx] = { ...items[idx], alt: e.target.value };
+                        onChange({ items } as Partial<Block>);
+                      }}
+                      onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                      onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
+                    />
+                  </Field>
+
+                  <Field label="Подпись">
+                    <input
+                      className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                      value={it.caption || ""}
+                      onChange={(e) => {
+                        const items = [...b.items];
+                        items[idx] = { ...items[idx], caption: e.target.value };
+                        onChange({ items } as Partial<Block>);
+                      }}
+                      onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                      onDragStart={preventDrag} draggable={false} autoComplete="off" spellCheck={false}
+                    />
+                  </Field>
+
+                  <div className="md:col-span-3 flex justify-end">
+                    <button
+                      className="px-3 py-2 rounded-lg bg-[#22172a] border border-[#3a2950] text-[#ff9bb3] hover:bg-[#2a1d35]"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        const items = [...b.items];
+                        items.splice(idx, 1);
+                        onChange({ items } as Partial<Block>);
+                      }}
+                      onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                      onDragStart={preventDrag} draggable={false}
+                    >
+                      Удалить карточку
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex justify-end">
+                <button
+                  className="px-3 py-2 rounded-lg bg-[#1a2e1f] border border-[#2a4f33] text-[#78f2d2] hover:bg-[#1f3a29]"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    const items = [...(b.items || []), { id: uid(), src: "", alt: "", caption: "" }];
+                    onChange({ items } as Partial<Block>);
+                  }}
+                  onMouseDownCapture={stopAll} onKeyDownCapture={stopAll} onClickCapture={stopAll}
+                  onDragStart={preventDrag} draggable={false}
+                >
+                  + Добавить карточку
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Новые самостоятельные ветки: spacer/divider */}
         {b.type === "spacer" && (
           <div className="grid grid-cols-2 gap-3">
@@ -865,7 +975,9 @@ function labelOf(t: BlockType) {
     case "heading": 
       return "Заголовок (H2–H4)";
     case "section": 
-      return "секция";    
+      return "секция";
+    case "grid": 
+      return "сетка 1–4";      
   }
 }
 
@@ -983,7 +1095,18 @@ export default function SiteBuilder() {
                       ? { id: uid(), type: "divider" }
                       : type === "section"
                         ? { id: uid(), type: "section", title: "Секция", text: "", align: "left", theme: "auto", pad: "md", bg: "none" }
-                        : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
+                        : type === "grid"
+                          ? {
+                            id: uid(),
+                            type: "grid",
+                            cols: 3,
+                            items: [
+                              { id: uid(), src: "", alt: "Изображение 1", caption: "Подпись 1" },
+                              { id: uid(), src: "", alt: "Изображение 2", caption: "Подпись 2" },
+                              { id: uid(), src: "", alt: "Изображение 3", caption: "Подпись 3" },
+                            ],
+                          }
+                          : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
 
 
     setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
@@ -1260,7 +1383,7 @@ export default function SiteBuilder() {
         throw new Error("Ожидался объект с массивом blocks.");
       }
 
-      const okTypes = new Set<BlockType>(["hero", "h1", "heading", "p", "img", "btn", "cols2", "spacer", "divider"]);
+      const okTypes = new Set<BlockType>(["hero", "h1", "heading", "p", "img", "btn", "cols2", "spacer", "divider", "section", "grid"]);
 
 
       const title = typeof (data as any).title === "string" ? (data as any).title : "Мой сайт";
@@ -1578,7 +1701,7 @@ export default function SiteBuilder() {
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("spacer")}>+ Spacer</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("divider")}>+ Divider</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("section")}>+ Секция</button>
-
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("grid")}>+ Сетка 1–4</button>
         </div>
 
         {/* Список блоков */}
