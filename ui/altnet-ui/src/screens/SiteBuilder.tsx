@@ -260,6 +260,47 @@ export default function SiteBuilder() {
   const [canvasGapX, setCanvasGapX] = useState<number>(16);
   const [canvasGapY, setCanvasGapY] = useState<number>(16);
 
+  // — выбор блока и утилиты редактирования —
+  const [selId, setSelId] = useState<string | null>(null);
+  const sel = useMemo(() => doc.blocks.find(b => b.id === selId) ?? null, [doc.blocks, selId]);
+
+  const patchBlock = useCallback((id: string, patch: Partial<any>) => {
+    setDoc(d => ({ ...d, blocks: d.blocks.map(b => b.id === id ? { ...b, ...patch } : b) }));
+  }, []);
+
+  const removeBlock = useCallback((id: string) => {
+    setDoc(d => ({ ...d, blocks: d.blocks.filter(b => b.id !== id) }));
+    if (selId === id) setSelId(null);
+  }, [selId]);
+
+  const duplicateBlock = useCallback((id: string) => {
+    setDoc(d => {
+      const i = d.blocks.findIndex(b => b.id === id);
+      if (i < 0) return d;
+      const copy = { ...d.blocks[i], id: uid() } as any;
+      const next = d.blocks.slice();
+      next.splice(i + 1, 0, copy);
+      return { ...d, blocks: next };
+    });
+  }, []);
+
+  const labelOf = useCallback((b: Block): string => {
+    switch (b.type) {
+      case "hero": return "Hero";
+      case "h1": return "Заголовок (H1)";
+      case "heading": return `Заголовок (${(b as any).level?.toUpperCase() || "H2"})`;
+      case "p": return "Текст";
+      case "img": return "Картинка";
+      case "btn": return "Кнопка";
+      case "cols2": return "Две колонки";
+      case "spacer": return "Разделитель (высота)";
+      case "divider": return "Линия";
+      case "section": return "Секция";
+      case "grid": return "Сетка";
+      default: return String((b as any).type);
+    }
+  }, []);
+
   // — канвас-предпросмотр —
   const [previewHtml, setPreviewHtml] = useState<string>("");
   const [autoPreview, setAutoPreview] = useState<boolean>(true);
@@ -688,6 +729,252 @@ export default function SiteBuilder() {
     } catch { }
   }, []);
 
+  // — Редактор свойств выбранного блока —
+  const Editor = useCallback(() => {
+    if (!sel) return <div className="text-xs text-[#9aa3b2]">Выберите блок слева.</div>;
+
+    const id = sel.id;
+    const row = (children: React.ReactNode) => <div className="grid gap-3">{children}</div>;
+
+    switch (sel.type) {
+      case "hero": {
+        const b = sel as HeroBlock;
+        return row(
+          <>
+            <Field label="Заголовок">
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.title} onChange={e => patchBlock(id, { title: e.target.value })} autoComplete="off" spellCheck={false} />
+            </Field>
+            <Field label="Подзаголовок">
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.subtitle || ""} onChange={e => patchBlock(id, { subtitle: e.target.value })} autoComplete="off" spellCheck={false} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Текст кнопки">
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.ctaText || ""} onChange={e => patchBlock(id, { ctaText: e.target.value })} autoComplete="off" spellCheck={false} />
+              </Field>
+              <Field label="Ссылка (http/altfs/ipfs/#)">
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.ctaLink || ""} onChange={e => patchBlock(id, { ctaLink: e.target.value })} autoComplete="off" spellCheck={false} />
+              </Field>
+            </div>
+          </>
+        );
+      }
+      case "h1": {
+        const b = sel as H1Block;
+        return row(
+          <Field label="Текст H1">
+            <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} autoComplete="off" spellCheck={false} />
+          </Field>
+        );
+      }
+      case "heading": {
+        const b = sel as HeadingBlock;
+        return row(
+          <>
+            <Field label="Текст заголовка">
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} autoComplete="off" spellCheck={false} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Уровень">
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.level || "h2"} onChange={e => patchBlock(id, { level: e.target.value as any })}>
+                  <option value="h2">H2</option><option value="h3">H3</option><option value="h4">H4</option>
+                </select>
+              </Field>
+              <Field label="Выравнивание">
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.align || "left"} onChange={e => patchBlock(id, { align: e.target.value as any })}>
+                  <option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option>
+                </select>
+              </Field>
+            </div>
+          </>
+        );
+      }
+      case "p": {
+        const b = sel as PBlock;
+        return row(
+          <>
+            <Field label="Текст">
+              <textarea className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[96px]"
+                value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} spellCheck={false} />
+            </Field>
+            <Field label="Выравнивание">
+              <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                value={b.align || "left"} onChange={e => patchBlock(id, { align: e.target.value as any })}>
+                <option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option>
+              </select>
+            </Field>
+          </>
+        );
+      }
+      case "img": {
+        const b = sel as ImgBlock;
+        return row(
+          <>
+            <Field label="CID/URL изображения">
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.cid} onChange={e => patchBlock(id, { cid: e.target.value })} autoComplete="off" spellCheck={false} />
+            </Field>
+            <Field label="Alt-текст (доступность/SEO)">
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.alt || ""} onChange={e => patchBlock(id, { alt: e.target.value })} autoComplete="off" spellCheck={false} />
+            </Field>
+          </>
+        );
+      }
+      case "btn": {
+        const b = sel as BtnBlock;
+        return row(
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Текст кнопки">
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.label} onChange={e => patchBlock(id, { label: e.target.value })} autoComplete="off" spellCheck={false} />
+              </Field>
+              <Field label="Ссылка">
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.href} onChange={e => patchBlock(id, { href: e.target.value })} autoComplete="off" spellCheck={false} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Стиль">
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.variant || "primary"} onChange={e => patchBlock(id, { variant: e.target.value as any })}>
+                  <option value="primary">Primary</option><option value="secondary">Secondary</option>
+                </select>
+              </Field>
+              <Field label="Выравнивание">
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.align || "center"} onChange={e => patchBlock(id, { align: e.target.value as any })}>
+                  <option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option>
+                </select>
+              </Field>
+            </div>
+          </>
+        );
+      }
+      case "cols2": {
+        const b = sel as Cols2Block;
+        return row(
+          <>
+            <Field label="Заголовок">
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.title} onChange={e => patchBlock(id, { title: e.target.value })} autoComplete="off" spellCheck={false} />
+            </Field>
+            <Field label="Текст">
+              <textarea className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[96px]"
+                value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} spellCheck={false} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Изображение (CID/URL)">
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.img} onChange={e => patchBlock(id, { img: e.target.value })} autoComplete="off" spellCheck={false} />
+              </Field>
+              <Field label="Alt">
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.alt} onChange={e => patchBlock(id, { alt: e.target.value })} autoComplete="off" spellCheck={false} />
+              </Field>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Соотношение колонок">
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.ratio} onChange={e => patchBlock(id, { ratio: e.target.value as ColsRatio })}>
+                  <option value="5-7">5–7</option><option value="6-6">6–6</option><option value="7-5">7–5</option>
+                </select>
+              </Field>
+              <Field label="Порядок (реверс)">
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.reverse ? "1" : "0"} onChange={e => patchBlock(id, { reverse: e.target.value === "1" })}>
+                  <option value="0">Обычный</option><option value="1">Реверс</option>
+                </select>
+              </Field>
+            </div>
+          </>
+        );
+      }
+      case "section": {
+        const b = sel as SectionBlock;
+        return row(
+          <>
+            <Field label="Заголовок секции"><input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={b.title || ""} onChange={e => patchBlock(id, { title: e.target.value })} /></Field>
+            <Field label="Текст секции"><textarea className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[72px]"
+              value={b.text || ""} onChange={e => patchBlock(id, { text: e.target.value })} /></Field>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Тема">
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.theme || "auto"}
+                  onChange={e => patchBlock(id, { theme: e.target.value as any })}>
+                  <option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option>
+                </select>
+              </Field>
+              <Field label="Паддинги">
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.pad || "md"}
+                  onChange={e => patchBlock(id, { pad: e.target.value as any })}>
+                  <option value="sm">sm</option><option value="md">md</option><option value="lg">lg</option>
+                </select>
+              </Field>
+              <Field label="Фон">
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.bg || "none"}
+                  onChange={e => patchBlock(id, { bg: e.target.value as any })}>
+                  <option value="none">none</option><option value="subtle">subtle</option><option value="card">card</option><option value="accent">accent</option>
+                </select>
+              </Field>
+            </div>
+          </>
+        );
+      }
+      case "grid": {
+        const b = sel as GridBlock;
+        return row(
+          <>
+            <Field label="Кол-во колонок">
+              <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.cols}
+                onChange={e => patchBlock(id, { cols: Number(e.target.value) as any })}>
+                <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
+              </select>
+            </Field>
+            <div className="grid gap-2">
+              {b.items.map((it, i) => (
+                <div key={it.id} className="rounded-lg border border-[#2a2f45] p-2 grid gap-2">
+                  <div className="text-xs text-[#9aa3b2]">Элемент {i + 1}</div>
+                  <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                    value={it.src} onChange={e => {
+                      const items = b.items.slice(); items[i] = { ...items[i], src: e.target.value };
+                      patchBlock(id, { items });
+                    }} placeholder="CID/URL" />
+                  <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                    value={it.alt || ""} onChange={e => {
+                      const items = b.items.slice(); items[i] = { ...items[i], alt: e.target.value };
+                      patchBlock(id, { items });
+                    }} placeholder="Alt" />
+                  <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                    value={it.caption || ""} onChange={e => {
+                      const items = b.items.slice(); items[i] = { ...items[i], caption: e.target.value };
+                      patchBlock(id, { items });
+                    }} placeholder="Подпись" />
+                </div>
+              ))}
+              <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff]"
+                onClick={() => {
+                  const items = b.items.slice();
+                  items.push({ id: uid(), src: "", alt: "", caption: "" });
+                  patchBlock(id, { items });
+                }}>+ Добавить элемент</button>
+            </div>
+          </>
+        );
+      }
+      default:
+        return <div className="text-xs text-[#9aa3b2]">Редактор для этого блока пока не реализован.</div>;
+    }
+  }, [sel, patchBlock]);
+
   // --- Мини-превью блоков для левой канвы (SortableCanvas)
   const renderPreviewBlock = useCallback((b: Block) => {
     switch (b.type) {
@@ -992,9 +1279,42 @@ export default function SiteBuilder() {
             gapX={canvasGapX}
             gapY={canvasGapY}
             blocks={doc.blocks}
-            renderBlock={renderPreviewBlock}
+            renderBlock={(b) => (
+              <div
+                onClick={() => setSelId(b.id)}
+                className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2] ring-2 ring-[#6E59F2]/50" : "border-[#2a2f45]"} bg-[#0c0f1a] p-3 cursor-pointer`}
+                title={labelOf(b)}
+              >
+                <div className="text-xs text-[#9aa3b2] mb-1">{labelOf(b)}</div>
+                {renderPreviewBlock(b)}
+              </div>
+            )}
             onReorder={(next) => setDoc(prev => ({ ...prev, blocks: next }))}
           />
+        </div>
+        <div className="mt-4 rounded-2xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
+          <div className="mb-2 text-sm text-[#cfd5e6]">Редактор блока</div>
+          {sel && (
+            <div className="flex items-center gap-2 mb-3">
+              <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-xs"
+                onClick={() => patchBlock(sel.id, { hidden: !((sel as any).hidden) })}>
+                {(sel as any).hidden ? "👁 Показать" : "👁‍🗨 Скрыть"}
+              </button>
+              <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-xs"
+                onClick={() => patchBlock(sel.id, { locked: !((sel as any).locked) })}>
+                {(sel as any).locked ? "🔓 Разблокировать" : "🔒 Заблокировать"}
+              </button>
+              <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-xs"
+                onClick={() => duplicateBlock(sel.id)}>
+                ⧉ Дублировать
+              </button>
+              <button className="px-2 py-1 rounded bg-[#241a24] border border-[#442a45] text-xs text-[#ffb3a8]"
+                onClick={() => removeBlock(sel.id)}>
+                🗑 Удалить
+              </button>
+            </div>
+          )}
+          <Editor />
         </div>
       </div> {/* конец левой панели */}
       {/* ПРАВАЯ ПАНЕЛЬ: Канвас-предпросмотр */}
