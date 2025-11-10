@@ -1297,17 +1297,70 @@ export default function SiteBuilder() {
 
         <div className="mb-3 text-sm text-[#9aa3b2]">Палитра</div>
         <div className="grid grid-cols-2 gap-2 mb-4">
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("hero")}>+ Hero</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("h1")}>+ Заголовок</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("heading")}>+ Заголовок (H2–H4)</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("p")}>+ Текст</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("img")}>+ Картинка</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("btn")}>+ Кнопка</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("cols2")}>+ Две колонки</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("spacer")}>+ Spacer</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("divider")}>+ Divider</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("section")}>+ Секция</button>
-          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("grid")}>+ Сетка 1–4</button>
+          {/* Палитра: кнопки теперь ещё и draggable, чтобы перетаскивать на слоты канваса */}
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("hero")}
+            title="Клик — добавить; Перетащите на канвас"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "hero"); e.dataTransfer.effectAllowed = "copy"; }}
+          >+ Hero</button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("h1")}
+            title="Клик — добавить; Перетащите на канвас"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "h1"); e.dataTransfer.effectAllowed = "copy"; }}
+          >+ Заголовок</button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("heading")}
+            title="Клик — добавить; Перетащите на канвас"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "heading"); e.dataTransfer.effectAllowed = "copy"; }}
+          >+ Заголовок (H2–H4)</button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("p")}
+            title="Клик — добавить; Перетащите на канвас"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "p"); e.dataTransfer.effectAllowed = "copy"; }}
+          >+ Текст</button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("img")}
+            title="Клик — добавить; Перетащите на канвас"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "img"); e.dataTransfer.effectAllowed = "copy"; }}
+          >+ Картинка</button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("btn")}
+            title="Клик — добавить; Перетащите на канвас"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "btn"); e.dataTransfer.effectAllowed = "copy"; }}
+          >+ Кнопка</button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("divider")}
+            title="Клик — добавить; Перетащите на канвас"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "divider"); e.dataTransfer.effectAllowed = "copy"; }}
+          >+ Разделитель</button>
+
+          <button
+            className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]"
+            onClick={() => addBlock("spacer")}
+            title="Клик — добавить; Перетащите на канвас"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("application/x-block", "spacer"); e.dataTransfer.effectAllowed = "copy"; }}
+          >+ Интервал</button>
         </div>
 
         <div className="flex items-center gap-2">
@@ -1352,6 +1405,41 @@ export default function SiteBuilder() {
                 className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2] ring-2 ring-[#6E59F2]/50" : "border-[#2a2f45]"} bg-[#0c0f1a] p-3 cursor-pointer`}
                 title={labelOf(b)}
               >
+                {/* ── Быстрые действия на карточке (overlay), не всплывают в DnD */}
+                <div
+                  className="absolute right-2 top-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition"
+                  onMouseDownCapture={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
+                    title={(b as any).hidden ? 'Показать' : 'Скрыть'}
+                    onClick={() => patchBlock(b.id, { hidden: !((b as any).hidden) })}
+                  >
+                    {(b as any).hidden ? '👁' : '👁‍🗨'}
+                  </button>
+                  <button
+                    className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
+                    title={(b as any).locked ? 'Разблокировать' : 'Заблокировать'}
+                    onClick={() => patchBlock(b.id, { locked: !((b as any).locked) })}
+                  >
+                    {(b as any).locked ? '🔓' : '🔒'}
+                  </button>
+                  <button
+                    className="px-1.5 py-0.5 rounded bg-[#111425] border border-[#2a2f45] text-[11px] text-[#cfd5e6] hover:bg-[#151a2e]"
+                    title="Дублировать"
+                    onClick={() => duplicateBlock(b.id)}
+                  >
+                    ⧉
+                  </button>
+                  <button
+                    className="px-1.5 py-0.5 rounded bg-[#241a24] border border-[#442a45] text-[11px] text-[#ffb3a8] hover:bg-[#2a1c2a]"
+                    title="Удалить"
+                    onClick={() => removeBlock(b.id)}
+                  >
+                    🗑
+                  </button>
+                </div>
                 <div className="text-xs text-[#9aa3b2] mb-1">{labelOf(b)}</div>
                 {renderPreviewBlock(b)}
               </div>

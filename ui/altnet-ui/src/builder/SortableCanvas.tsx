@@ -64,16 +64,28 @@ function InsertSlot({
   const { setNodeRef, isOver } = useDroppable({ id });
   const [open, setOpen] = useState(false);
 
-  return (
-    <div className="col-span-full">
-      <div
-        ref={setNodeRef}
-        className={
-          "my-2 rounded-lg border border-dashed " +
-          (isOver ? "border-indigo-500 bg-indigo-500/10" : "border-[#2a2f45] bg-[#0c0f1a]")
-        }
-      >
-        <div className="p-2 flex items-center justify-center">
+    return (
+        <div className="col-span-full">
+            <div
+                ref={setNodeRef}
+                onDragOver={(e) => {
+                    // Разрешаем дроп только нашего «application/x-block»
+                    const types = Array.from(e.dataTransfer?.types ?? []);
+                    if (types.includes("application/x-block")) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                    const t = e.dataTransfer?.getData("application/x-block") as InsertChoice | undefined;
+                    if (t) {
+                        e.preventDefault();
+                        onInsert?.(t);
+                    }
+                }}
+                className={
+                    "my-2 rounded-lg border border-dashed " +
+                    (isOver ? "border-indigo-500 bg-indigo-500/10" : "border-[#2a2f45] bg-[#0c0f1a]")
+                }
+            >
+                <div className="p-2 flex items-center justify-center">
           {!open ? (
             <button
               type="button"
