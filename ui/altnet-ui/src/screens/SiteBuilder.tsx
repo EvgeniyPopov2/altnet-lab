@@ -1071,7 +1071,7 @@ export default function SiteBuilder() {
   }, []);
 
   return (
-    <div className="h-full grid grid-cols-1 md:grid-cols-[380px_minmax(0,1fr)] xl:grid-cols-[420px_minmax(0,1fr)] gap-4">
+    <div className="h-full grid grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)_360px] xl:grid-cols-[340px_minmax(0,1fr)_420px] gap-4">
       {/* Левая панель */}
       <div className="md:col-[1] h-full overflow-y-auto border-r border-[#1c2030] bg-[#0b0e18] p-4">
         <div className="mb-4">
@@ -1368,9 +1368,82 @@ export default function SiteBuilder() {
           )}
           <Editor />
         </div>
+
+        {/* Центр: Канвас (SortableCanvas) */}
+<div className="hidden md:block md:col-[2] h-full overflow-y-auto bg-[#0b0e18] border-r border-[#1c2030]">
+  <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 border-b border-[#1c2030] bg-[#0b0e18]">
+    <div className="text-[#e6e9f4]/90 font-semibold">Канвас</div>
+    <div className="text-xs text-[#9aa3b2]">
+      Колонки: {canvasCols} · gapX: {canvasGapX}px · gapY: {canvasGapY}px
+    </div>
+  </div>
+
+          <div className="p-4">
+            <SortableCanvas
+              cols={canvasCols}
+              gapX={canvasGapX}
+              gapY={canvasGapY}
+              blocks={doc.blocks}
+              onReorder={(next) => setDoc(d => ({ ...d, blocks: next as any }))}
+              renderBlock={(b: any) => {
+                const selected = selId === b.id;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setSelId(b.id)}
+                    className={[
+                      "w-full text-left rounded-2xl p-4 bg-[#0c0f1a] border transition",
+                      selected ? "border-indigo-500/70 ring-2 ring-indigo-500/20" : "border-[#1f2751] hover:border-[#2a2f45]"
+                    ].join(" ")}
+                  >
+                    <div className="text-[11px] uppercase tracking-wide text-[#9aa3b2] mb-1">
+                      {labelOf(b)}
+                    </div>
+                    <div className="prose-invert">
+                      {renderPreviewBlock(b)}
+                    </div>
+
+                    {/* Быстрые действия */}
+                    <div className="mt-3 flex gap-2 text-xs">
+                      <button
+                        type="button"
+                        className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#b8c1ff]"
+                        onClick={(e) => { e.stopPropagation(); duplicateBlock(b.id); }}
+                      >
+                        Дублировать
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4]/80"
+                        onClick={(e) => { e.stopPropagation(); moveBlock(b.id, -1); }}
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2 py-1 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4]/80"
+                        onClick={(e) => { e.stopPropagation(); moveBlock(b.id, +1); }}
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        className="ml-auto px-2 py-1 rounded bg-[#2a1220] border border-[#442239] text-[#ffb8c1]"
+                        onClick={(e) => { e.stopPropagation(); removeBlock(b.id); }}
+                      >
+                        Удалить
+                      </button>
+                    </div>
+                  </button>
+                );
+              }}
+            />
+          </div>
+        </div>
+
       </div> {/* конец левой панели */}
       {/* ПРАВАЯ ПАНЕЛЬ: Канвас-предпросмотр */}
-      <div className="md:col-[2] min-h-[60vh]">
+      <div className="md:col-[3] h-full overflow-y-auto">
         <div className="h-full rounded-2xl border border-[#1c2030] bg-[#0b0e18] overflow-hidden flex flex-col">
           <div className="px-3 py-2 border-b border-[#1c2030] flex items-center gap-2 text-[#cfd5e6]">
             <span className="text-sm opacity-80">Предпросмотр (sandbox)</span>
