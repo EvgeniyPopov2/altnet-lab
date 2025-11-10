@@ -314,74 +314,6 @@ export default function SiteBuilder() {
     }
   }, []);
 
-  // — вставка блока после выделенного (или в конец) —
-const insertAfterSelection = useCallback((b: Block) => {
-  setDoc(d => {
-    const arr = d.blocks.slice();
-    const idx = selId ? arr.findIndex(x => x.id === selId) : -1;
-    arr.splice(idx >= 0 ? idx + 1 : arr.length, 0, b);
-    return { ...d, blocks: arr };
-  });
-}, [selId]);
-
-// — фабрики блоков (минимально необходимые поля) —
-const mkHero = (): HeroBlock => ({ id: uid(), type: "hero", title: "Заголовок героя", subtitle: "Короткий подзаголовок", ctaText: "Кнопка", ctaLink: "#" });
-const mkH1   = (): H1Block   => ({ id: uid(), type: "h1",  text: "Заголовок (H1)" });
-const mkHead = (): HeadingBlock => ({ id: uid(), type: "heading", level: "h2", text: "Заголовок (H2)", align: "left" });
-const mkP    = (): PBlock    => ({ id: uid(), type: "p", text: "Абзац текста…", align: "left" });
-const mkImg  = (): ImgBlock  => ({ id: uid(), type: "img", cid: "", alt: "" });
-const mkBtn  = (): BtnBlock  => ({ id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center", variant: "primary" });
-const mkCols = (): Cols2Block => ({ id: uid(), type: "cols2", title: "Заголовок", text: "Текст", img: "", alt: "", ratio: "6-6", reverse: false });
-const mkSpacer = (): SpacerBlock => ({ id: uid(), type: "spacer", size: "md" });
-const mkDivider = (): DividerBlock => ({ id: uid(), type: "divider" });
-const mkSection = (): SectionBlock => ({ id: uid(), type: "section", title: "Заголовок секции", text: "", theme: "auto", pad: "md", bg: "none" });
-const mkGrid = (): GridBlock => ({ id: uid(), type: "grid", cols: 3, items: [] });
-
-// — элементы палитры —
-type PaletteItem = { key: string; label: string; icon: string; make: () => Block };
-const PALETTE: PaletteItem[] = [
-  { key: "hero",    label: "Hero",        icon: "🖼️", make: mkHero },
-  { key: "h1",      label: "Заголовок",   icon: "T",  make: mkH1 },
-  { key: "heading", label: "Заголовок H2–H4", icon: "𝑻", make: mkHead },
-  { key: "p",       label: "Текст",       icon: "≡",  make: mkP },
-  { key: "img",     label: "Картинка",    icon: "🖼",  make: mkImg },
-  { key: "btn",     label: "Кнопка",      icon: "▭",  make: mkBtn },
-  { key: "cols2",   label: "Две колонки", icon: "▥",  make: mkCols },
-  { key: "divider", label: "Разделитель", icon: "—",  make: mkDivider },
-  { key: "spacer",  label: "Интервал",    icon: "↕",  make: mkSpacer },
-  { key: "section", label: "Секция",      icon: "▢",  make: mkSection },
-  { key: "grid",    label: "Сетка 1–4",   icon: "▦",  make: mkGrid },
-];
-
-// — компонент палитры (поиск + карточки) —
-const [paletteFilter, setPaletteFilter] = useState("");
-const Palette = useCallback(() => {
-  const items = PALETTE.filter(p => p.label.toLowerCase().includes(paletteFilter.toLowerCase()));
-  return (
-    <div className="grid gap-2">
-      <input
-        className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-        placeholder="Поиск виджетов…"
-        value={paletteFilter}
-        onChange={(e)=>setPaletteFilter(e.target.value)}
-      />
-      <div className="grid grid-cols-2 gap-2">
-        {items.map(it => (
-          <button
-            key={it.key}
-            onClick={() => insertAfterSelection(it.make())}
-            className="h-20 rounded-xl border border-[#2a2f45] bg-[#101426] hover:bg-[#151a31] active:scale-[0.99] transition grid place-items-center text-[#cfd5e6]"
-            title={it.label}
-          >
-            <div className="text-2xl leading-none mb-1">{it.icon}</div>
-            <div className="text-xs opacity-90">{it.label}</div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}, [paletteFilter, insertAfterSelection]);
-
   // — канвас-предпросмотр —
   const [previewHtml, setPreviewHtml] = useState<string>("");
   const [autoPreview, setAutoPreview] = useState<boolean>(true);
@@ -1342,8 +1274,7 @@ const Palette = useCallback(() => {
           </div>
         )}
 
-        <div className="mb-2 text-sm text-[#cfd5e6]">Палитра</div>
-        <Palette />
+        <div className="mb-3 text-sm text-[#9aa3b2]">Палитра</div>
         <div className="grid grid-cols-2 gap-2 mb-4">
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("hero")}>+ Hero</button>
           <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff] hover:bg-[#1f2336]" onClick={() => addBlock("h1")}>+ Заголовок</button>
