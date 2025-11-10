@@ -260,10 +260,34 @@ export default function SiteBuilder() {
   const [canvasGapX, setCanvasGapX] = useState<number>(16);
   const [canvasGapY, setCanvasGapY] = useState<number>(16);
 
+  // — канвас-предпросмотр —
+  const [previewHtml, setPreviewHtml] = useState<string>("");
+  const [autoPreview, setAutoPreview] = useState<boolean>(true);
+  const [isBuilding, setIsBuilding] = useState<boolean>(false);
+  // Модель для сборки: скрытые блоки вырезаем (объявляем ДО использования)
   const docForBuild = useMemo(
     () => ({ ...doc, blocks: doc.blocks.filter(b => !(b as any).hidden) }),
     [doc]
   );
+  const buildPreview = useCallback(async () => {
+    setIsBuilding(true);
+    try {
+      const model = adaptFromSiteBuilderDoc(docForBuild);
+      const blob = await exportSingleHtml(model, { bundleAssets: true });
+      const html = await blob.text();
+      setPreviewHtml(html);
+    } catch (e) {
+      console.error("Preview build failed:", e);
+    } finally {
+      setIsBuilding(false);
+    }
+  }, [docForBuild]);
+
+  useEffect(() => {
+    if (!autoPreview) return;
+    const t = setTimeout(() => { void buildPreview(); }, 350);
+    return () => clearTimeout(t);
+  }, [docForBuild, autoPreview, buildPreview]);
 
   // Снятие предупреждений TS о неиспользуемых сущностях после отключения старого превью
   const checks = useMemo(() => validateDoc(doc), [doc]);
@@ -973,6 +997,37 @@ export default function SiteBuilder() {
           />
         </div>
       </div> {/* конец левой панели */}
+      {/* ПРАВАЯ ПАНЕЛЬ: Канвас-предпросмотр */}
+      <div className="md:col-[2] min-h-[60vh]">
+        <div className="h-full rounded-2xl border border-[#1c2030] bg-[#0b0e18] overflow-hidden flex flex-col">
+          <div className="px-3 py-2 border-b border-[#1c2030] flex items-center gap-2 text-[#cfd5e6]">
+            <span className="text-sm opacity-80">Предпросмотр (sandbox)</span>
+            <label className="ml-auto flex items-center gap-1 text-xs opacity-80">
+              <input
+                type="checkbox"
+                checked={autoPreview}
+                onChange={(e) => setAutoPreview(e.target.checked)}
+              />
+              автообновление
+            </label>
+            <button
+              className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] hover:bg-[#1f2336] text-xs"
+              onClick={() => void buildPreview()}
+              disabled={isBuilding}
+              title="Пересобрать предпросмотр"
+            >
+              {isBuilding ? "Сборка…" : "Обновить"}
+            </button>
+          </div>
+          <iframe
+            title="preview"
+            sandbox="allow-same-origin"
+            className="flex-1 w-full"
+            // srcDoc используется без внешних скриптов — соответствует доктрине
+            srcDoc={previewHtml}
+          />
+        </div>
+      </div>
     </div>
   );
 }  
