@@ -1590,7 +1590,7 @@ export default function SiteBuilder() {
                 onClick={() => addBlock(t as any)}
                 onDragStart={(e) => e.dataTransfer.setData("application/x-block", t)}
                 draggable
-                className="flex items-center justify-center h-9 rounded-md bg-[#151a2e] border border-[#2a2f45] text-xs text-[#e6e9f4] hover:bg-[#1a203b]"
+                className="flex items-center justify-center h-9 rounded-md bg-[#F8FAFC] border border-[#e5e7eb] text-xs text-[#111827] hover:bg-white"
                 title={label}
               >
                 {label}
@@ -1658,22 +1658,28 @@ export default function SiteBuilder() {
           </label>
         </div>
 
-        <SortableCanvas
-          cols={canvasCols}
-          gapX={canvasGapX}
-          gapY={canvasGapY}
-          blocks={doc.blocks}
-          renderBlock={(b) => (
-            <div
-              onClick={() => setSelId(b.id)}
-              className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2]" : "border-[#2a2f45]"} bg-[#0b0e18] p-3 cursor-pointer`}
-            >
-              {selId === b.id ? previewOf(b) : renderPreviewBlock(b)}
+        <div className="flex justify-center">
+          <div className="w-full" style={{ maxWidth: `${doc.theme?.container ?? 960}px` }}>
+            <div className="rounded-2xl bg-white text-[#0f172a] shadow-[0_10px_40px_rgba(0,0,0,0.35)] border border-[#e5e7eb] p-6">
+              <SortableCanvas
+                cols={canvasCols}
+                gapX={canvasGapX}
+                gapY={canvasGapY}
+                blocks={doc.blocks}
+                renderBlock={(b) => (
+                  <div
+                    onClick={() => setSelId(b.id)}
+                    className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"} bg-white p-3 cursor-pointer`}
+                  >
+                    {selId === b.id ? previewOf(b) : renderPreviewBlock(b)}
+                  </div>
+                )}
+                onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
+                onInsertAt={(index, type) => handleInsertAt(index, type)}
+              />
             </div>
-          )}
-          onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
-          onInsertAt={(index, type) => handleInsertAt(index, type)}
-        />
+          </div>
+        </div>
       </div>
 
       {/* Правая панель — Свойства + Предпросмотр */}
