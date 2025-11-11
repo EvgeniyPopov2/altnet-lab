@@ -345,33 +345,6 @@ export default function SiteBuilder() {
     }
   }, [patchBlock, setSelId, styleInline]);
 
-
-
-  // Вставка нового блока в «слот» канваса
-  const handleInsertAt = useCallback((index: number, type: "hero" | "h1" | "p" | "btn" | "img" | "divider" | "spacer") => {
-    const id = uid();
-    const base: any =
-      type === "hero"
-        ? { id, type: "hero", title: "Заголовок героя", subtitle: "Короткий подзаголовок", ctaText: "Подробнее", ctaLink: "#" }
-        : type === "h1"
-          ? { id, type: "h1", text: "Новый заголовок", align: "left" }
-          : type === "p"
-            ? { id, type: "p", text: "Новый абзац. Опишите мысль.", align: "left" }
-            : type === "btn"
-              ? { id, type: "btn", label: "Кнопка", href: "#", variant: "primary", align: "left" }
-              : type === "img"
-                ? { id, type: "img", cid: "https://picsum.photos/1200/600", alt: "Изображение" }
-                : type === "divider"
-                  ? { id, type: "divider" }
-                  : { id, type: "spacer", size: "md" };
-
-    setDoc((d) => {
-      const next = d.blocks.slice();
-      next.splice(index, 0, base);
-      return { ...d, blocks: next };
-    });
-  }, []);
-
   const labelOf = useCallback((b: Block): string => {
     switch (b.type) {
       case "hero":
@@ -1443,10 +1416,10 @@ export default function SiteBuilder() {
             ))}
           </div>
 
-  <div className="mt-2 text-xs text-[#9aa3b2]">
-    Совет: перетащите элемент на канвас между слотами «+ Добавить блок».
-  </div>
-</div>
+          <div className="mt-2 text-xs text-[#9aa3b2]">
+            Совет: перетащите элемент на канвас между слотами «+ Добавить блок».
+          </div>
+        </div>
 
         {showChecklist && (
           <div className="mb-4 rounded-xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
@@ -1526,7 +1499,13 @@ export default function SiteBuilder() {
                   onInsert={(type) => {
                     const pos = doc.blocks.findIndex((b) => b.id === selId);
                     const index = pos >= 0 ? pos + 1 : doc.blocks.length;
-                    handleInsertAt(index, type);
+                    setDoc((d) => {
+                      const blocks = [...d.blocks];
+                      const clamped = Math.max(0, Math.min(index, blocks.length));
+                      const nb = createDefaultBlock(type);
+                      blocks.splice(clamped, 0, nb);
+                      return { ...d, blocks };
+                    });
                   }}
                 />
               </div>
