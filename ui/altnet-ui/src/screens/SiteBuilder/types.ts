@@ -18,7 +18,12 @@ export type BlockType =
   | "iconlist"
   | "alert"
   | "html"
-  | "code";
+  | "code"
+  | "tabs"
+  | "accordion"
+  | "blockquote"
+  | "cta"
+  | "rating";
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
 export type Align = "left" | "center" | "right";
@@ -225,6 +230,49 @@ export type CodeBlock = {
   lang?: string;
 };
 
+// ── B6.c: вкладки/аккордеон/цитата/CTA/рейтинг ───────────────────────────────
+export type TabItem = { id: string; label: string; content: string };
+export type TabsBlock = {
+  id: string;
+  type: "tabs";
+  items: TabItem[];
+  initial?: number;
+};
+
+export type AccordionItem = { id: string; title: string; content: string; open?: boolean };
+export type AccordionBlock = {
+  id: string;
+  type: "accordion";
+  items: AccordionItem[];
+  allowMultiple?: boolean;
+};
+
+export type BlockquoteBlock = {
+  id: string;
+  type: "blockquote";
+  text: string;
+  cite?: string;
+};
+
+export type CtaVariant = "primary" | "secondary" | "outline";
+export type CtaBlock = {
+  id: string;
+  type: "cta";
+  title: string;
+  text?: string;
+  btnLabel: string;
+  href: string;
+  variant?: CtaVariant;
+};
+
+export type RatingBlock = {
+  id: string;
+  type: "rating";
+  value: number; // 0..max
+  max?: number; // по умолчанию 5
+  readonly?: boolean; // в предпросмотре можно изменять, если false
+};
+
 export type Block =
   | HeroBlock 
   | H1Block 
@@ -241,7 +289,12 @@ export type Block =
   | IconListBlock 
   | AlertBlock 
   | HtmlBlock 
-  | CodeBlock;
+  | CodeBlock
+  | TabsBlock 
+  | AccordionBlock 
+  | BlockquoteBlock 
+  | CtaBlock 
+  | RatingBlock;
 
 export type Doc = {
   title: string;

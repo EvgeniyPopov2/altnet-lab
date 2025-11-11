@@ -16,6 +16,11 @@ import IconListView from "./iconlist/view";
 import AlertView from "./alert/view";
 import HtmlView from "./html/view";
 import CodeView from "./code/view";
+import TabsView from "./tabs/view";
+import AccordionView from "./accordion/view";
+import BlockquoteView from "./blockquote/view";
+import CtaView from "./cta/view";
+import RatingView from "./rating/view";
 
 /** Возвращает React-элемент превью для любого блока. */
 export function renderBlockView(b: Block) {
@@ -36,6 +41,11 @@ export function renderBlockView(b: Block) {
     case "alert":   return <AlertView block={b} />;
     case "html":    return <HtmlView block={b} />;
     case "code":    return <CodeView block={b} />;
+    case "tabs":       return <TabsView block={b} />;
+    case "accordion":  return <AccordionView block={b} />;
+    case "blockquote": return <BlockquoteView block={b} />;
+    case "cta":        return <CtaView block={b} />;
+    case "rating":     return <RatingView block={b} />;
     default:
       return <div className="text-sm text-[#6b7390]">Превью для блока пока не реализовано.</div>;
   }

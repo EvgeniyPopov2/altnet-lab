@@ -46,6 +46,11 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "cnt-icon-list", title: "Icon list",group: "Контент/Медиа",icon: "cnt-icon-list.svg", description: "Список с иконками",     type: "iconlist" },
   { id: "cnt-icon-box",  title: "Icon box", group: "Контент/Медиа",icon: "cnt-icon-box.svg",  description: "Иконка + заголовок",   type: "unsupported" },
   { id: "cnt-gallery",   title: "Gallery",  group: "Контент/Медиа",icon: "cnt-gallery.svg",   description: "Галерея",             type: "unsupported" },
+  { id: "cnt-tabs",      title: "Tabs",      group: "Контент/Медиа", icon: "cnt-tabs.svg",      description: "Вкладки с ARIA",          type: "tabs" },
+  { id: "cnt-accordion", title: "Accordion", group: "Контент/Медиа", icon: "cnt-accordion.svg", description: "Аккордеон с ARIA",       type: "accordion" },
+  { id: "cnt-blockquote",title: "Blockquote",group: "Контент/Медиа", icon: "cnt-blockquote.svg",description: "Цитата/выдержка",         type: "blockquote" },
+  { id: "cnt-cta",       title: "CTA",       group: "Контент/Медиа", icon: "cnt-cta.svg",       description: "Призыв к действию",      type: "cta" },
+
 
   // — Встраивания
   { id: "emb-html",      title: "HTML (Safe)", group: "Встраивания", icon: "emb-html.svg", description: "Санитизированный HTML", type: "html" },
@@ -57,6 +62,7 @@ export const paletteMeta: PaletteMeta[] = [
 
   // — Утилиты
   { id: "util-alert",    title: "Alert",    group: "Утилиты", icon: "util-alert.svg", description: "Информационный блок", type: "alert" },
+  { id: "util-rating",   title: "Rating",    group: "Утилиты", icon: "util-rating.svg", description: "Звёздный рейтинг", type: "rating" },
 
   // — Брендинг (пока как image/presets)
   { id: "brand-logo",    title: "Logo",     group: "Брендинг", icon: "brand-logo.svg", description: "Логотип", type: "img" },

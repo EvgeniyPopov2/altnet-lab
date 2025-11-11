@@ -5,7 +5,8 @@ import type {
   Block, H1Block, PBlock, BtnBlock, ImgBlock,
   DividerBlock, SpacerBlock,
   HeadingBlock, HeroBlock, Cols2Block, SectionBlock, GridBlock,
-  IconBlock, IconListBlock, AlertBlock, HtmlBlock, CodeBlock
+  IconBlock, IconListBlock, AlertBlock, HtmlBlock, CodeBlock,
+  TabsBlock, AccordionBlock, BlockquoteBlock, CtaBlock, RatingBlock
 } from "./types";
 
 // Берём точный union InsertChoice из SortableCanvas.
@@ -127,6 +128,62 @@ export function createDefaultBlock(type: InsertChoice): Block {
         type: "code",
         code: 'console.log("Hello AltNet");',
         lang: "js",
+      };
+      return b;
+    }
+    
+    case "tabs": {
+      const b: TabsBlock = {
+        id: newId("tabs"),
+        type: "tabs",
+        initial: 0,
+        items: [
+          { id: newId("tab"), label: "Вкладка 1", content: "Содержимое вкладки 1" },
+          { id: newId("tab"), label: "Вкладка 2", content: "Содержимое вкладки 2" },
+        ],
+      };
+      return b;
+    }
+    case "accordion": {
+      const b: AccordionBlock = {
+        id: newId("acc"),
+        type: "accordion",
+        allowMultiple: false,
+        items: [
+          { id: newId("ai"), title: "Раздел 1", content: "Текст раздела 1", open: true },
+          { id: newId("ai"), title: "Раздел 2", content: "Текст раздела 2", open: false },
+        ],
+      };
+      return b;
+    }
+    case "blockquote": {
+      const b: BlockquoteBlock = {
+        id: newId("bq"),
+        type: "blockquote",
+        text: "«Хороший код — тот, который понятен завтра.»",
+        cite: "AltNet",
+      };
+      return b;
+    }
+    case "cta": {
+      const b: CtaBlock = {
+        id: newId("cta"),
+        type: "cta",
+        title: "Готовы начать?",
+        text: "Создайте раздел за минуту.",
+        btnLabel: "Подробнее",
+        href: "#",
+        variant: "primary",
+      };
+      return b;
+    }
+    case "rating": {
+      const b: RatingBlock = {
+        id: newId("rt"),
+        type: "rating",
+        value: 4,
+        max: 5,
+        readonly: false,
       };
       return b;
     }
