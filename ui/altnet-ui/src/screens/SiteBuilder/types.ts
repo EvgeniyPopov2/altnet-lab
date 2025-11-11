@@ -8,11 +8,12 @@ export type BlockType =
   | "icon" | "iconlist" | "alert" | "html" | "code"
   | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
   | "counter" | "progress" | "breadcrumbs" | "pagination" | "social"
-  | "iconbox" | "imagebox"
+  | "iconbox" | "imagebox" 
   | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
   | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
   | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
   | "container" | "sidebar" | "offcanvas";
+
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
 export type Align = "left" | "center" | "right";

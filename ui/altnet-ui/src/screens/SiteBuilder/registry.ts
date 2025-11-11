@@ -11,7 +11,7 @@ import type {
   PriceListBlock, TestimonialsBlock, ShareBlock, ProgressTrackerBlock, AnchorBlock, TocBlock,
   VideoBlock, GalleryBlock, CarouselBlock, CountdownBlock, MenuBlock, SearchBlock, ContentNavBlock,
   MapBlock, LottieBlock, MediaCarouselBlock, SlidesBlock, VideoPlaylistBlock, HotspotBlock,
-  ContainerBlock, SidebarBlock, OffcanvasBlock,
+  ContainerBlock, SidebarBlock, OffcanvasBlock, ShortcodeBlock, PriceTableBlock,
 } from "./types";
 
 // Берём точный union InsertChoice из SortableCanvas.

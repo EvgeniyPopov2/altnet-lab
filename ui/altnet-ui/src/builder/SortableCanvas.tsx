@@ -16,7 +16,7 @@ export type InsertChoice =
   | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
   | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
   | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
-  | "container" | "sidebar" | "offcanvas";
+  | "container" | "sidebar" | "offcanvas"| "shortcode" | "pricetable";
 
 type Props<T extends SortableLike> = {
   cols?: 1 | 2 | 3 | 4;
