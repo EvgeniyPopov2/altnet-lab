@@ -94,6 +94,9 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "nav-menu",        title: "Menu",        group: "Навигация", icon: "nav-menu.svg",        description: "Гориз./верт. меню", type: "menu" },
   { id: "nav-search",      title: "Search",      group: "Навигация", icon: "nav-search.svg",      description: "Поле поиска",        type: "search" },
   { id: "nav-content-nav", title: "Content nav", group: "Навигация", icon: "nav-content-nav.svg", description: "Навигатор по секциям", type: "contentnav" },
+  { id: "layout-container", title: "Container", group: "Планировка", icon: "layout-container.svg", description: "Контейнер ширины/отступов", type: "container" },
+  { id: "layout-sidebar",   title: "Sidebar",   group: "Планировка", icon: "layout-sidebar.svg",   description: "Боковая панель",         type: "sidebar" },
+  { id: "layout-offcanvas", title: "Offcanvas", group: "Планировка", icon: "layout-offcanvas.svg", description: "Выезжающая панель",       type: "offcanvas" },
 
   // — Пресеты (позже, составные)
   { id: "preset-bio-card", title: "Bio card", group: "Пресеты", icon: "preset-bio-card.svg", description: "Готовая карточка", type: "unsupported" },

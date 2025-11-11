@@ -15,7 +15,8 @@ export type InsertChoice =
   | "counter" | "progress" | "breadcrumbs" | "pagination" | "social" | "iconbox" | "imagebox"
   | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
   | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
-  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot";
+  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
+  | "container" | "sidebar" | "offcanvas";
 
 type Props<T extends SortableLike> = {
   cols?: 1 | 2 | 3 | 4;

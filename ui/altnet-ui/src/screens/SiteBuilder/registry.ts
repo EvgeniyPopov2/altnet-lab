@@ -11,6 +11,7 @@ import type {
   PriceListBlock, TestimonialsBlock, ShareBlock, ProgressTrackerBlock, AnchorBlock, TocBlock,
   VideoBlock, GalleryBlock, CarouselBlock, CountdownBlock, MenuBlock, SearchBlock, ContentNavBlock,
   MapBlock, LottieBlock, MediaCarouselBlock, SlidesBlock, VideoPlaylistBlock, HotspotBlock,
+  ContainerBlock, SidebarBlock, OffcanvasBlock,
 } from "./types";
 
 // Берём точный union InsertChoice из SortableCanvas.
@@ -449,6 +450,46 @@ export function createDefaultBlock(type: InsertChoice): Block {
           { id: newId("hm"), x: 25, y: 40, label: "Точка A", href: "#" },
           { id: newId("hm"), x: 70, y: 55, label: "Точка B", href: "#" },
         ],
+      };
+      return b;
+    }
+
+    case "container": {
+      const b: ContainerBlock = {
+        id: newId("cont"),
+        type: "container",
+        width: "md",
+        padding: "md",
+        bg: "none",
+        border: false,
+        rounded: true,
+        note: "Контейнер (макс. ширина + отступы)",
+      };
+      return b;
+    }
+    case "sidebar": {
+      const b: SidebarBlock = {
+        id: newId("side"),
+        type: "sidebar",
+        side: "left",
+        width: 260,
+        title: "Навигация",
+        items: [
+          { id: newId("si"), label: "Вступление", href: "#intro" },
+          { id: newId("si"), label: "Раздел 1", href: "#section-1" },
+          { id: newId("si"), label: "Контакты", href: "#contacts" },
+        ],
+      };
+      return b;
+    }
+    case "offcanvas": {
+      const b: OffcanvasBlock = {
+        id: newId("oc"),
+        type: "offcanvas",
+        side: "left",
+        width: 320,
+        title: "Меню",
+        body: "Панель Offcanvas. Здесь будет содержимое.",
       };
       return b;
     }

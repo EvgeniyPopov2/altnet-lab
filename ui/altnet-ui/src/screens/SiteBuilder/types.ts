@@ -11,7 +11,8 @@ export type BlockType =
   | "iconbox" | "imagebox"
   | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
   | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
-  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot";
+  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
+  | "container" | "sidebar" | "offcanvas";
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
 export type Align = "left" | "center" | "right";
@@ -471,6 +472,43 @@ export type HotspotBlock = {
   markers: HotspotMarker[];
 };
 
+// ── B6.h: layout container / sidebar / offcanvas ─────────────────────────────
+export type ContainerWidth = "sm" | "md" | "lg" | "xl" | "full";
+export type ContainerPadding = "none" | "sm" | "md" | "lg";
+export type ContainerBg = "none" | "panel" | "brand";
+
+export type ContainerBlock = {
+  id: string;
+  type: "container";
+  width?: ContainerWidth;     // по умолчанию md
+  padding?: ContainerPadding; // по умолчанию md
+  bg?: ContainerBg;           // фон: none|panel|brand
+  border?: boolean;           // рамка
+  rounded?: boolean;          // скругления
+  note?: string;              // подпись/описание
+};
+
+export type SidebarItem = { id: string; label: string; href: string };
+export type SidebarSide = "left" | "right";
+export type SidebarBlock = {
+  id: string;
+  type: "sidebar";
+  side?: SidebarSide;         // left/right (для предпросмотра — оформление)
+  width?: number;             // px, по умолчанию 260
+  items: SidebarItem[];       // пункты навигации
+  title?: string;
+};
+
+export type OffcanvasSide = "left" | "right";
+export type OffcanvasBlock = {
+  id: string;
+  type: "offcanvas";
+  side?: OffcanvasSide;       // слева/справа
+  width?: number;             // px, по умолчанию 320
+  title?: string;
+  body?: string;              // текст-заглушка (пока без вложенных блоков)
+};
+
 export type Block =
   | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock
   | DividerBlock | SpacerBlock | Cols2Block | SectionBlock | GridBlock
@@ -480,7 +518,8 @@ export type Block =
   | IconBoxBlock | ImageBoxBlock | PriceListBlock | TestimonialsBlock | ShareBlock
   | ProgressTrackerBlock | AnchorBlock | TocBlock
   | VideoBlock | GalleryBlock | CarouselBlock | CountdownBlock | MenuBlock | SearchBlock | ContentNavBlock
-  | MapBlock | LottieBlock | MediaCarouselBlock | SlidesBlock | VideoPlaylistBlock | HotspotBlock;
+  | MapBlock | LottieBlock | MediaCarouselBlock | SlidesBlock | VideoPlaylistBlock | HotspotBlock
+  | ContainerBlock | SidebarBlock | OffcanvasBlock;
 
 export type Doc = {
   title: string;
