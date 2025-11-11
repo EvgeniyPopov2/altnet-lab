@@ -2,6 +2,8 @@ import React, { useCallback, useMemo, useRef, useState, useEffect } from "react"
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
 import Canvas from "./SiteBuilder/canvas/Canvas";
 import Outline from "./SiteBuilder/outline/Outline";
+import Palette from "./SiteBuilder/palette/Palette";
+import { createDefaultBlock } from "./SiteBuilder/registry";
 import Inspector from "./SiteBuilder/inspector/Inspector";
 import Field from "./SiteBuilder/ui/Field";
 import type {
@@ -1559,6 +1561,16 @@ export default function SiteBuilder() {
         <div className="flex justify-center">
           <div className="w-full" style={{ maxWidth: `${doc.theme?.container ?? 960}px` }}>
             <div className="rounded-2xl bg-white text-[#0f172a] shadow-[0_10px_40px_rgba(0,0,0,0.35)] border border-[#e5e7eb] p-6">
+              {/* Палитра блоков (каркас). Вставляет после выбранного, иначе — в конец. */}
+              <div className="mb-4">
+                <Palette
+                  onInsert={(type) => {
+                    const pos = doc.blocks.findIndex((b) => b.id === selId);
+                    const index = pos >= 0 ? pos + 1 : doc.blocks.length;
+                    handleInsertAt(index, type);
+                  }}
+                />
+              </div>
               <Canvas
                 cols={canvasCols}
                 gapX={canvasGapX}
@@ -1573,7 +1585,15 @@ export default function SiteBuilder() {
                   </div>
                 )}
                 onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
-                onInsertAt={(index, type) => handleInsertAt(index, type)}
+                onInsertAt={(index, type) => {
+                  setDoc((d) => {
+                    const blocks = [...d.blocks];
+                    const clamped = Math.max(0, Math.min(index, blocks.length));
+                    const nb = createDefaultBlock(type);
+                    blocks.splice(clamped, 0, nb);
+                    return { ...d, blocks };
+                  });
+                }}
               />
               {/* Навигатор блоков (пока только выбор). Показываем на широком экране. */}
               <div className="mt-4 hidden xl:block">
