@@ -306,17 +306,29 @@ export type ProgressBlock = {
 };
 
 export type Crumb = { id: string; label: string; href?: string };
+export type CrumbItem = { id: string; label: string; href?: string };
+export type BreadcrumbsSize = "sm" | "md" | "lg";
+export type BreadcrumbsSeparator = "/" | "›" | "»";
 export type BreadcrumbsBlock = {
   id: string;
   type: "breadcrumbs";
-  items: Crumb[];
+  items: CrumbItem[];             // последний — текущая страница (без href)
+  size?: BreadcrumbsSize;
+  separator?: BreadcrumbsSeparator;
+  ariaLabel?: string;
 };
 
+export type PaginationSize = "sm" | "md" | "lg";
 export type PaginationBlock = {
   id: string;
   type: "pagination";
-  total: number;            // страниц
-  current: number;          // 1..total
+  current: number;                // 1..total
+  total: number;                  // >=1
+  baseHref?: string;              // например "/blog?page="
+  size?: PaginationSize;
+  siblings?: number;              // сколько соседей вокруг current
+  boundary?: number;              // сколько страниц с краёв (1..N и ... N-1..N)
+  ariaLabel?: string;
 };
 
 export type SocialItem = { id: string; label: string; href: string };
@@ -420,12 +432,14 @@ export type CountdownBlock = {
   target: string;  // ISO-дата/время
 };
 
-export type MenuItem = { id: string; label: string; href: string };
+export type MenuItem = { id: string; label: string; href: string; children?: MenuItem[] };
 export type MenuOrientation = "horizontal" | "vertical";
 export type MenuBlock = {
   id: string;
   type: "menu";
   items: MenuItem[];
+  activeHref?: string;
+  ariaLabel?: string;
   orientation?: MenuOrientation;
 };
 
@@ -443,6 +457,10 @@ export type ContentNavBlock = {
   type: "contentnav";
   items: ContentNavItem[];
   orientation?: MenuOrientation;
+  spy?: boolean;                  // включить scrollspy
+  spyOffset?: number;             // отступ для расчёта видимости (px)
+  activeHref?: string;            // текущий активный якорь
+  ariaLabel?: string;             // подпись для nav
 };
 
 // ── B6.g: map/lottie/mediacarousel/slides/videoplaylist/hotspot ──────────────
@@ -535,6 +553,8 @@ export type OffcanvasBlock = {
   title?: string;
   body?: string;              // текст-заглушка (пока без вложенных блоков)
 };
+
+
 
 export type Block =
   | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock

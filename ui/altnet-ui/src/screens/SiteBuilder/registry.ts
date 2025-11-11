@@ -99,12 +99,16 @@ export function createDefaultBlock(type: InsertChoice): Block {
     }
     case "iconlist": {
       const b: IconListBlock = {
-        id: newId("icol"),
+        id: newId("icl"),
         type: "iconlist",
+        variant: "dot",
+        size: "md",
+        gap: "md",
+        align: "start",
         items: [
-          { id: newId("it"), icon: "check", text: "Пункт списка 1" },
-          { id: newId("it"), icon: "check", text: "Пункт списка 2" },
-          { id: newId("it"), icon: "check", text: "Пункт списка 3" },
+          { id: newId("ili"), label: "Пункт 1", href: "#one", description: "Короткое описание" },
+          { id: newId("ili"), label: "Пункт 2", href: "#two" },
+          { id: newId("ili"), label: "Пункт 3", href: "#three" },
         ],
       };
       return b;
@@ -139,13 +143,17 @@ export function createDefaultBlock(type: InsertChoice): Block {
 
     case "tabs": {
       const b: TabsBlock = {
-        id: newId("tabs"),
+        id: newId("tb"),
         type: "tabs",
-        initial: 0,
-        items: [
-          { id: newId("tab"), label: "Вкладка 1", content: "Содержимое вкладки 1" },
-          { id: newId("tab"), label: "Вкладка 2", content: "Содержимое вкладки 2" },
+        tabs: [
+          { id: newId("ti"), label: "Вкладка 1", content: "Контент вкладки 1" },
+          { id: newId("ti"), label: "Вкладка 2", content: "Контент вкладки 2" },
         ],
+        active: 0,
+        variant: "underline",
+        size: "md",
+        align: "start",
+        orientation: "horizontal",
       };
       return b;
     }
@@ -174,11 +182,13 @@ export function createDefaultBlock(type: InsertChoice): Block {
       const b: CtaBlock = {
         id: newId("cta"),
         type: "cta",
-        title: "Готовы начать?",
-        text: "Создайте раздел за минуту.",
+        title: "Присоединяйтесь к AltNet",
+        text: "Короткий призыв с безопасной ссылкой.",
         btnLabel: "Подробнее",
-        href: "#",
+        btnHref: "#more",
         variant: "primary",
+        align: "start",
+        emphasis: "panel",
       };
       return b;
     }
@@ -206,15 +216,28 @@ export function createDefaultBlock(type: InsertChoice): Block {
         id: newId("bc"),
         type: "breadcrumbs",
         items: [
-          { id: newId("cr"), label: "Главная", href: "#" },
-          { id: newId("cr"), label: "Раздел", href: "#" },
-          { id: newId("cr"), label: "Страница" },
+          { id: newId("c"), label: "Главная", href: "#" },
+          { id: newId("c"), label: "Раздел", href: "#" },
+          { id: newId("c"), label: "Текущая" },
         ],
+        size: "sm",
+        separator: "›",
+        ariaLabel: "Хлебные крошки",
       };
       return b;
     }
     case "pagination": {
-      const b: PaginationBlock = { id: newId("pg"), type: "pagination", total: 7, current: 3 };
+      const b: PaginationBlock = {
+        id: newId("pg"),
+        type: "pagination",
+        current: 2,
+        total: 9,
+        baseHref: "#p=",
+        size: "sm",
+        siblings: 1,
+        boundary: 1,
+        ariaLabel: "Навигация по страницам",
+      };
       return b;
     }
     case "social": {
@@ -366,9 +389,17 @@ export function createDefaultBlock(type: InsertChoice): Block {
         type: "menu",
         orientation: "horizontal",
         items: [
-          { id: newId("mi"), label: "Главная", href: "#" },
-          { id: newId("mi"), label: "Контакты", href: "#" },
+          { id: newId("mi"), label: "Главная", href: "#intro" },
+          {
+            id: newId("mi"), label: "Разделы", href: "#section-1", children: [
+              { id: newId("mi"), label: "Раздел 1.1", href: "#s11" },
+              { id: newId("mi"), label: "Раздел 1.2", href: "#s12" },
+            ]
+          },
+          { id: newId("mi"), label: "Контакты", href: "#contacts" },
         ],
+        activeHref: "#intro",
+        ariaLabel: "Главное меню",
       };
       return b;
     }
@@ -389,8 +420,13 @@ export function createDefaultBlock(type: InsertChoice): Block {
         orientation: "horizontal",
         items: [
           { id: newId("ci"), label: "Вступление", href: "#intro" },
-          { id: newId("ci"), label: "Раздел 1", href: "#section-1" },
+          { id: newId("ci"), label: "Часть 1", href: "#part-1" },
+          { id: newId("ci"), label: "Выводы", href: "#summary" },
         ],
+        spy: true,
+        spyOffset: 120,
+        activeHref: "#intro",
+        ariaLabel: "Навигация по контенту",
       };
       return b;
     }
@@ -409,9 +445,9 @@ export function createDefaultBlock(type: InsertChoice): Block {
         type: "mediacarousel",
         initial: 0,
         slides: [
-          { id: newId("ms"), kind: "img",   src: "https://picsum.photos/seed/m1/1200/600", caption: "Кадр 1" },
+          { id: newId("ms"), kind: "img", src: "https://picsum.photos/seed/m1/1200/600", caption: "Кадр 1" },
           { id: newId("ms"), kind: "video", src: "https://www.w3schools.com/html/mov_bbb.mp4", caption: "Видео" },
-          { id: newId("ms"), kind: "img",   src: "https://picsum.photos/seed/m2/1200/600", caption: "Кадр 2" },
+          { id: newId("ms"), kind: "img", src: "https://picsum.photos/seed/m2/1200/600", caption: "Кадр 2" },
         ],
       };
       return b;

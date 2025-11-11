@@ -101,9 +101,13 @@ export function renderBlockView(b: Block) {
     case "slides":         return <SlidesView block={b} />;
     case "videoplaylist":  return <VideoPlaylistView block={b} />;
     case "hotspot":        return <HotspotView block={b} />;
-    case "container":   return <ContainerView block={b} />;
-    case "sidebar":     return <SidebarView block={b} />;
-    case "offcanvas":   return <OffcanvasView block={b} />;
+    case "container":     return <ContainerView block={b} />;
+    case "sidebar":       return <SidebarView block={b} />;
+    case "offcanvas":     return <OffcanvasView block={b} />;
+    case "breadcrumbs":   return <BreadcrumbsView block={b} />;
+    case "pagination":    return <PaginationView block={b} />;
+    case "menu":         return <MenuView block={b} />;
+    case "contentnav":   return <ContentNavView block={b} />;
     default:
       return <div className="text-sm text-[#6b7390]">Превью для блока пока не реализовано.</div>;
   }

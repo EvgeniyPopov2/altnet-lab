@@ -65,6 +65,7 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "cnt-slides",            title: "Slides",         group: "Контент/Медиа",  icon: "cnt-slides.svg",            description: "Текстовые слайды",               type: "slides" },
   { id: "cnt-video-playlist",    title: "Video playlist", group: "Контент/Медиа",  icon: "cnt-video-playlist.svg",    description: "Плейлист видео",                  type: "videoplaylist" },
   { id: "cnt-hotspot",           title: "Hotspot",        group: "Контент/Медиа",  icon: "cnt-hotspot.svg",           description: "Изображение с метками",          type: "hotspot" },
+  { id: "nav-pagination",  title: "Pagination",  group: "Навигация", icon: "nav-pagination.svg",  description: "Навигация по страницам", type: "pagination" },
 
   // — Встраивания
   { id: "emb-html",      title: "HTML (Safe)", group: "Встраивания", icon: "emb-html.svg", description: "Санитизированный HTML", type: "html" },
