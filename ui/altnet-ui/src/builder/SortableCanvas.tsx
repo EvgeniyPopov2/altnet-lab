@@ -11,7 +11,8 @@ export type InsertChoice =
   | "divider" | "spacer"
   | "hero" | "cols2" | "section" | "grid"
   | "icon" | "iconlist" | "alert" | "html" | "code"
-  | "tabs" | "accordion" | "blockquote" | "cta" | "rating";
+  | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
+  | "counter" | "progress" | "breadcrumbs" | "pagination" | "social" | "iconbox" | "imagebox";
 
 type Props<T extends SortableLike> = {
   cols?: 1 | 2 | 3 | 4;

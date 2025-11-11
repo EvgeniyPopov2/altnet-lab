@@ -50,7 +50,10 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "cnt-accordion", title: "Accordion", group: "Контент/Медиа", icon: "cnt-accordion.svg", description: "Аккордеон с ARIA",       type: "accordion" },
   { id: "cnt-blockquote",title: "Blockquote",group: "Контент/Медиа", icon: "cnt-blockquote.svg",description: "Цитата/выдержка",         type: "blockquote" },
   { id: "cnt-cta",       title: "CTA",       group: "Контент/Медиа", icon: "cnt-cta.svg",       description: "Призыв к действию",      type: "cta" },
-
+  { id: "cnt-counter",      title: "Counter",      group: "Контент/Медиа", icon: "cnt-counter.svg",      description: "Счётчик",             type: "counter" },
+  { id: "cnt-progress-bar", title: "Progress",     group: "Контент/Медиа", icon: "cnt-progress-bar.svg", description: "Полоса прогресса",    type: "progress" },
+  { id: "cnt-icon-box",     title: "Icon box",     group: "Контент/Медиа", icon: "cnt-icon-box.svg",     description: "Иконка + текст",      type: "iconbox" }, // было unsupported — теперь вставляем
+  { id: "cnt-image-box",    title: "Image box",    group: "Контент/Медиа", icon: "cnt-image-box.svg",    description: "Картинка + подпись",  type: "imagebox" },
 
   // — Встраивания
   { id: "emb-html",      title: "HTML (Safe)", group: "Встраивания", icon: "emb-html.svg", description: "Санитизированный HTML", type: "html" },
@@ -63,12 +66,15 @@ export const paletteMeta: PaletteMeta[] = [
   // — Утилиты
   { id: "util-alert",    title: "Alert",    group: "Утилиты", icon: "util-alert.svg", description: "Информационный блок", type: "alert" },
   { id: "util-rating",   title: "Rating",    group: "Утилиты", icon: "util-rating.svg", description: "Звёздный рейтинг", type: "rating" },
+  { id: "util-social",     title: "Social",      group: "Утилиты",  icon: "util-social.svg",     description: "Соц. ссылки",      type: "social" },
 
   // — Брендинг (пока как image/presets)
   { id: "brand-logo",    title: "Logo",     group: "Брендинг", icon: "brand-logo.svg", description: "Логотип", type: "img" },
 
   // — Навигация (позже)
   { id: "nav-menu",      title: "Menu",     group: "Навигация", icon: "nav-menu.svg", description: "Меню навигации", type: "unsupported" },
+  { id: "nav-breadcrumbs", title: "Breadcrumbs", group: "Навигация", icon: "nav-breadcrumbs.svg", description: "Хлебные крошки", type: "breadcrumbs" },
+  { id: "nav-pagination",  title: "Pagination",  group: "Навигация", icon: "nav-pagination.svg",  description: "Пагинация",       type: "pagination" },
 
   // — Пресеты (позже, составные)
   { id: "preset-bio-card", title: "Bio card", group: "Пресеты", icon: "preset-bio-card.svg", description: "Готовая карточка", type: "unsupported" },

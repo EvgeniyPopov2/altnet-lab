@@ -6,7 +6,8 @@ import type {
   DividerBlock, SpacerBlock,
   HeadingBlock, HeroBlock, Cols2Block, SectionBlock, GridBlock,
   IconBlock, IconListBlock, AlertBlock, HtmlBlock, CodeBlock,
-  TabsBlock, AccordionBlock, BlockquoteBlock, CtaBlock, RatingBlock
+  TabsBlock, AccordionBlock, BlockquoteBlock, CtaBlock, RatingBlock,
+  CounterBlock, ProgressBlock, BreadcrumbsBlock, PaginationBlock, SocialBlock, IconBoxBlock, ImageBoxBlock,
 } from "./types";
 
 // Берём точный union InsertChoice из SortableCanvas.
@@ -184,6 +185,64 @@ export function createDefaultBlock(type: InsertChoice): Block {
         value: 4,
         max: 5,
         readonly: false,
+      };
+      return b;
+    }
+
+    case "counter": {
+      const b: CounterBlock = { id: newId("cnt"), type: "counter", value: 42, suffix: "+" };
+      return b;
+    }
+    case "progress": {
+      const b: ProgressBlock = { id: newId("prg"), type: "progress", value: 65, label: "Готовность" };
+      return b;
+    }
+    case "breadcrumbs": {
+      const b: BreadcrumbsBlock = {
+        id: newId("bc"),
+        type: "breadcrumbs",
+        items: [
+          { id: newId("cr"), label: "Главная", href: "#" },
+          { id: newId("cr"), label: "Раздел", href: "#" },
+          { id: newId("cr"), label: "Страница" },
+        ],
+      };
+      return b;
+    }
+    case "pagination": {
+      const b: PaginationBlock = { id: newId("pg"), type: "pagination", total: 7, current: 3 };
+      return b;
+    }
+    case "social": {
+      const b: SocialBlock = {
+        id: newId("soc"),
+        type: "social",
+        items: [
+          { id: newId("s"), label: "Telegram", href: "#" },
+          { id: newId("s"), label: "YouTube", href: "#" },
+          { id: newId("s"), label: "GitHub", href: "#" },
+        ],
+      };
+      return b;
+    }
+    case "iconbox": {
+      const b: IconBoxBlock = {
+        id: newId("ibox"),
+        type: "iconbox",
+        icon: "star",
+        title: "Заголовок",
+        text: "Короткое описание.",
+      };
+      return b;
+    }
+    case "imagebox": {
+      const b: ImageBoxBlock = {
+        id: newId("imgb"),
+        type: "imagebox",
+        src: "https://picsum.photos/800/450",
+        alt: "Демо",
+        title: "Картинка с заголовком",
+        text: "Подпись к изображению.",
       };
       return b;
     }

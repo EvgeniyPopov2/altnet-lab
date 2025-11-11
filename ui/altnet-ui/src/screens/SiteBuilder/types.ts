@@ -23,7 +23,14 @@ export type BlockType =
   | "accordion"
   | "blockquote"
   | "cta"
-  | "rating";
+  | "rating"
+  | "counter"
+  | "progress"
+  | "breadcrumbs"
+  | "pagination"
+  | "social"
+  | "iconbox"
+  | "imagebox";
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
 export type Align = "left" | "center" | "right";
@@ -273,28 +280,67 @@ export type RatingBlock = {
   readonly?: boolean; // в предпросмотре можно изменять, если false
 };
 
+// ── B6.d: простые контент/навигац. блоки ─────────────────────────────────────
+export type CounterBlock = {
+  id: string;
+  type: "counter";
+  value: number;            // текущее значение
+  prefix?: string;          // например "≈"
+  suffix?: string;          // например "+"
+};
+
+export type ProgressBlock = {
+  id: string;
+  type: "progress";
+  value: number;            // 0..100
+  label?: string;
+};
+
+export type Crumb = { id: string; label: string; href?: string };
+export type BreadcrumbsBlock = {
+  id: string;
+  type: "breadcrumbs";
+  items: Crumb[];
+};
+
+export type PaginationBlock = {
+  id: string;
+  type: "pagination";
+  total: number;            // страниц
+  current: number;          // 1..total
+};
+
+export type SocialItem = { id: string; label: string; href: string };
+export type SocialBlock = {
+  id: string;
+  type: "social";
+  items: SocialItem[];
+};
+
+export type IconBoxBlock = {
+  id: string;
+  type: "iconbox";
+  icon: IconName;
+  title: string;
+  text?: string;
+};
+
+export type ImageBoxBlock = {
+  id: string;
+  type: "imagebox";
+  src?: string;     // url или cid
+  alt?: string;
+  title?: string;
+  text?: string;
+};
+
 export type Block =
-  | HeroBlock 
-  | H1Block 
-  | HeadingBlock 
-  | PBlock 
-  | ImgBlock 
-  | BtnBlock
-  | DividerBlock 
-  | SpacerBlock 
-  | Cols2Block 
-  | SectionBlock 
-  | GridBlock
-  | IconBlock 
-  | IconListBlock 
-  | AlertBlock 
-  | HtmlBlock 
-  | CodeBlock
-  | TabsBlock 
-  | AccordionBlock 
-  | BlockquoteBlock 
-  | CtaBlock 
-  | RatingBlock;
+  | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock
+  | DividerBlock | SpacerBlock | Cols2Block | SectionBlock | GridBlock
+  | IconBlock | IconListBlock | AlertBlock | HtmlBlock | CodeBlock
+  | TabsBlock | AccordionBlock | BlockquoteBlock | CtaBlock | RatingBlock
+  | CounterBlock | ProgressBlock | BreadcrumbsBlock | PaginationBlock | SocialBlock
+  | IconBoxBlock | ImageBoxBlock;
 
 export type Doc = {
   title: string;

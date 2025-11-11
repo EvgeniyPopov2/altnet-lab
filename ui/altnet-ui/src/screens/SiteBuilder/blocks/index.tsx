@@ -21,6 +21,13 @@ import AccordionView from "./accordion/view";
 import BlockquoteView from "./blockquote/view";
 import CtaView from "./cta/view";
 import RatingView from "./rating/view";
+import CounterView from "./counter/view";
+import ProgressView from "./progress/view";
+import BreadcrumbsView from "./breadcrumbs/view";
+import PaginationView from "./pagination/view";
+import SocialView from "./social/view";
+import IconBoxView from "./iconbox/view";
+import ImageBoxView from "./imagebox/view";
 
 /** Возвращает React-элемент превью для любого блока. */
 export function renderBlockView(b: Block) {
@@ -46,6 +53,13 @@ export function renderBlockView(b: Block) {
     case "blockquote": return <BlockquoteView block={b} />;
     case "cta":        return <CtaView block={b} />;
     case "rating":     return <RatingView block={b} />;
+    case "counter":     return <CounterView block={b} />;
+    case "progress":    return <ProgressView block={b} />;
+    case "breadcrumbs": return <BreadcrumbsView block={b} />;
+    case "pagination":  return <PaginationView block={b} />;
+    case "social":      return <SocialView block={b} />;
+    case "iconbox":     return <IconBoxView block={b} />;
+    case "imagebox":    return <ImageBoxView block={b} />;
     default:
       return <div className="text-sm text-[#6b7390]">Превью для блока пока не реализовано.</div>;
   }
