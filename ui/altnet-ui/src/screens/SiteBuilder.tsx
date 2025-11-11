@@ -285,6 +285,7 @@ export default function SiteBuilder() {
   // выбор блока
   const [selId, setSelId] = useState<string | null>(null);
   const sel = useMemo(() => doc.blocks.find((b) => b.id === selId) ?? null, [doc.blocks, selId]);
+  const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
 
   const patchBlock = useCallback((id: string, patch: Partial<any>) => {
     setDoc((d) => ({ ...d, blocks: d.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
@@ -321,6 +322,17 @@ export default function SiteBuilder() {
       return { ...d, blocks: next };
     });
   }, []);
+
+  const styleInline = (b: any): React.CSSProperties => {
+    const s = (b && b.style) || {};
+    const px = (v: any) => (typeof v === "number" ? v : undefined);
+    return {
+      marginTop: px(s.mt),
+      marginBottom: px(s.mb),
+      paddingTop: px(s.pt ?? s.py),
+      paddingBottom: px(s.pb ?? s.py),
+    };
+  };
 
   // ── Превью блоков (мини-карточки на канвасе) ────────────────────────────────
   const renderPreviewBlock = useCallback((b: Block) => {
@@ -364,140 +376,140 @@ export default function SiteBuilder() {
   }, []);
 
   // ── Полноценное превью для «мини-сайта» внутри карточки блока (инлайн правка текстов)
-  const previewOf = useCallback(
-    (b: Block) => {
-      const commonWrap = (children: React.ReactNode, pad = true) => <div className={pad ? "p-3" : ""}>{children}</div>;
+  const previewOf = useCallback((b: Block) => {
+    const commonWrap = (children: React.ReactNode, pad = true) => (
+      <div className={pad ? "p-3" : ""}>{children}</div>
+    );
+    const wrapStyled = (children: React.ReactNode, pad = true) => (
+      <div style={styleInline(b as any)}>{commonWrap(children, pad)}</div>
+    );
 
-      if ((b as any).hidden) {
-        return commonWrap(<div className="text-xs text-[#9aa3b2] italic">Блок скрыт</div>);
-      }
+    if ((b as any).hidden) {
+      return wrapStyled(<div className="text-xs text-[#9aa3b2] italic">Блок скрыт</div>);
+    }
 
-      switch (b.type) {
-        case "hero": {
-          const hb = b as HeroBlock;
-          return (
-            <div className="rounded-xl border border-[#2a2f45] bg-gradient-to-br from-[#0e1327] to-[#0c0f1a] p-6">
-              <div
-                className="text-2xl font-bold text-[#e6e9f4] mb-1"
-                contentEditable
-                suppressContentEditableWarning
-                onBlur={(e) => patchBlock(b.id, { title: e.currentTarget.innerText })}
-                onDoubleClick={() => setSelId(b.id)}
-              >
-                {hb.title || "Заголовок героя"}
-              </div>
-              <div
-                className="text-sm text-[#9aa3b2] mb-3"
-                contentEditable
-                suppressContentEditableWarning
-                onBlur={(e) => patchBlock(b.id, { subtitle: e.currentTarget.innerText })}
-                onDoubleClick={() => setSelId(b.id)}
-              >
-                {hb.subtitle || "Подзаголовок или краткое описание секции"}
-              </div>
-              {(hb.ctaText || hb.ctaLink) && (
-                <a
-                  href={hb.ctaLink || "#"}
-                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-[#1a203b] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
-                  rel="noopener noreferrer nofollow"
-                  onClick={(e) => e.preventDefault()}
-                  title="Кнопка (клик в предпросмотре заблокирован)"
-                >
-                  {hb.ctaText || "Кнопка"}
-                </a>
-              )}
-            </div>
-          );
-        }
-
-        case "h1": {
-          const h = b as H1Block;
-          const align = h.align || "left";
-          return commonWrap(
+    switch (b.type) {
+      case "hero": {
+        const hb = b as HeroBlock;
+        return wrapStyled(
+          <div className="rounded-xl border border-[#2a2f45] bg-gradient-to-br from-[#0e1327] to-[#0c0f1a] p-6">
             <div
-              className="text-2xl font-semibold text-[#e6e9f4]"
-              style={{ textAlign: align }}
+              className="text-2xl font-bold text-[#e6e9f4] mb-1"
               contentEditable
               suppressContentEditableWarning
-              onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
+              onBlur={(e) => patchBlock(b.id, { title: e.currentTarget.innerText })}
               onDoubleClick={() => setSelId(b.id)}
             >
-              {h.text || "Заголовок H1"}
+              {hb.title || "Заголовок героя"}
             </div>
-          );
-        }
-
-        case "p": {
-          const p = b as PBlock;
-          const align = p.align || "left";
-          return commonWrap(
             <div
-              className="text-sm leading-6 text-[#cfd5e6] whitespace-pre-wrap"
-              style={{ textAlign: align }}
+              className="text-sm text-[#9aa3b2] mb-3"
               contentEditable
               suppressContentEditableWarning
-              onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
+              onBlur={(e) => patchBlock(b.id, { subtitle: e.currentTarget.innerText })}
               onDoubleClick={() => setSelId(b.id)}
             >
-              {p.text || "Текстовый абзац. Дважды кликните, чтобы отредактировать."}
+              {hb.subtitle || "Подзаголовок или краткое описание секции"}
             </div>
-          );
-        }
-
-        case "img": {
-          const im = b as ImgBlock;
-          const src = im.cid || "";
-          return commonWrap(
-            <figure className="grid gap-2">
-              <img
-                src={src}
-                alt={im.alt || ""}
-                className="max-w-full rounded-lg border border-[#2a2f45] bg-[#0b0e18] object-contain"
-                onDoubleClick={() => setSelId(b.id)}
-                draggable={false}
-              />
-              <figcaption className="text-xs text-[#9aa3b2]">{im.alt || "alt-текст"}</figcaption>
-            </figure>
-          );
-        }
-
-        case "btn": {
-          const bt = b as BtnBlock;
-          const align = bt.align || "left";
-          return commonWrap(
-            <div style={{ textAlign: align }}>
+            {(hb.ctaText || hb.ctaLink) && (
               <a
-                href={bt.href || "#"}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${
-                  bt.variant === "secondary"
-                    ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
-                    : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
-                }`}
+                href={hb.ctaLink || "#"}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-[#1a203b] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
                 rel="noopener noreferrer nofollow"
                 onClick={(e) => e.preventDefault()}
                 title="Кнопка (клик в предпросмотре заблокирован)"
-                onDoubleClick={() => setSelId(b.id)}
               >
-                {bt.label || "Кнопка"}
+                {hb.ctaText || "Кнопка"}
               </a>
-            </div>
-          );
-        }
-
-        case "divider": {
-          return commonWrap(<hr className="border-t border-[#2a2f45]" />, false);
-        }
-
-        case "spacer": {
-          return <div className="h-8" />;
-        }
-
-        default:
-          return commonWrap(<div className="text-xs text-[#9aa3b2]">[Превью для типа «{(b as any).type}» пока нет]</div>);
+            )}
+          </div>
+        );
       }
-    },
-    [patchBlock]
-  );
+
+      case "h1": {
+        const h = b as H1Block;
+        const align = h.align || "left";
+        return wrapStyled(
+          <div
+            className={`text-2xl font-semibold text-[#e6e9f4] text-${align}`}
+            contentEditable
+            suppressContentEditableWarning
+            onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
+            onDoubleClick={() => setSelId(b.id)}
+          >
+            {h.text || "Заголовок H1"}
+          </div>
+        );
+      }
+
+      case "p": {
+        const p = b as PBlock;
+        const align = p.align || "left";
+        return wrapStyled(
+          <div
+            className={`text-sm leading-6 text-[#cfd5e6] whitespace-pre-wrap text-${align}`}
+            contentEditable
+            suppressContentEditableWarning
+            onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
+            onDoubleClick={() => setSelId(b.id)}
+          >
+            {p.text || "Текстовый абзац. Дважды кликните, чтобы отредактировать."}
+          </div>
+        );
+      }
+
+      case "img": {
+        const im = b as ImgBlock;
+        const src = im.cid || "";
+        return wrapStyled(
+          <figure className="grid gap-2">
+            <img
+              src={src}
+              alt={im.alt || ""}
+              className="max-w-full rounded-lg border border-[#2a2f45] bg-[#0b0e18] object-contain"
+              onDoubleClick={() => setSelId(b.id)}
+              draggable={false}
+            />
+            <figcaption className="text-xs text-[#9aa3b2]">{im.alt || "alt-текст"}</figcaption>
+          </figure>
+        );
+      }
+
+      case "btn": {
+        const bt = b as BtnBlock;
+        const align = bt.align || "left";
+        return wrapStyled(
+          <div className={`text-${align}`}>
+            <a
+              href={bt.href || "#"}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${bt.variant === "secondary"
+                ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
+                : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                }`}
+              rel="noopener noreferrer nofollow"
+              onClick={(e) => e.preventDefault()}
+              title="Кнопка (клик в предпросмотре заблокирован)"
+              onDoubleClick={() => setSelId(b.id)}
+            >
+              {bt.label || "Кнопка"}
+            </a>
+          </div>
+        );
+      }
+
+      case "divider": {
+        return wrapStyled(<hr className="border-t border-[#2a2f45]" />, false);
+      }
+
+      case "spacer": {
+        return <div style={styleInline(b as any)}><div className="h-8" /></div>;
+      }
+
+      default:
+        return wrapStyled(<div className="text-xs text-[#9aa3b2]">[Превью для типа «{(b as any).type}» пока нет]</div>);
+    }
+  }, [patchBlock, setSelId]);
+
 
   // Вставка нового блока в «слот» канваса
   const handleInsertAt = useCallback((index: number, type: "hero" | "h1" | "p" | "btn" | "img" | "divider" | "spacer") => {
@@ -506,16 +518,16 @@ export default function SiteBuilder() {
       type === "hero"
         ? { id, type: "hero", title: "Заголовок героя", subtitle: "Короткий подзаголовок", ctaText: "Подробнее", ctaLink: "#" }
         : type === "h1"
-        ? { id, type: "h1", text: "Новый заголовок", align: "left" }
-        : type === "p"
-        ? { id, type: "p", text: "Новый абзац. Опишите мысль.", align: "left" }
-        : type === "btn"
-        ? { id, type: "btn", label: "Кнопка", href: "#", variant: "primary", align: "left" }
-        : type === "img"
-        ? { id, type: "img", cid: "https://picsum.photos/1200/600", alt: "Изображение" }
-        : type === "divider"
-        ? { id, type: "divider" }
-        : { id, type: "spacer", size: "md" };
+          ? { id, type: "h1", text: "Новый заголовок", align: "left" }
+          : type === "p"
+            ? { id, type: "p", text: "Новый абзац. Опишите мысль.", align: "left" }
+            : type === "btn"
+              ? { id, type: "btn", label: "Кнопка", href: "#", variant: "primary", align: "left" }
+              : type === "img"
+                ? { id, type: "img", cid: "https://picsum.photos/1200/600", alt: "Изображение" }
+                : type === "divider"
+                  ? { id, type: "divider" }
+                  : { id, type: "spacer", size: "md" };
 
     setDoc((d) => {
       const next = d.blocks.slice();
@@ -597,7 +609,7 @@ export default function SiteBuilder() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
-    } catch {}
+    } catch { }
   }, [doc]);
 
   const addBlock = useCallback((type: BlockType) => {
@@ -605,33 +617,33 @@ export default function SiteBuilder() {
       type === "hero"
         ? { id: uid(), type: "hero", title: "Новый раздел", subtitle: "", ctaText: "", ctaLink: "" }
         : type === "h1"
-        ? { id: uid(), type: "h1", text: "Заголовок" }
-        : type === "heading"
-        ? { id: uid(), type: "heading", text: "Заголовок секции", level: "h2", align: "left" }
-        : type === "p"
-        ? { id: uid(), type: "p", text: "Параграф текста…" }
-        : type === "img"
-        ? { id: uid(), type: "img", cid: "", alt: "" }
-        : type === "cols2"
-        ? { id: uid(), type: "cols2", title: "Заголовок", text: "Текст…", img: "", alt: "", ratio: "6-6", reverse: false }
-        : type === "spacer"
-        ? { id: uid(), type: "spacer", size: "md" }
-        : type === "divider"
-        ? { id: uid(), type: "divider" }
-        : type === "section"
-        ? { id: uid(), type: "section", title: "Секция", text: "", align: "left", theme: "auto", pad: "md", bg: "none" }
-        : type === "grid"
-        ? {
-            id: uid(),
-            type: "grid",
-            cols: 3,
-            items: [
-              { id: uid(), src: "", alt: "Изображение 1", caption: "Подпись 1" },
-              { id: uid(), src: "", alt: "Изображение 2", caption: "Подпись 2" },
-              { id: uid(), src: "", alt: "Изображение 3", caption: "Подпись 3" },
-            ],
-          }
-        : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
+          ? { id: uid(), type: "h1", text: "Заголовок" }
+          : type === "heading"
+            ? { id: uid(), type: "heading", text: "Заголовок секции", level: "h2", align: "left" }
+            : type === "p"
+              ? { id: uid(), type: "p", text: "Параграф текста…" }
+              : type === "img"
+                ? { id: uid(), type: "img", cid: "", alt: "" }
+                : type === "cols2"
+                  ? { id: uid(), type: "cols2", title: "Заголовок", text: "Текст…", img: "", alt: "", ratio: "6-6", reverse: false }
+                  : type === "spacer"
+                    ? { id: uid(), type: "spacer", size: "md" }
+                    : type === "divider"
+                      ? { id: uid(), type: "divider" }
+                      : type === "section"
+                        ? { id: uid(), type: "section", title: "Секция", text: "", align: "left", theme: "auto", pad: "md", bg: "none" }
+                        : type === "grid"
+                          ? {
+                            id: uid(),
+                            type: "grid",
+                            cols: 3,
+                            items: [
+                              { id: uid(), src: "", alt: "Изображение 1", caption: "Подпись 1" },
+                              { id: uid(), src: "", alt: "Изображение 2", caption: "Подпись 2" },
+                              { id: uid(), src: "", alt: "Изображение 3", caption: "Подпись 3" },
+                            ],
+                          }
+                          : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
 
     setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
   }, []);
@@ -745,7 +757,7 @@ export default function SiteBuilder() {
     if (livePreviewChannelRef.current) {
       try {
         livePreviewChannelRef.current.close();
-      } catch {}
+      } catch { }
     }
     livePreviewChannelRef.current = new BroadcastChannel(`altnet_live_preview:${id}`);
 
@@ -907,7 +919,7 @@ export default function SiteBuilder() {
     setDoc(DEFAULT_DOC);
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    } catch { }
   }, []);
 
   // — Навигатор (Outline) —
@@ -917,15 +929,13 @@ export default function SiteBuilder() {
         {doc.blocks.map((b, idx) => (
           <div
             key={b.id}
-            className={`group flex items-center justify-between gap-2 rounded-lg border ${
-              selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
-            } px-2 py-1`}
+            className={`group flex items-center justify-between gap-2 rounded-lg border ${selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
+              } px-2 py-1`}
           >
             <button
               onClick={() => setSelId(b.id)}
-              className={`rounded-xl border ${
-                selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
-              } bg-[#0c0f1a] p-3 cursor-pointer`}
+              className={`rounded-xl border ${selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
+                } bg-[#0c0f1a] p-3 cursor-pointer`}
               title={labelOf(b)}
             >
               <span className="opacity-60 mr-1">#{idx + 1}</span>
@@ -973,414 +983,328 @@ export default function SiteBuilder() {
   // — Редактор свойств выбранного блока —
   const Editor = useCallback(() => {
     if (!sel) return <div className="text-xs text-[#9aa3b2]">Выберите блок слева.</div>;
-
     const id = sel.id;
     const row = (children: React.ReactNode) => <div className="grid gap-3">{children}</div>;
 
+    // Вкладки
+    const Tabs = (
+      <div className="mb-3 flex items-center gap-2">
+        {(["content", "style", "advanced"] as const).map(t => (
+          <button
+            key={t}
+            className={[
+              "px-2.5 py-1.5 rounded-md border text-xs",
+              editorTab === t ? "border-[#6E59F2] bg-[#121528] text-[#e6e9f4]" : "border-[#2a2f45] bg-[#0c0f1a] text-[#cfd5e6]"
+            ].join(" ")}
+            onClick={() => setEditorTab(t)}
+          >
+            {t === "content" ? "Контент" : t === "style" ? "Стиль" : "Расширенные"}
+          </button>
+        ))}
+      </div>
+    );
+
+    // Контентные формы (как было)
+    let contentNode: React.ReactNode = null;
     switch (sel.type) {
       case "hero": {
         const b = sel as HeroBlock;
-        return row(
+        contentNode = row(
           <>
             <Field label="Заголовок">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.title}
-                onChange={(e) => patchBlock(id, { title: e.target.value })}
-                autoComplete="off"
-                spellCheck={false}
-              />
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.title} onChange={e => patchBlock(id, { title: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <Field label="Подзаголовок">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.subtitle || ""}
-                onChange={(e) => patchBlock(id, { subtitle: e.target.value })}
-                autoComplete="off"
-                spellCheck={false}
-              />
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.subtitle || ""} onChange={e => patchBlock(id, { subtitle: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Текст кнопки">
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.ctaText || ""}
-                  onChange={(e) => patchBlock(id, { ctaText: e.target.value })}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.ctaText || ""} onChange={e => patchBlock(id, { ctaText: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
               <Field label="Ссылка (http/altfs/ipfs/#)">
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.ctaLink || ""}
-                  onChange={(e) => patchBlock(id, { ctaLink: e.target.value })}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.ctaLink || ""} onChange={e => patchBlock(id, { ctaLink: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
             </div>
           </>
         );
+        break;
       }
-
       case "h1": {
         const b = sel as H1Block;
-        return row(
+        contentNode = row(
           <Field label="Текст H1">
-            <input
-              className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={b.text}
-              onChange={(e) => patchBlock(id, { text: e.target.value })}
-              autoComplete="off"
-              spellCheck={false}
-            />
+            <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+              value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} autoComplete="off" spellCheck={false} />
           </Field>
         );
+        break;
       }
-
       case "heading": {
         const b = sel as HeadingBlock;
-        return row(
+        contentNode = row(
           <>
             <Field label="Текст заголовка">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.text}
-                onChange={(e) => patchBlock(id, { text: e.target.value })}
-                autoComplete="off"
-                spellCheck={false}
-              />
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Уровень">
-                <select
-                  className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.level || "h2"}
-                  onChange={(e) => patchBlock(id, { level: e.target.value as any })}
-                >
-                  <option value="h2">H2</option>
-                  <option value="h3">H3</option>
-                  <option value="h4">H4</option>
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.level || "h2"} onChange={e => patchBlock(id, { level: e.target.value as any })}>
+                  <option value="h2">H2</option><option value="h3">H3</option><option value="h4">H4</option>
                 </select>
               </Field>
               <Field label="Выравнивание">
-                <select
-                  className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.align || "left"}
-                  onChange={(e) => patchBlock(id, { align: e.target.value as any })}
-                >
-                  <option value="left">Слева</option>
-                  <option value="center">По центру</option>
-                  <option value="right">Справа</option>
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.align || "left"} onChange={e => patchBlock(id, { align: e.target.value as any })}>
+                  <option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option>
                 </select>
               </Field>
             </div>
           </>
         );
+        break;
       }
-
       case "p": {
         const b = sel as PBlock;
-        return row(
+        contentNode = row(
           <>
             <Field label="Текст">
-              <textarea
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[96px]"
-                value={b.text}
-                onChange={(e) => patchBlock(id, { text: e.target.value })}
-                spellCheck={false}
-              />
+              <textarea className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[96px]"
+                value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} spellCheck={false} />
             </Field>
             <Field label="Выравнивание">
-              <select
-                className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                value={b.align || "left"}
-                onChange={(e) => patchBlock(id, { align: e.target.value as any })}
-              >
-                <option value="left">Слева</option>
-                <option value="center">По центру</option>
-                <option value="right">Справа</option>
+              <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                value={b.align || "left"} onChange={e => patchBlock(id, { align: e.target.value as any })}>
+                <option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option>
               </select>
             </Field>
           </>
         );
+        break;
       }
-
       case "img": {
         const b = sel as ImgBlock;
-        return row(
+        contentNode = row(
           <>
             <Field label="CID/URL изображения">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.cid}
-                onChange={(e) => patchBlock(id, { cid: e.target.value })}
-                autoComplete="off"
-                spellCheck={false}
-              />
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.cid} onChange={e => patchBlock(id, { cid: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <Field label="Alt-текст (доступность/SEO)">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.alt || ""}
-                onChange={(e) => patchBlock(id, { alt: e.target.value })}
-                autoComplete="off"
-                spellCheck={false}
-              />
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.alt || ""} onChange={e => patchBlock(id, { alt: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
           </>
         );
+        break;
       }
-
       case "btn": {
         const b = sel as BtnBlock;
-        return row(
+        contentNode = row(
           <>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Текст кнопки">
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.label}
-                  onChange={(e) => patchBlock(id, { label: e.target.value })}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.label} onChange={e => patchBlock(id, { label: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
               <Field label="Ссылка">
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.href}
-                  onChange={(e) => patchBlock(id, { href: e.target.value })}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.href} onChange={e => patchBlock(id, { href: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Стиль">
-                <select
-                  className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.variant || "primary"}
-                  onChange={(e) => patchBlock(id, { variant: e.target.value as any })}
-                >
-                  <option value="primary">Primary</option>
-                  <option value="secondary">Secondary</option>
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.variant || "primary"} onChange={e => patchBlock(id, { variant: e.target.value as any })}>
+                  <option value="primary">Primary</option><option value="secondary">Secondary</option>
                 </select>
               </Field>
               <Field label="Выравнивание">
-                <select
-                  className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.align || "center"}
-                  onChange={(e) => patchBlock(id, { align: e.target.value as any })}
-                >
-                  <option value="left">Слева</option>
-                  <option value="center">По центру</option>
-                  <option value="right">Справа</option>
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.align || "center"} onChange={e => patchBlock(id, { align: e.target.value as any })}>
+                  <option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option>
                 </select>
               </Field>
             </div>
           </>
         );
+        break;
       }
-
       case "cols2": {
         const b = sel as Cols2Block;
-        return row(
+        contentNode = row(
           <>
             <Field label="Заголовок">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.title}
-                onChange={(e) => patchBlock(id, { title: e.target.value })}
-                autoComplete="off"
-                spellCheck={false}
-              />
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.title} onChange={e => patchBlock(id, { title: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <Field label="Текст">
-              <textarea
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[96px]"
-                value={b.text}
-                onChange={(e) => patchBlock(id, { text: e.target.value })}
-                spellCheck={false}
-              />
+              <textarea className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[96px]"
+                value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} spellCheck={false} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Изображение (CID/URL)">
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.img}
-                  onChange={(e) => patchBlock(id, { img: e.target.value })}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.img} onChange={e => patchBlock(id, { img: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
               <Field label="Alt">
-                <input
-                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.alt}
-                  onChange={(e) => patchBlock(id, { alt: e.target.value })}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
+                <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                  value={b.alt} onChange={e => patchBlock(id, { alt: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Соотношение колонок">
-                <select
-                  className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.ratio}
-                  onChange={(e) => patchBlock(id, { ratio: e.target.value as ColsRatio })}
-                >
-                  <option value="5-7">5–7</option>
-                  <option value="6-6">6–6</option>
-                  <option value="7-5">7–5</option>
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.ratio} onChange={e => patchBlock(id, { ratio: e.target.value as ColsRatio })}>
+                  <option value="5-7">5–7</option><option value="6-6">6–6</option><option value="7-5">7–5</option>
                 </select>
               </Field>
               <Field label="Порядок (реверс)">
-                <select
-                  className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.reverse ? "1" : "0"}
-                  onChange={(e) => patchBlock(id, { reverse: e.target.value === "1" })}
-                >
-                  <option value="0">Обычный</option>
-                  <option value="1">Реверс</option>
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                  value={b.reverse ? "1" : "0"} onChange={e => patchBlock(id, { reverse: e.target.value === "1" })}>
+                  <option value="0">Обычный</option><option value="1">Реверс</option>
                 </select>
               </Field>
             </div>
           </>
         );
+        break;
       }
-
       case "section": {
         const b = sel as SectionBlock;
-        return row(
+        contentNode = row(
           <>
             <Field label="Заголовок секции">
-              <input
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.title || ""}
-                onChange={(e) => patchBlock(id, { title: e.target.value })}
-              />
+              <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                value={b.title || ""} onChange={e => patchBlock(id, { title: e.target.value })} />
             </Field>
             <Field label="Текст секции">
-              <textarea
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[72px]"
-                value={b.text || ""}
-                onChange={(e) => patchBlock(id, { text: e.target.value })}
-              />
+              <textarea className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[72px]"
+                value={b.text || ""} onChange={e => patchBlock(id, { text: e.target.value })} />
             </Field>
             <div className="grid grid-cols-3 gap-3">
               <Field label="Тема">
-                <select
-                  className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.theme || "auto"}
-                  onChange={(e) => patchBlock(id, { theme: e.target.value as any })}
-                >
-                  <option value="auto">Auto</option>
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.theme || "auto"}
+                  onChange={e => patchBlock(id, { theme: e.target.value as any })}>
+                  <option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option>
                 </select>
               </Field>
               <Field label="Паддинги">
-                <select
-                  className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.pad || "md"}
-                  onChange={(e) => patchBlock(id, { pad: e.target.value as any })}
-                >
-                  <option value="sm">sm</option>
-                  <option value="md">md</option>
-                  <option value="lg">lg</option>
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.pad || "md"}
+                  onChange={e => patchBlock(id, { pad: e.target.value as any })}>
+                  <option value="sm">sm</option><option value="md">md</option><option value="lg">lg</option>
                 </select>
               </Field>
               <Field label="Фон">
-                <select
-                  className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.bg || "none"}
-                  onChange={(e) => patchBlock(id, { bg: e.target.value as any })}
-                >
-                  <option value="none">none</option>
-                  <option value="subtle">subtle</option>
-                  <option value="card">card</option>
-                  <option value="accent">accent</option>
+                <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.bg || "none"}
+                  onChange={e => patchBlock(id, { bg: e.target.value as any })}>
+                  <option value="none">none</option><option value="subtle">subtle</option><option value="card">card</option><option value="accent">accent</option>
                 </select>
               </Field>
             </div>
           </>
         );
+        break;
       }
-
       case "grid": {
         const b = sel as GridBlock;
-        return row(
+        contentNode = row(
           <>
             <Field label="Кол-во колонок">
-              <select
-                className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                value={b.cols}
-                onChange={(e) => patchBlock(id, { cols: Number(e.target.value) as any })}
-              >
-                <option value={1}>1</option>
-                <option value={2}>2</option>
-                <option value={3}>3</option>
-                <option value={4}>4</option>
+              <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.cols}
+                onChange={e => patchBlock(id, { cols: Number(e.target.value) as any })}>
+                <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
               </select>
             </Field>
             <div className="grid gap-2">
               {b.items.map((it, i) => (
                 <div key={it.id} className="rounded-lg border border-[#2a2f45] p-2 grid gap-2">
                   <div className="text-xs text-[#9aa3b2]">Элемент {i + 1}</div>
-                  <input
-                    className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                    value={it.src}
-                    onChange={(e) => {
-                      const items = b.items.slice();
-                      items[i] = { ...items[i], src: e.target.value };
-                      patchBlock(id, { items });
-                    }}
-                    placeholder="CID/URL"
-                  />
-                  <input
-                    className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                    value={it.alt || ""}
-                    onChange={(e) => {
-                      const items = b.items.slice();
-                      items[i] = { ...items[i], alt: e.target.value };
-                      patchBlock(id, { items });
-                    }}
-                    placeholder="Alt"
-                  />
-                  <input
-                    className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                    value={it.caption || ""}
-                    onChange={(e) => {
-                      const items = b.items.slice();
-                      items[i] = { ...items[i], caption: e.target.value };
-                      patchBlock(id, { items });
-                    }}
-                    placeholder="Подпись"
-                  />
+                  <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                    value={it.src} onChange={e => { const items = b.items.slice(); items[i] = { ...items[i], src: e.target.value }; patchBlock(id, { items }); }} placeholder="CID/URL" />
+                  <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                    value={it.alt || ""} onChange={e => { const items = b.items.slice(); items[i] = { ...items[i], alt: e.target.value }; patchBlock(id, { items }); }} placeholder="Alt" />
+                  <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+                    value={it.caption || ""} onChange={e => { const items = b.items.slice(); items[i] = { ...items[i], caption: e.target.value }; patchBlock(id, { items }); }} placeholder="Подпись" />
                 </div>
               ))}
-              <button
-                className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff]"
-                onClick={() => {
-                  const items = b.items.slice();
-                  items.push({ id: uid(), src: "", alt: "", caption: "" });
-                  patchBlock(id, { items });
-                }}
-              >
+              <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff]"
+                onClick={() => { const items = b.items.slice(); items.push({ id: uid(), src: "", alt: "", caption: "" }); patchBlock(id, { items }); }}>
                 + Добавить элемент
               </button>
             </div>
           </>
         );
+        break;
       }
-
       default:
-        return <div className="text-xs text-[#9aa3b2]">Редактор для этого блока пока не реализован.</div>;
+        contentNode = <div className="text-xs text-[#9aa3b2]">Редактор для этого блока пока не реализован.</div>;
     }
-  }, [sel, patchBlock]);
+
+    // Стиль (общий для всех типов)
+    const s = ((sel as any).style || {}) as { mt?: number; mb?: number; py?: number; pt?: number; pb?: number };
+    const styleNode = row(
+      <>
+        <div className="grid grid-cols-3 gap-3">
+          <Field label="Отступ сверху (px)">
+            <input type="number" className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={s.mt ?? 0}
+              onChange={(e) => patchBlock(id, { style: { ...(s || {}), mt: Math.max(0, parseInt(e.target.value || "0", 10)) } } as any)} />
+          </Field>
+          <Field label="Отступ снизу (px)">
+            <input type="number" className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={s.mb ?? 0}
+              onChange={(e) => patchBlock(id, { style: { ...(s || {}), mb: Math.max(0, parseInt(e.target.value || "0", 10)) } } as any)} />
+          </Field>
+          <Field label="Паддинг по Y (px)">
+            <input type="number" className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={s.py ?? 0}
+              onChange={(e) => patchBlock(id, { style: { ...(s || {}), py: Math.max(0, parseInt(e.target.value || "0", 10)) } } as any)} />
+          </Field>
+        </div>
+        <div className="text-xs text-[#9aa3b2]">
+          Вдохновлено Elementor → Basic Spacing. Breakpoints и другие стили добавим на следующих шагах.
+        </div>
+      </>
+    );
+
+    // Advanced (минимум: скрыть/заблокировать)
+    const advancedNode = row(
+      <>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Скрыть блок">
+            <button
+              className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4]"
+              onClick={() => patchBlock(id, { hidden: !((sel as any).hidden) })}
+            >
+              {((sel as any).hidden ? "Показан → Скрыть" : "Скрыт → Показать")}
+            </button>
+          </Field>
+          <Field label="Блокировка">
+            <button
+              className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4]"
+              onClick={() => patchBlock(id, { locked: !((sel as any).locked) })}
+            >
+              {((sel as any).locked ? "Разблокировать" : "Заблокировать")}
+            </button>
+          </Field>
+        </div>
+      </>
+    );
+
+    return (
+      <>
+        {Tabs}
+        {editorTab === "content" ? contentNode : editorTab === "style" ? styleNode : advancedNode}
+      </>
+    );
+  }, [sel, patchBlock, editorTab]);
+
 
   // Разметка: 3 колонки — слева настройки/палитра, центр — канвас, справа — свойства + предпросмотр
   return (
@@ -1408,9 +1332,8 @@ export default function SiteBuilder() {
             return (
               <Field label="Описание сайта (meta description, до 160 символов)">
                 <textarea
-                  className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#cfd5e6] min-h-[72px] resize-vertical ${
-                    tooLong ? "border-[#ff6b6b] focus:border-[#ff6b6b]" : "border-[#1f2751] focus:border-[#2a3a8f]"
-                  }`}
+                  className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#cfd5e6] min-h-[72px] resize-vertical ${tooLong ? "border-[#ff6b6b] focus:border-[#ff6b6b]" : "border-[#1f2751] focus:border-[#2a3a8f]"
+                    }`}
                   value={desc}
                   onChange={(e) => setDoc((d) => ({ ...d, description: e.target.value }))}
                   autoComplete="off"
