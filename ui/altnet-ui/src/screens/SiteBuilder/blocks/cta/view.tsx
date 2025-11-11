@@ -1,4 +1,3 @@
-import React from "react";
 import type { CtaBlock } from "../../types";
 
 export default function CtaView({ block }: { block: CtaBlock }) {

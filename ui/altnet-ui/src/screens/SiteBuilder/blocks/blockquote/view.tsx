@@ -1,4 +1,3 @@
-import React from "react";
 import type { BlockquoteBlock } from "../../types";
 
 export default function BlockquoteView({ block }: { block: BlockquoteBlock }) {

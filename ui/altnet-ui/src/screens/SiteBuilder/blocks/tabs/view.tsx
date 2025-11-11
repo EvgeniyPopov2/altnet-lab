@@ -23,7 +23,7 @@ export default function TabsView({ block }: { block: TabsBlock }) {
         {block.items.map((t, i) => (
           <button
             key={t.id}
-            ref={(el) => (tabsRef.current[i] = el)}
+            ref={(el) => { tabsRef.current[i] = el; }}
             role="tab"
             aria-selected={i === idx}
             aria-controls={`panel-${block.id}-${i}`}
