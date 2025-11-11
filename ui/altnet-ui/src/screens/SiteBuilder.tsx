@@ -595,7 +595,7 @@ export default function SiteBuilder() {
   const [previewHtml, setPreviewHtml] = useState<string>("");
   const [autoPreview, setAutoPreview] = useState<boolean>(true);
   const [isBuilding, setIsBuilding] = useState<boolean>(false);
-
+  const [elQuery, setElQuery] = useState<string>("");
 
   // Скрытые блоки вырезаем из модели для экспорта/предпросмотра
   const docForBuild = useMemo(() => ({ ...doc, blocks: doc.blocks.filter((b) => !(b as any).hidden) }), [doc]);
@@ -625,6 +625,24 @@ export default function SiteBuilder() {
   const checks = useMemo(() => validateDoc(doc), [doc]);
   const okCount = useMemo(() => checks.filter((c) => c.ok).length, [checks]);
   const [showChecklist, setShowChecklist] = useState(false);
+
+  const layoutItems: Array<[BlockType, string]> = [
+    ["section", "Контейнер"],
+    ["grid", "Сетка"],
+    ["cols2", "Две колонки"],
+    ["hero", "Hero"],
+  ];
+  const basicItems: Array<[BlockType, string]> = [
+    ["h1", "Заголовок"],
+    ["p", "Текст"],
+    ["img", "Изображение"],
+    ["btn", "Кнопка"],
+    ["divider", "Разделитель"],
+    ["spacer", "Интервал"],
+  ];
+  const q = elQuery.trim().toLowerCase();
+  const layoutFiltered = layoutItems.filter(([, label]) => label.toLowerCase().includes(q));
+  const basicFiltered = basicItems.filter(([, label]) => label.toLowerCase().includes(q));
 
   const isValidOgImage = (s: string) => {
     if (!s) return true;
@@ -1575,19 +1593,20 @@ export default function SiteBuilder() {
         {/* Палитра элементов */}
         <div className="mb-4">
           <div className="mb-2 text-sm text-[#9aa3b2]">Элементы</div>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              ["h1", "Заголовок"],
-              ["p", "Текст"],
-              ["btn", "Кнопка"],
-              ["img", "Изображение"],
-              ["divider", "Разделитель"],
-              ["spacer", "Интервал"],
-              ["hero", "Hero"],
-            ].map(([t, label]) => (
+
+          <input
+            className="w-full mb-2 px-3 py-2 rounded-md bg-[#0f1420] border border-[#2a2f45] text-[#e6e9f4]"
+            placeholder="Поиск виджета…"
+            value={elQuery}
+            onChange={(e) => setElQuery(e.target.value)}
+          />
+
+          <div className="text-xs text-[#9aa3b2] mb-1">Layout</div>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {layoutFiltered.map(([t, label]) => (
               <button
                 key={t}
-                onClick={() => addBlock(t as any)}
+                onClick={() => addBlock(t)}
                 onDragStart={(e) => e.dataTransfer.setData("application/x-block", t)}
                 draggable
                 className="flex items-center justify-center h-9 rounded-md bg-[#F8FAFC] border border-[#e5e7eb] text-xs text-[#111827] hover:bg-white"
@@ -1597,8 +1616,27 @@ export default function SiteBuilder() {
               </button>
             ))}
           </div>
-          <div className="mt-2 text-xs text-[#9aa3b2]">Совет: перетащите элемент на канвас между слотами «+ Добавить блок».</div>
-        </div>
+
+          <div className="text-xs text-[#9aa3b2] mb-1">Базовый</div>
+          <div className="grid grid-cols-2 gap-2">
+            {basicFiltered.map(([t, label]) => (
+              <button
+                key={t}
+                onClick={() => addBlock(t)}
+                onDragStart={(e) => e.dataTransfer.setData("application/x-block", t)}
+                draggable
+                className="flex items-center justify-center h-9 rounded-md bg-[#F8FAFC] border border-[#e5e7eb] text-xs text-[#111827] hover:bg-white"
+                title={label}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+  <div className="mt-2 text-xs text-[#9aa3b2]">
+    Совет: перетащите элемент на канвас между слотами «+ Добавить блок».
+  </div>
+</div>
 
         {showChecklist && (
           <div className="mb-4 rounded-xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
@@ -1622,40 +1660,51 @@ export default function SiteBuilder() {
 
       {/* Средняя панель — Канвас */}
       <div className="md:col-[2] min-h-0 overflow-y-auto p-4">
-        <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-[#2a2f45] bg-[#0c0f1a] p-2">
-          <label className="text-xs text-[#9aa3b2]">
-            Колонки:&nbsp;
-            <select
-              className="px-2 py-1 rounded-md bg-[#0f1420] border border-[#2a2f45] text-[#e6e9f4]"
-              value={canvasCols}
-              onChange={(e) => setCanvasCols(Number(e.target.value) as 1 | 2 | 3 | 4)}
-            >
-              <option value={1}>1</option>
-              <option value={2}>2</option>
-              <option value={3}>3</option>
-              <option value={4}>4</option>
-            </select>
-          </label>
+        <div className="sticky top-0 z-10 mb-3 flex items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white p-2 shadow-sm">
+          {/* Переключатели устройств как в Elementor */}
+          <div className="flex items-center gap-1 text-xs">
+            <button className={`px-2 py-1 rounded border ${iframeMode === "fit" ? "border-indigo-500/60" : "border-[#e5e7eb]"}`} onClick={() => setIframeMode("fit")}>Fit</button>
+            <button className={`px-2 py-1 rounded border ${iframeMode === "desktop" ? "border-indigo-500/60" : "border-[#e5e7eb]"}`} onClick={() => { setIframeMode("desktop"); setBp("desktop"); }}>🖥 1280</button>
+            <button className={`px-2 py-1 rounded border ${iframeMode === "tablet" ? "border-indigo-500/60" : "border-[#e5e7eb]"}`} onClick={() => { setIframeMode("tablet"); setBp("tablet"); }}>📱 834</button>
+            <button className={`px-2 py-1 rounded border ${iframeMode === "mobile" ? "border-indigo-500/60" : "border-[#e5e7eb]"}`} onClick={() => { setIframeMode("mobile"); setBp("mobile"); }}>📱 390</button>
+          </div>
 
-          <label className="text-xs text-[#9aa3b2]">
-            Gap X:&nbsp;
-            <input
-              type="number"
-              className="w-20 px-2 py-1 rounded-md bg-[#0f1420] border border-[#2a2f45] text-[#e6e9f4]"
-              value={canvasGapX}
-              onChange={(e) => setCanvasGapX(Math.max(0, parseInt(e.target.value || "0", 10)))}
-            />
-          </label>
+          {/* Настройки сетки — в выпадашке */}
+          <details className="ml-2">
+            <summary className="cursor-pointer px-2 py-1 rounded border border-[#e5e7eb] bg-[#F8FAFC] text-xs">Сетка</summary>
+            <div className="mt-2 flex flex-wrap items-center gap-3 p-2 rounded border border-[#e5e7eb] bg-[#F8FAFC]">
+              <label className="text-xs text-[#374151]">
+                Колонки:&nbsp;
+                <select className="px-2 py-1 rounded-md bg-white border border-[#e5e7eb]"
+                  value={canvasCols}
+                  onChange={(e) => setCanvasCols(Number(e.target.value) as 1 | 2 | 3 | 4)}>
+                  <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
+                </select>
+              </label>
+              <label className="text-xs text-[#374151]">
+                Gap X:&nbsp;
+                <input type="number" className="w-20 px-2 py-1 rounded-md bg-white border border-[#e5e7eb]"
+                  value={canvasGapX}
+                  onChange={(e) => setCanvasGapX(Math.max(0, parseInt(e.target.value || "0", 10)))} />
+              </label>
+              <label className="text-xs text-[#374151]">
+                Gap Y:&nbsp;
+                <input type="number" className="w-20 px-2 py-1 rounded-md bg-white border border-[#e5e7eb]"
+                  value={canvasGapY}
+                  onChange={(e) => setCanvasGapY(Math.max(0, parseInt(e.target.value || "0", 10)))} />
+              </label>
+            </div>
+          </details>
 
-          <label className="text-xs text-[#9aa3b2]">
-            Gap Y:&nbsp;
-            <input
-              type="number"
-              className="w-20 px-2 py-1 rounded-md bg-[#0f1420] border border-[#2a2f45] text-[#e6e9f4]"
-              value={canvasGapY}
-              onChange={(e) => setCanvasGapY(Math.max(0, parseInt(e.target.value || "0", 10)))}
-            />
-          </label>
+          {/* Кнопки справа */}
+          <div className="ml-auto flex items-center gap-2">
+            <button className="px-3 py-1.5 rounded-md bg-[#1f2937] text-white" onClick={onOpenPreviewTab} title="Открыть предпросмотр">
+              Предпросмотр
+            </button>
+            <button className="px-3 py-1.5 rounded-md bg-[#10B981] text-white" onClick={onExportSingle} title="Экспорт одним HTML">
+              Опубликовать
+            </button>
+          </div>
         </div>
 
         <div className="flex justify-center">
