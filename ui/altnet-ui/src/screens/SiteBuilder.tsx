@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState, useEffect } from "react"
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
 import Canvas from "./SiteBuilder/canvas/Canvas";
 import Outline from "./SiteBuilder/outline/Outline";
+import Inspector from "./SiteBuilder/inspector/Inspector";
 import Field from "./SiteBuilder/ui/Field";
 import type {
   BlockType,
@@ -1577,6 +1578,10 @@ export default function SiteBuilder() {
               {/* Навигатор блоков (пока только выбор). Показываем на широком экране. */}
               <div className="mt-4 hidden xl:block">
                 <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
+              </div>
+              {/* Inspector (каркас). Пока просто ниже; затем перенесём в правую колонку. */}
+              <div className="mt-4">
+                <Inspector block={doc.blocks.find((b) => b.id === selId)} />
               </div>
             </div>
           </div>
