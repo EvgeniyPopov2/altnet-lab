@@ -188,12 +188,19 @@ export type IconBlock = {
   color?: string; // tailwind-класс цвета текста, напр. "text-[#2a3b8f]"
 };
 
-export type IconListItem = { id: string; icon: IconName; text: string };
+export type IconListVariant = "dot" | "check" | "star" | "custom";
+export type IconListSize = "sm" | "md" | "lg";
+export type IconListAlign = "start" | "center" | "end";
+export type IconListItem = { id: string; label: string; href?: string; description?: string; icon?: string };
 
 export type IconListBlock = {
   id: string;
   type: "iconlist";
   items: IconListItem[];
+  variant?: IconListVariant;       // dot|check|star|custom
+  size?: IconListSize;             // sm|md|lg
+  gap?: IconListSize;              // sm|md|lg
+  align?: IconListAlign;           // start|center|end
 };
 
 export type AlertVariant = "info" | "success" | "warning" | "danger";
@@ -220,20 +227,35 @@ export type CodeBlock = {
 };
 
 // ── B6.c: вкладки/аккордеон/цитата/CTA/рейтинг ───────────────────────────────
-export type TabItem = { id: string; label: string; content: string };
+export type TabsVariant = "underline" | "boxed" | "pill";
+export type TabsSize = "sm" | "md" | "lg";
+export type TabsAlign = "start" | "center" | "end";
+export type TabsOrientation = "horizontal" | "vertical";
+export type TabItem = { id: string; label: string; content?: string; disabled?: boolean };
+
 export type TabsBlock = {
   id: string;
   type: "tabs";
-  items: TabItem[];
-  initial?: number;
+  tabs: TabItem[];                 // прежнее поле tabs — оставляем
+  active?: number;                 // индекс 0..N-1
+  variant?: TabsVariant;           // underline|boxed|pill
+  size?: TabsSize;                 // sm|md|lg
+  align?: TabsAlign;               // start|center|end
+  orientation?: TabsOrientation;   // horizontal|vertical
 };
 
-export type AccordionItem = { id: string; title: string; content: string; open?: boolean };
+export type AccordionVariant = "ghost" | "filled" | "outline";
+export type AccordionSize = "sm" | "md" | "lg";
+export type AccordionItem = { id: string; title: string; content?: string; open?: boolean };
+
 export type AccordionBlock = {
   id: string;
   type: "accordion";
-  items: AccordionItem[];
-  allowMultiple?: boolean;
+  items: AccordionItem[];          // было items — не ломаем
+  allowMultiple?: boolean;         // можно открывать несколько
+  allowToggle?: boolean;           // можно закрыть последний открытый
+  variant?: AccordionVariant;      // ghost|filled|outline
+  size?: AccordionSize;            // sm|md|lg
 };
 
 export type BlockquoteBlock = {
@@ -243,15 +265,20 @@ export type BlockquoteBlock = {
   cite?: string;
 };
 
-export type CtaVariant = "primary" | "secondary" | "outline";
+export type CtaVariant = "primary" | "secondary" | "outline" | "ghost";
+export type CtaAlign = "start" | "center" | "end";
+export type CtaEmphasis = "none" | "panel" | "brand";
+
 export type CtaBlock = {
   id: string;
   type: "cta";
-  title: string;
+  title?: string;
   text?: string;
-  btnLabel: string;
-  href: string;
-  variant?: CtaVariant;
+  btnLabel?: string;
+  btnHref?: string;
+  variant?: CtaVariant;            // стиль кнопки
+  align?: CtaAlign;                // выравнивание
+  emphasis?: CtaEmphasis;          // фон/акцент
 };
 
 export type RatingBlock = {

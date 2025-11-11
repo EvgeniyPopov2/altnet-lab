@@ -1,31 +1,56 @@
-// src/screens/SiteBuilder/blocks/iconlist/view.tsx
-import type { IconListBlock, IconName } from "../../types";
+import type { IconListBlock, IconListItem, IconListVariant } from "../../types";
 
-function Icon({ name }: { name: IconName }) {
-  // Мини-иконка 16px (reuse простых SVG как в IconView)
-  switch (name) {
-    case "check":
-      return <svg width="16" height="16" viewBox="0 0 24 24"><path d="M5 12l4 4L19 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-    case "heart":
-      return <svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 21s-7-5-7-10a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 5-7 10-7 10z" fill="none" stroke="currentColor" strokeWidth="2"/></svg>;
-    case "shield":
-      return <svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V6l-8-3-8 3v6c0 6 8 10 8 10z" fill="none" stroke="currentColor" strokeWidth="2"/></svg>;
-    case "alert":
-      return <svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 3l9 16H3L12 3z" fill="none" stroke="currentColor" strokeWidth="2"/><circle cx="12" cy="17" r="1.5" fill="currentColor"/><path d="M12 9v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>;
-    default:
-      return <svg width="16" height="16" viewBox="0 0 24 24"><path d="M12 2l3.1 6.3L22 9.3l-5 4.9 1.2 7-6.2-3.3L5.8 21l1.2-6.8-5-4.9 6.9-1z" fill="currentColor"/></svg>;
-  }
+function Marker({ variant }: { variant: IconListVariant }) {
+  if (variant === "check") return <span aria-hidden className="inline-block w-4 h-4 rounded-full grid place-items-center bg-[#27E3CE] text-[#0b1022] text-[10px]">✓</span>;
+  if (variant === "star")  return <span aria-hidden className="inline-block w-4 h-4 rounded-full grid place-items-center bg-[#FFC857] text-[#0b1022] text-[10px]">★</span>;
+  return <span aria-hidden className="inline-block w-2 h-2 rounded-full bg-[#5865F2]" />;
+}
+
+function safeHref(h?: string) {
+  const s = (h || "").trim().toLowerCase();
+  if (!s) return undefined;
+  if (s.startsWith("javascript:")) return "#";
+  if (/^https?:\/\//.test(s) || s.startsWith("#")) return h!;
+  return "#";
 }
 
 export default function IconListView({ block }: { block: IconListBlock }) {
+  const size = block.size ?? "md";
+  const gap  = block.gap ?? "md";
+  const align = block.align ?? "start";
+  const v = block.variant ?? "dot";
+
+  const sz = size === "lg" ? "text-base" : size === "sm" ? "text-xs" : "text-sm";
+  const gp = gap === "lg" ? "gap-3" : gap === "sm" ? "gap-1.5" : "gap-2";
+  const al = align === "center" ? "justify-center" : align === "end" ? "justify-end" : "justify-start";
+
+  function Item({ it }: { it: IconListItem }) {
+    const href = safeHref(it.href);
+    const content = (
+      <div className={`flex items-start ${gp}`}>
+        <div className="mt-1">
+          {block.variant === "custom" && it.icon
+            ? <span className="inline-block w-4 h-4 rounded bg-[#0f1630] border border-[#1f2751] text-[9px] text-[#c9d0e9] grid place-items-center">{it.icon.slice(0,2)}</span>
+            : <Marker variant={v} />}
+        </div>
+        <div>
+          <div className={`${sz} text-[#e6e9f4]`}>{it.label}</div>
+          {it.description && <div className="text-xs text-[#9aa3b2]">{it.description}</div>}
+        </div>
+      </div>
+    );
+    return href ? (
+      <a href={href} className="block hover:bg-[#121b3f] rounded-lg px-2 py-1" rel="noopener noreferrer nofollow">
+        {content}
+      </a>
+    ) : (
+      <div className="px-2 py-1">{content}</div>
+    );
+  }
+
   return (
-    <ul className="grid gap-1">
-      {block.items.map((it) => (
-        <li key={it.id} className="flex items-start gap-2 text-[#2b3050]">
-          <span className="mt-[2px] text-[#2a3b8f]"><Icon name={it.icon} /></span>
-          <span className="text-sm">{it.text}</span>
-        </li>
-      ))}
-    </ul>
+    <div className={`grid ${al} gap-1`}>
+      {block.items.map(it => <Item key={it.id} it={it} />)}
+    </div>
   );
 }
