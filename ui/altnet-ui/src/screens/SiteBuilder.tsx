@@ -281,18 +281,19 @@ export default function SiteBuilder() {
   const [canvasCols, setCanvasCols] = useState<1 | 2 | 3 | 4>(3);
   const [canvasGapX, setCanvasGapX] = useState<number>(16);
   const [canvasGapY, setCanvasGapY] = useState<number>(16);
-type Breakpoint = "desktop" | "tablet" | "mobile";
-type BlockStyle = { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
-type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyle };
+  type Breakpoint = "desktop" | "tablet" | "mobile";
+  type BlockStyle = { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+  type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyle };
 
-const [bp, setBp] = useState<Breakpoint>("desktop");
-const [iframeMode, setIframeMode] = useState<"fit" | Breakpoint>("fit");
-const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
+  const [bp, setBp] = useState<Breakpoint>("desktop");
+  const [iframeMode, setIframeMode] = useState<"fit" | Breakpoint>("fit");
+  const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
 
   // выбор блока
   const [selId, setSelId] = useState<string | null>(null);
-  const sel = useMemo(() => doc.blocks.find((b) => b.id === selId) ?? null, [doc.blocks, selId]);
   const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
+  useEffect(() => { setEditorTab("content"); }, [selId]);
+  const sel = useMemo(() => doc.blocks.find((b) => b.id === selId) ?? null, [doc.blocks, selId]);
 
   const patchBlock = useCallback((id: string, patch: Partial<any>) => {
     setDoc((d) => ({ ...d, blocks: d.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
@@ -316,8 +317,8 @@ const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobi
       return { ...d, blocks: next };
     });
   }, []);
-  
-  
+
+
 
   const moveBlock = useCallback((id: string, dir: -1 | 1) => {
     setDoc((d) => {
@@ -333,25 +334,25 @@ const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobi
   }, []);
 
   const resolveStyle = (b: any, cur: Breakpoint): BlockStyle => {
-  const base: BlockStyle = (b && b.style) || {};
-  const perAll: StyleByBp = (b && b.styleByBp) || {};
-  const per: BlockStyle = (perAll && (perAll as any)[cur]) || {};
-  return { ...base, ...per };
-};
-
-const styleInline = useCallback((b: any): React.CSSProperties => {
-  const s = resolveStyle(b, bp);
-  const pt = s.py != null ? s.py : s.pt;
-  const pb = s.py != null ? s.py : s.pb;
-  const mt = s.mt;
-  const mb = s.mb;
-  return {
-    ...(pt != null ? { paddingTop: Number(pt) } : {}),
-    ...(pb != null ? { paddingBottom: Number(pb) } : {}),
-    ...(mt != null ? { marginTop: Number(mt) } : {}),
-    ...(mb != null ? { marginBottom: Number(mb) } : {}),
+    const base: BlockStyle = (b && b.style) || {};
+    const perAll: StyleByBp = (b && b.styleByBp) || {};
+    const per: BlockStyle = (perAll && (perAll as any)[cur]) || {};
+    return { ...base, ...per };
   };
-}, [bp]);
+
+  const styleInline = useCallback((b: any): React.CSSProperties => {
+    const s = resolveStyle(b, bp);
+    const pt = s.py != null ? s.py : s.pt;
+    const pb = s.py != null ? s.py : s.pb;
+    const mt = s.mt;
+    const mb = s.mb;
+    return {
+      ...(pt != null ? { paddingTop: Number(pt) } : {}),
+      ...(pb != null ? { paddingBottom: Number(pb) } : {}),
+      ...(mt != null ? { marginTop: Number(mt) } : {}),
+      ...(mb != null ? { marginBottom: Number(mb) } : {}),
+    };
+  }, [bp]);
 
 
   // ── Превью блоков (мини-карточки на канвасе) ────────────────────────────────
@@ -399,7 +400,11 @@ const styleInline = useCallback((b: any): React.CSSProperties => {
   const previewOf = useCallback((b: Block) => {
     // общий враппер: применяем отступы/паддинги текущего устройства через styleInline
     const wrapStyled = (children: React.ReactNode, pad = true) => (
-      <div style={styleInline(b as any)} className={pad ? "p-3" : ""}>
+      <div
+        id={(b as any).anchorId || undefined}
+        className={`${pad ? "p-3 " : ""}${(b as any).className || ""}`}
+        style={styleInline(b as any)}
+      >
         {children}
       </div>
     );
@@ -503,8 +508,8 @@ const styleInline = useCallback((b: any): React.CSSProperties => {
             <a
               href={bt.href || "#"}
               className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${bt.variant === "secondary"
-                  ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
-                  : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
+                : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
                 }`}
               rel="noopener noreferrer nofollow"
               onClick={(e) => e.preventDefault()}
@@ -590,8 +595,8 @@ const styleInline = useCallback((b: any): React.CSSProperties => {
   const [previewHtml, setPreviewHtml] = useState<string>("");
   const [autoPreview, setAutoPreview] = useState<boolean>(true);
   const [isBuilding, setIsBuilding] = useState<boolean>(false);
-  
-void setBp; void iframeMode; void setIframeMode; void widthByBp; // временно отключаем варнинги кнопки устройств/iframe, появятся «неиспользуется …»
+
+
   // Скрытые блоки вырезаем из модели для экспорта/предпросмотра
   const docForBuild = useMemo(() => ({ ...doc, blocks: doc.blocks.filter((b) => !(b as any).hidden) }), [doc]);
 
@@ -1005,6 +1010,25 @@ void setBp; void iframeMode; void setIframeMode; void widthByBp; // времен
   // — Редактор свойств выбранного блока —
   const Editor = useCallback(() => {
     if (!sel) return <div className="text-xs text-[#9aa3b2]">Выберите блок слева.</div>;
+    const sBy: StyleByBp = (sel as any).styleByBp || {};
+    const sCur: BlockStyle = sBy[bp] || {};
+
+    // показываем число как строку в input
+    const readNum = (v: any) => (v == null ? "" : String(v));
+
+    // принимаем string|number, нормализуем -> number|undefined
+    const updCur = (patch: Partial<Record<keyof BlockStyle, string | number>>) => {
+      const normalized = Object.fromEntries(
+        Object.entries(patch).map(([k, v]) => [k, v === "" || v == null ? undefined : Number(v)])
+      ) as Partial<BlockStyle>;
+
+      const next: BlockStyle = { ...(sBy[bp] || {}), ...normalized };
+      patchBlock(sel.id, { styleByBp: { ...sBy, [bp]: next } } as any);
+    };
+
+    const tabBtn = (t: "content" | "style" | "advanced") =>
+      `px-3 py-1.5 text-sm rounded-md border ${editorTab === t ? "border-indigo-500/60 bg-[#121528] text-[#e6e9f4]" : "border-[#2a2f45] bg-[#0c0f1a] text-[#cfd5e6]"
+      }`;
     const id = sel.id;
     const row = (children: React.ReactNode) => <div className="grid gap-3">{children}</div>;
 
@@ -1025,6 +1049,54 @@ void setBp; void iframeMode; void setIframeMode; void widthByBp; // времен
         ))}
       </div>
     );
+
+    {/* STYLE: общие отступы по устройствам */ }
+    {
+      editorTab === "style" && (
+        <div className="grid gap-3">
+          <div className="flex items-center gap-1 text-xs">
+            <span className="opacity-70">Устройство:</span>
+            <button className={tabBtn("content").replace("text-sm", "text-xs")} onClick={() => setBp("desktop")}>Desktop</button>
+            <button className={tabBtn("content").replace("text-sm", "text-xs")} onClick={() => setBp("tablet")}>Tablet</button>
+            <button className={tabBtn("content").replace("text-sm", "text-xs")} onClick={() => setBp("mobile")}>Mobile</button>
+            <span className="ml-2 opacity-70">({bp})</span>
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            <Field label="mt"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.mt)} onChange={e => updCur({ mt: e.target.value })} placeholder="px" /></Field>
+            <Field label="mb"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.mb)} onChange={e => updCur({ mb: e.target.value })} placeholder="px" /></Field>
+            <Field label="pt"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.pt)} onChange={e => updCur({ pt: e.target.value })} placeholder="px" /></Field>
+            <Field label="pb"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.pb)} onChange={e => updCur({ pb: e.target.value })} placeholder="px" /></Field>
+            <Field label="py"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.py)} onChange={e => updCur({ py: e.target.value })} placeholder="px" /></Field>
+          </div>
+        </div>
+      )
+    }
+    { editorTab === "style" && <></> }
+    {
+      editorTab === "advanced" && (
+        <div className="grid gap-3">
+          <div className="flex gap-2">
+            <button className="px-2 py-1 rounded border border-[#2a2f45] bg-[#0c0f1a]" onClick={() => patchBlock(sel.id, { hidden: !((sel as any).hidden) } as any)}>
+              {(sel as any).hidden ? "Показать" : "Скрыть"}
+            </button>
+            <button className="px-2 py-1 rounded border border-[#2a2f45] bg-[#0c0f1a]" onClick={() => patchBlock(sel.id, { locked: !((sel as any).locked) } as any)}>
+              {(sel as any).locked ? "Разблокировать" : "Заблокировать"}
+            </button>
+          </div>
+          <Field label="ID (якорь)">
+            <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={(sel as any).anchorId || ""}
+              onChange={e => patchBlock(sel.id, { anchorId: e.target.value } as any)} />
+          </Field>
+          <Field label="CSS класс">
+            <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={(sel as any).className || ""}
+              onChange={e => patchBlock(sel.id, { className: e.target.value } as any)} />
+          </Field>
+        </div>
+      )
+    }
+    { editorTab !== "content" && <></> }
 
     // Контентные формы (как было)
     let contentNode: React.ReactNode = null;
@@ -1325,7 +1397,7 @@ void setBp; void iframeMode; void setIframeMode; void widthByBp; // времен
         {editorTab === "content" ? contentNode : editorTab === "style" ? styleNode : advancedNode}
       </>
     );
-  }, [sel, patchBlock, editorTab]);
+  }, [sel, patchBlock, bp, editorTab]);
 
 
   // Разметка: 3 колонки — слева настройки/палитра, центр — канвас, справа — свойства + предпросмотр
@@ -1612,22 +1684,44 @@ void setBp; void iframeMode; void setIframeMode; void widthByBp; // времен
         </div>
 
         <div className="rounded-2xl border border-[#1c2030] bg-[#0b0e18] overflow-hidden flex flex-col min-h-[320px]">
-          <div className="px-3 py-2 border-b border-[#1c2030] flex items-center gap-2 text-[#cfd5e6]">
+          <div className="flex items-center w-full gap-2">
             <span className="text-sm opacity-80">Предпросмотр (sandbox)</span>
-            <label className="ml-auto flex items-center gap-1 text-xs opacity-80">
-              <input type="checkbox" checked={autoPreview} onChange={(e) => setAutoPreview(e.target.checked)} />
-              автообновление
-            </label>
-            <button
-              className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] hover:bg-[#1f2336] text-xs"
-              onClick={() => void buildPreview()}
-              disabled={isBuilding}
-              title="Пересобрать предпросмотр"
-            >
-              {isBuilding ? "Сборка…" : "Обновить"}
-            </button>
+
+            <div className="flex items-center gap-2 text-xs ml-4">
+              <button className={`px-2 py-1 rounded border ${iframeMode === "fit" ? "border-indigo-500/60" : "border-[#2a2f45]"}`} onClick={() => setIframeMode("fit")}>Fit</button>
+              <button className={`px-2 py-1 rounded border ${iframeMode === "desktop" ? "border-indigo-500/60" : "border-[#2a2f45]"}`} onClick={() => { setIframeMode("desktop"); setBp("desktop"); }}>🖥 1280</button>
+              <button className={`px-2 py-1 rounded border ${iframeMode === "tablet" ? "border-indigo-500/60" : "border-[#2a2f45]"}`} onClick={() => { setIframeMode("tablet"); setBp("tablet"); }}>📱 834</button>
+              <button className={`px-2 py-1 rounded border ${iframeMode === "mobile" ? "border-indigo-500/60" : "border-[#2a2f45]"}`} onClick={() => { setIframeMode("mobile"); setBp("mobile"); }}>📱 390</button>
+            </div>
+
+            <div className="ml-auto flex items-center gap-3">
+              <label className="flex items-center gap-1 text-xs opacity-80">
+                <input type="checkbox" checked={autoPreview} onChange={(e) => setAutoPreview(e.target.checked)} />
+                автообновление
+              </label>
+              <button
+                className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] hover:bg-[#1f2336] text-xs"
+                onClick={() => void buildPreview()}
+                disabled={isBuilding}
+
+              >
+                {isBuilding ? "Сборка…" : "Обновить"}
+              </button>
+            </div>
           </div>
-          <iframe title="preview" sandbox="allow-same-origin" className="flex-1 w-full" srcDoc={previewHtml} />
+          <div className="flex-1 w-full overflow-auto">
+            <iframe
+              title="preview"
+              sandbox="allow-same-origin"
+              className="block"
+              style={{
+                width: iframeMode === "fit" ? "100%" : `${widthByBp[iframeMode as Breakpoint]}px`,
+                height: "100%",
+                margin: "0 auto",
+              }}
+              srcDoc={previewHtml}
+            />
+          </div>
         </div>
       </div>
     </div>
