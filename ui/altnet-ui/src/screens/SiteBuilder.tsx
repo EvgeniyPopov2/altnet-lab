@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
-import SortableCanvas from "../builder/SortableCanvas";
+import Canvas from "./SiteBuilder/canvas/Canvas";
+import Outline from "./SiteBuilder/outline/Outline";
 import Field from "./SiteBuilder/ui/Field";
 import type {
   BlockType,
@@ -1557,7 +1558,7 @@ export default function SiteBuilder() {
         <div className="flex justify-center">
           <div className="w-full" style={{ maxWidth: `${doc.theme?.container ?? 960}px` }}>
             <div className="rounded-2xl bg-white text-[#0f172a] shadow-[0_10px_40px_rgba(0,0,0,0.35)] border border-[#e5e7eb] p-6">
-              <SortableCanvas
+              <Canvas
                 cols={canvasCols}
                 gapX={canvasGapX}
                 gapY={canvasGapY}
@@ -1573,6 +1574,10 @@ export default function SiteBuilder() {
                 onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
                 onInsertAt={(index, type) => handleInsertAt(index, type)}
               />
+              {/* Навигатор блоков (пока только выбор). Показываем на широком экране. */}
+              <div className="mt-4 hidden xl:block">
+                <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
+              </div>
             </div>
           </div>
         </div>
