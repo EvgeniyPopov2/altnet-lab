@@ -1,175 +1,22 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
 import SortableCanvas from "../builder/SortableCanvas";
-
+import Field from "./SiteBuilder/ui/Field";
+import type {
+  BlockType,
+  HeroBlock, H1Block, HeadingBlock, PBlock, ImgBlock, BtnBlock,
+  ColsRatio, Cols2Block, SectionBlock,
+  GridBlock, Block, Doc
+} from "./SiteBuilder/types";
 type CheckItem = { id: string; ok: boolean; text: string };
 
-// ── Небольшая обёртка для подписи + контента поля ввода
-function Field(props: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="grid gap-1">
-      <span className="text-xs text-[#9aa3b2]">{props.label}</span>
-      {props.children}
-    </label>
-  );
-}
+
 
 const isHttp = (s: string) => /^https?:\/\//i.test(s || "");
 const isHash = (s: string) => (s || "").trim().startsWith("#");
 const notEmpty = (s?: string) => !!(s && s.trim().length > 0);
 
-/* =========================
- * Типы документа и блоков
- * ========================= */
-type BlockType =
-  | "hero"
-  | "h1"
-  | "heading"
-  | "p"
-  | "img"
-  | "btn"
-  | "cols2"
-  | "spacer"
-  | "divider"
-  | "section"
-  | "grid";
 
-type HeroBlock = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  type: "hero";
-  title: string;
-  subtitle?: string;
-  ctaText?: string;
-  ctaLink?: string;
-};
-
-type H1Block = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  align?: "left" | "center" | "right";
-  type: "h1";
-  text: string;
-};
-
-type PBlock = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  align?: "left" | "center" | "right";
-  type: "p";
-  text: string;
-};
-
-type ImgBlock = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  type: "img";
-  cid: string; // altfs://CID или http(s)
-  alt?: string;
-};
-
-type BtnBlock = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  type: "btn";
-  label: string;
-  href: string;
-  variant?: "primary" | "secondary";
-  align?: "left" | "center" | "right";
-};
-
-type ColsRatio = "5-7" | "6-6" | "7-5";
-
-type Cols2Block = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  type: "cols2";
-  title: string;
-  text: string;
-  img: string; // CID/URL
-  alt: string;
-  ratio: ColsRatio;
-  reverse?: boolean;
-};
-
-type SpacerBlock = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  type: "spacer";
-  size?: "xs" | "sm" | "md" | "lg" | "xl";
-};
-
-type DividerBlock = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  type: "divider";
-};
-
-type HeadingBlock = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  type: "heading";
-  text: string;
-  level?: "h2" | "h3" | "h4";
-  align?: "left" | "center" | "right";
-};
-
-type SectionBlock = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  type: "section";
-  title?: string;
-  text?: string;
-  align?: "left" | "center" | "right";
-  theme?: "auto" | "light" | "dark";
-  pad?: "sm" | "md" | "lg";
-  bg?: "none" | "subtle" | "card" | "accent";
-};
-
-type GridItem = { id: string; src: string; alt?: string; caption?: string };
-
-type GridBlock = {
-  id: string;
-  hidden?: boolean;
-  locked?: boolean;
-  type: "grid";
-  cols: 1 | 2 | 3 | 4;
-  items: GridItem[];
-};
-
-type Block =
-  | HeroBlock
-  | H1Block
-  | HeadingBlock
-  | PBlock
-  | ImgBlock
-  | BtnBlock
-  | Cols2Block
-  | SpacerBlock
-  | DividerBlock
-  | SectionBlock
-  | GridBlock;
-
-type Doc = {
-  title: string;
-  description?: string; // meta description
-  ogImage?: string;
-  theme?: {
-    accent?: string; // HEX или css-цвет
-    container?: number; // px
-  };
-  blocks: Block[];
-};
 
 const STORAGE_KEY = "altnet.sitebuilder.v1";
 
