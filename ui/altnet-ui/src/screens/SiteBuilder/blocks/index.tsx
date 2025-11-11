@@ -6,33 +6,31 @@ import BtnView from "./btn/view";
 import ImgView from "./img/view";
 import DividerView from "./divider/view";
 import SpacerView from "./spacer/view";
+import HeadingView from "./heading/view";
+import HeroView from "./hero/view";
+import Cols2View from "./cols2/view";
+import SectionView from "./section/view";
+import GridView from "./grid/view";
 
 /** Возвращает React-элемент превью для любого блока. */
 export function renderBlockView(b: Block) {
   switch (b.type) {
-    case "h1":
-      return <H1View block={b} />;
-    case "p":
-      return <PView block={b} />;
-    case "btn":
-      return <BtnView block={b} />;
-    case "img":
-      return <ImgView block={b} />;
-    case "divider":
-      return <DividerView block={b} />;
-    case "spacer":
-      return <SpacerView block={b} />;
-    // Остальные типы подключим в следующих шагах:
-    // case "heading": ...
-    // case "cols2": ...
-    // case "section": ...
-    // case "grid": ...
-    // case "hero": ...
+    case "h1":      return <H1View block={b} />;
+    case "heading": return <HeadingView block={b} />;
+    case "p":       return <PView block={b} />;
+    case "btn":     return <BtnView block={b} />;
+    case "img":     return <ImgView block={b} />;
+    case "divider": return <DividerView block={b} />;
+    case "spacer":  return <SpacerView block={b} />;
+    case "hero":    return <HeroView block={b} />;
+    case "cols2":   return <Cols2View block={b} />;
+    case "section": return <SectionView block={b} />;
+    case "grid":    return <GridView block={b} />;
     default:
-      return (
-        <div className="text-sm text-[#6b7390]">
-          Превью для блока <b>{b.type}</b> пока не реализовано.
-        </div>
-      );
+  return (
+    <div className="text-sm text-[#6b7390]">
+      Превью для блока пока не реализовано.
+    </div>
+  );
   }
 }
