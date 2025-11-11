@@ -50,6 +50,10 @@ import HotspotView from "./hotspot/view";
 import ContainerView from "./container/view";
 import SidebarView from "./sidebar/view";
 import OffcanvasView from "./offcanvas/view";
+import ShortcodeView from "./shortcode/view";
+import PriceTableView from "./pricetable/view";
+
+
 
 /** Возвращает React-элемент превью для любого блока. */
 export function renderBlockView(b: Block) {
@@ -108,6 +112,8 @@ export function renderBlockView(b: Block) {
     case "pagination":    return <PaginationView block={b} />;
     case "menu":         return <MenuView block={b} />;
     case "contentnav":   return <ContentNavView block={b} />;
+    case "shortcode":      return <ShortcodeView block={b as any} />;
+    case "pricetable":     return <PriceTableView block={b as any} />;
     default:
       return <div className="text-sm text-[#6b7390]">Превью для блока пока не реализовано.</div>;
   }

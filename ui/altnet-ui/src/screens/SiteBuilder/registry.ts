@@ -530,6 +530,53 @@ export function createDefaultBlock(type: InsertChoice): Block {
       return b;
     }
 
+    case "shortcode": {
+      const b: ShortcodeBlock = {
+        id: newId("sc"),
+        type: "shortcode",
+        title: "Видео (YouTube, безопасно)",
+        code: '[youtube id="dQw4w9WgXcQ"]',
+      };
+      return b;
+    }
+
+    case "pricetable": {
+      const b: PriceTableBlock = {
+        id: newId("pt"),
+        type: "pricetable",
+        plans: [
+          {
+            id: newId("pl"),
+            name: "Старт",
+            price: "0 ₽",
+            period: "/мес",
+            ctaLabel: "Начать",
+            ctaHref: "#start",
+            features: [
+              { id: newId("pf"), label: "1 сайт", included: true },
+              { id: newId("pf"), label: "Базовые блоки", included: true },
+              { id: newId("pf"), label: "Поддержка", included: false },
+            ],
+          },
+          {
+            id: newId("pl"),
+            name: "Про",
+            price: "299 ₽",
+            period: "/мес",
+            popular: true,
+            ctaLabel: "Выбрать",
+            ctaHref: "#pro",
+            features: [
+              { id: newId("pf"), label: "Безлимит блоков", included: true },
+              { id: newId("pf"), label: "CDR-защита загрузок", included: true },
+              { id: newId("pf"), label: "Приоритетная поддержка", included: true },
+            ],
+          },
+        ],
+      };
+      return b;
+    }
+
     default: {
       // Fallback: безопасный абзац.
       const b: PBlock = { id: newId("p"), type: "p", text: `Unsupported type: ${String(type)}`, align: "left" };

@@ -1,22 +1,34 @@
-import type { ImageBoxBlock } from "../../types";
+type ImageBoxItem = { id: string; title?: string; text?: string; alt?: string; src?: string; cid?: string };
+type ImageBoxLike = { items?: ImageBoxItem[]; columns?: 1|2|3|4 };
 
-export default function ImageBoxView({ block }: { block: ImageBoxBlock }) {
+function safeSrc(s?: string) {
+  const u = (s || "").trim();
+  if (!u) return "";
+  if (/^(https?:|data:|ipfs:|altfs:)/i.test(u)) return u;
+  return "";
+}
+
+export default function ImageBoxView({ block }: { block: ImageBoxLike }) {
+  const cols = block.columns ?? 3;
+  const grid = cols === 4 ? "md:grid-cols-4" : cols === 2 ? "md:grid-cols-2" : "md:grid-cols-3";
+  const items = block.items || [
+    { id: "p1", title: "Карта 1", text: "Описание", src: "https://picsum.photos/600/360?1" },
+    { id: "p2", title: "Карта 2", text: "Описание", src: "https://picsum.photos/600/360?2" },
+    { id: "p3", title: "Карта 3", text: "Описание", src: "https://picsum.photos/600/360?3" },
+  ];
   return (
-    <figure className="grid gap-2">
-      {block.src && (
-        <img
-          src={block.src}
-          alt={block.alt || ""}
-          className="w-full rounded-xl border border-[#2a2f45]"
-          draggable={false}
-        />
-      )}
-      {(block.title || block.text) && (
-        <figcaption className="grid gap-1">
-          {block.title && <div className="text-sm font-semibold text-[#e6e9f4]">{block.title}</div>}
-          {block.text && <div className="text-xs text-[#9aa3b2]">{block.text}</div>}
-        </figcaption>
-      )}
-    </figure>
+    <div className={`grid gap-3 ${grid}`}>
+      {items.map(it => (
+        <article key={it.id} className="rounded-2xl border border-[#1f2751] bg-[#0b1022] overflow-hidden">
+          {safeSrc(it.src || it.cid) && (
+            <img className="w-full h-auto object-cover" src={safeSrc(it.src || it.cid)} alt={it.alt || ""} />
+          )}
+          <div className="p-4">
+            <h4 className="text-sm font-semibold text-[#e6e9f4]">{it.title || "Заголовок"}</h4>
+            {it.text && <p className="text-xs text-[#c9d0e9] mt-1">{it.text}</p>}
+          </div>
+        </article>
+      ))}
+    </div>
   );
 }

@@ -554,7 +554,30 @@ export type OffcanvasBlock = {
   body?: string;              // текст-заглушка (пока без вложенных блоков)
 };
 
+// ── B6.k: новые блоки ─────────────────────────────────────────────────────────
+export type ShortcodeBlock = {
+  id: string;
+  type: "shortcode";
+  code: string; // например: [youtube id="dQw4w9WgXcQ"] или [soundcloud url="https://soundcloud.com/..."]
+  title?: string;
+};
 
+export type PriceTableFeature = { id: string; label: string; included?: boolean };
+export type PriceTablePlan = {
+  id: string;
+  name: string;
+  price: string;
+  period?: string;    // /mo, /yr
+  ctaLabel?: string;
+  ctaHref?: string;
+  popular?: boolean;
+  features?: PriceTableFeature[];
+};
+export type PriceTableBlock = {
+  id: string;
+  type: "pricetable";
+  plans: PriceTablePlan[];
+};
 
 export type Block =
   | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock
@@ -566,7 +589,7 @@ export type Block =
   | ProgressTrackerBlock | AnchorBlock | TocBlock
   | VideoBlock | GalleryBlock | CarouselBlock | CountdownBlock | MenuBlock | SearchBlock | ContentNavBlock
   | MapBlock | LottieBlock | MediaCarouselBlock | SlidesBlock | VideoPlaylistBlock | HotspotBlock
-  | ContainerBlock | SidebarBlock | OffcanvasBlock;
+  | ContainerBlock | SidebarBlock | OffcanvasBlock | ShortcodeBlock | PriceTableBlock;
 
 export type Doc = {
   title: string;
