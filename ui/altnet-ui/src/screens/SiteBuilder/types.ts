@@ -30,7 +30,13 @@ export type BlockType =
   | "pagination"
   | "social"
   | "iconbox"
-  | "imagebox";
+  | "imagebox"
+  | "pricelist"
+  | "testimonials"
+  | "share"
+  | "progresstracker"
+  | "anchor"
+  | "toc";
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
 export type Align = "left" | "center" | "right";
@@ -334,13 +340,59 @@ export type ImageBoxBlock = {
   text?: string;
 };
 
+// ── B6.e: price/testimonials/share/tracker/anchor/toc ────────────────────────
+export type PriceItem = { id: string; title: string; price: string; desc?: string };
+export type PriceListBlock = {
+  id: string;
+  type: "pricelist";
+  items: PriceItem[];
+};
+
+export type TestimonialItem = { id: string; author: string; text: string; role?: string };
+export type TestimonialsBlock = {
+  id: string;
+  type: "testimonials";
+  items: TestimonialItem[];
+};
+
+export type ShareNetwork = "copy" | "telegram" | "vk" | "twitter" | "facebook";
+export type ShareBlock = {
+  id: string;
+  type: "share";
+  url?: string;                // если не задан — берём location.href в рантайме (в SafePreview не будет доступа, поэтому опционально)
+  networks: ShareNetwork[];
+};
+
+export type ProgressStep = { id: string; label: string };
+export type ProgressTrackerBlock = {
+  id: string;
+  type: "progresstracker";
+  steps: ProgressStep[];
+  current: number;            // индекс 0..N-1
+};
+
+export type AnchorBlock = {
+  id: string;
+  type: "anchor";
+  name: string;               // якорь (id) для навигации, только [a-z0-9-_]
+  label?: string;             // человекочитаемое
+};
+
+export type TocItem = { id: string; label: string; href: string }; // href= "#id"
+export type TocBlock = {
+  id: string;
+  type: "toc";
+  items: TocItem[];          // пока ручной список; авто-скан добавим позже
+};
+
 export type Block =
   | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock
   | DividerBlock | SpacerBlock | Cols2Block | SectionBlock | GridBlock
   | IconBlock | IconListBlock | AlertBlock | HtmlBlock | CodeBlock
   | TabsBlock | AccordionBlock | BlockquoteBlock | CtaBlock | RatingBlock
   | CounterBlock | ProgressBlock | BreadcrumbsBlock | PaginationBlock | SocialBlock
-  | IconBoxBlock | ImageBoxBlock;
+  | IconBoxBlock | ImageBoxBlock
+  | PriceListBlock | TestimonialsBlock | ShareBlock | ProgressTrackerBlock | AnchorBlock | TocBlock;
 
 export type Doc = {
   title: string;

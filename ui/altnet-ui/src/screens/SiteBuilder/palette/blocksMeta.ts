@@ -54,6 +54,9 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "cnt-progress-bar", title: "Progress",     group: "Контент/Медиа", icon: "cnt-progress-bar.svg", description: "Полоса прогресса",    type: "progress" },
   { id: "cnt-icon-box",     title: "Icon box",     group: "Контент/Медиа", icon: "cnt-icon-box.svg",     description: "Иконка + текст",      type: "iconbox" }, // было unsupported — теперь вставляем
   { id: "cnt-image-box",    title: "Image box",    group: "Контент/Медиа", icon: "cnt-image-box.svg",    description: "Картинка + подпись",  type: "imagebox" },
+  { id: "cnt-price-list",    title: "Price list",    group: "Контент/Медиа", icon: "cnt-price-list.svg",    description: "Список цен",       type: "pricelist" },
+  { id: "util-testimonials", title: "Testimonials",  group: "Утилиты",        icon: "util-testimonials.svg", description: "Отзывы",           type: "testimonials" },
+  { id: "cnt-toc", title: "ToC", group: "Контент/Медиа", icon: "cnt-toc.svg", description: "Содержание", type: "toc" },
 
   // — Встраивания
   { id: "emb-html",      title: "HTML (Safe)", group: "Встраивания", icon: "emb-html.svg", description: "Санитизированный HTML", type: "html" },
@@ -67,6 +70,8 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "util-alert",    title: "Alert",    group: "Утилиты", icon: "util-alert.svg", description: "Информационный блок", type: "alert" },
   { id: "util-rating",   title: "Rating",    group: "Утилиты", icon: "util-rating.svg", description: "Звёздный рейтинг", type: "rating" },
   { id: "util-social",     title: "Social",      group: "Утилиты",  icon: "util-social.svg",     description: "Соц. ссылки",      type: "social" },
+  { id: "util-share",            title: "Share",            group: "Утилиты", icon: "util-share.svg",            description: "Поделиться",        type: "share" },
+  { id: "util-progress-tracker", title: "Progress tracker", group: "Утилиты", icon: "util-progress-tracker.svg", description: "Шаги процесса",     type: "progresstracker" },
 
   // — Брендинг (пока как image/presets)
   { id: "brand-logo",    title: "Logo",     group: "Брендинг", icon: "brand-logo.svg", description: "Логотип", type: "img" },
@@ -75,6 +80,7 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "nav-menu",      title: "Menu",     group: "Навигация", icon: "nav-menu.svg", description: "Меню навигации", type: "unsupported" },
   { id: "nav-breadcrumbs", title: "Breadcrumbs", group: "Навигация", icon: "nav-breadcrumbs.svg", description: "Хлебные крошки", type: "breadcrumbs" },
   { id: "nav-pagination",  title: "Pagination",  group: "Навигация", icon: "nav-pagination.svg",  description: "Пагинация",       type: "pagination" },
+  { id: "nav-anchor", title: "Anchor", group: "Навигация", icon: "nav-anchor.svg", description: "Якорь для переходов", type: "anchor" },
 
   // — Пресеты (позже, составные)
   { id: "preset-bio-card", title: "Bio card", group: "Пресеты", icon: "preset-bio-card.svg", description: "Готовая карточка", type: "unsupported" },

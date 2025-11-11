@@ -28,6 +28,12 @@ import PaginationView from "./pagination/view";
 import SocialView from "./social/view";
 import IconBoxView from "./iconbox/view";
 import ImageBoxView from "./imagebox/view";
+import PriceListView from "./pricelist/view";
+import TestimonialsView from "./testimonials/view";
+import ShareView from "./share/view";
+import ProgressTrackerView from "./progresstracker/view";
+import AnchorView from "./anchor/view";
+import TocView from "./toc/view";
 
 /** Возвращает React-элемент превью для любого блока. */
 export function renderBlockView(b: Block) {
@@ -60,6 +66,12 @@ export function renderBlockView(b: Block) {
     case "social":      return <SocialView block={b} />;
     case "iconbox":     return <IconBoxView block={b} />;
     case "imagebox":    return <ImageBoxView block={b} />;
+    case "pricelist":       return <PriceListView block={b} />;
+    case "testimonials":    return <TestimonialsView block={b} />;
+    case "share":           return <ShareView block={b} />;
+    case "progresstracker": return <ProgressTrackerView block={b} />;
+    case "anchor":          return <AnchorView block={b} />;
+    case "toc":             return <TocView block={b} />;
     default:
       return <div className="text-sm text-[#6b7390]">Превью для блока пока не реализовано.</div>;
   }

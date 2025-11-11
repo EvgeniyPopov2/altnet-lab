@@ -8,6 +8,7 @@ import type {
   IconBlock, IconListBlock, AlertBlock, HtmlBlock, CodeBlock,
   TabsBlock, AccordionBlock, BlockquoteBlock, CtaBlock, RatingBlock,
   CounterBlock, ProgressBlock, BreadcrumbsBlock, PaginationBlock, SocialBlock, IconBoxBlock, ImageBoxBlock,
+  PriceListBlock, TestimonialsBlock, ShareBlock, ProgressTrackerBlock, AnchorBlock, TocBlock,
 } from "./types";
 
 // Берём точный union InsertChoice из SortableCanvas.
@@ -132,7 +133,7 @@ export function createDefaultBlock(type: InsertChoice): Block {
       };
       return b;
     }
-    
+
     case "tabs": {
       const b: TabsBlock = {
         id: newId("tabs"),
@@ -243,6 +244,71 @@ export function createDefaultBlock(type: InsertChoice): Block {
         alt: "Демо",
         title: "Картинка с заголовком",
         text: "Подпись к изображению.",
+      };
+      return b;
+    }
+
+    case "pricelist": {
+      const b: PriceListBlock = {
+        id: newId("pl"),
+        type: "pricelist",
+        items: [
+          { id: newId("pi"), title: "Базовый", price: "990 ₽", desc: "Для старта" },
+          { id: newId("pi"), title: "Профи", price: "2 490 ₽", desc: "Для команды" },
+        ],
+      };
+      return b;
+    }
+    case "testimonials": {
+      const b: TestimonialsBlock = {
+        id: newId("ts"),
+        type: "testimonials",
+        items: [
+          { id: newId("t"), author: "Анна", text: "Очень удобно и быстро!", role: "PM" },
+          { id: newId("t"), author: "Илья", text: "Классный конструктор.", role: "Разработчик" },
+        ],
+      };
+      return b;
+    }
+    case "share": {
+      const b: ShareBlock = {
+        id: newId("sh"),
+        type: "share",
+        url: "",
+        networks: ["copy", "telegram", "twitter"],
+      };
+      return b;
+    }
+    case "progresstracker": {
+      const b: ProgressTrackerBlock = {
+        id: newId("pt"),
+        type: "progresstracker",
+        steps: [
+          { id: newId("s"), label: "Шаг 1" },
+          { id: newId("s"), label: "Шаг 2" },
+          { id: newId("s"), label: "Готово" },
+        ],
+        current: 1,
+      };
+      return b;
+    }
+    case "anchor": {
+      const b: AnchorBlock = {
+        id: newId("anc"),
+        type: "anchor",
+        name: "section-1",
+        label: "Секция 1",
+      };
+      return b;
+    }
+    case "toc": {
+      const b: TocBlock = {
+        id: newId("toc"),
+        type: "toc",
+        items: [
+          { id: newId("ti"), label: "Вступление", href: "#intro" },
+          { id: newId("ti"), label: "Раздел 1", href: "#section-1" },
+        ],
       };
       return b;
     }
