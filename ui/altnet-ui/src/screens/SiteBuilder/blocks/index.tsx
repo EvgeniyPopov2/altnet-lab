@@ -34,6 +34,13 @@ import ShareView from "./share/view";
 import ProgressTrackerView from "./progresstracker/view";
 import AnchorView from "./anchor/view";
 import TocView from "./toc/view";
+import VideoView from "./video/view";
+import GalleryView from "./gallery/view";
+import CarouselView from "./carousel/view";
+import CountdownView from "./countdown/view";
+import MenuView from "./menu/view";
+import SearchView from "./search/view";
+import ContentNavView from "./contentnav/view";
 
 /** Возвращает React-элемент превью для любого блока. */
 export function renderBlockView(b: Block) {
@@ -72,6 +79,13 @@ export function renderBlockView(b: Block) {
     case "progresstracker": return <ProgressTrackerView block={b} />;
     case "anchor":          return <AnchorView block={b} />;
     case "toc":             return <TocView block={b} />;
+    case "video":       return <VideoView block={b} />;
+    case "gallery":     return <GalleryView block={b} />;
+    case "carousel":    return <CarouselView block={b} />;
+    case "countdown":   return <CountdownView block={b} />;
+    case "menu":        return <MenuView block={b} />;
+    case "search":      return <SearchView block={b} />;
+    case "contentnav":  return <ContentNavView block={b} />;
     default:
       return <div className="text-sm text-[#6b7390]">Превью для блока пока не реализовано.</div>;
   }

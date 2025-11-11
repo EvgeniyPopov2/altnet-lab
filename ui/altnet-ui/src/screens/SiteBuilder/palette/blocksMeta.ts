@@ -57,6 +57,9 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "cnt-price-list",    title: "Price list",    group: "Контент/Медиа", icon: "cnt-price-list.svg",    description: "Список цен",       type: "pricelist" },
   { id: "util-testimonials", title: "Testimonials",  group: "Утилиты",        icon: "util-testimonials.svg", description: "Отзывы",           type: "testimonials" },
   { id: "cnt-toc", title: "ToC", group: "Контент/Медиа", icon: "cnt-toc.svg", description: "Содержание", type: "toc" },
+  { id: "basic-video",   title: "Video",     group: "Базовые",        icon: "basic-video.svg",   description: "HTML5 видео",           type: "video" },
+  { id: "cnt-gallery",   title: "Gallery",   group: "Контент/Медиа",  icon: "cnt-gallery.svg",   description: "Галерея изображений",   type: "gallery" },
+  { id: "cnt-carousel",  title: "Carousel",  group: "Контент/Медиа",  icon: "cnt-carousel.svg",  description: "Карусель слайдов",      type: "carousel" },
 
   // — Встраивания
   { id: "emb-html",      title: "HTML (Safe)", group: "Встраивания", icon: "emb-html.svg", description: "Санитизированный HTML", type: "html" },
@@ -72,6 +75,7 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "util-social",     title: "Social",      group: "Утилиты",  icon: "util-social.svg",     description: "Соц. ссылки",      type: "social" },
   { id: "util-share",            title: "Share",            group: "Утилиты", icon: "util-share.svg",            description: "Поделиться",        type: "share" },
   { id: "util-progress-tracker", title: "Progress tracker", group: "Утилиты", icon: "util-progress-tracker.svg", description: "Шаги процесса",     type: "progresstracker" },
+  { id: "util-countdown", title: "Countdown", group: "Утилиты",       icon: "util-countdown.svg", description: "Обратный отсчёт", type: "countdown" },
 
   // — Брендинг (пока как image/presets)
   { id: "brand-logo",    title: "Logo",     group: "Брендинг", icon: "brand-logo.svg", description: "Логотип", type: "img" },
@@ -81,6 +85,9 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "nav-breadcrumbs", title: "Breadcrumbs", group: "Навигация", icon: "nav-breadcrumbs.svg", description: "Хлебные крошки", type: "breadcrumbs" },
   { id: "nav-pagination",  title: "Pagination",  group: "Навигация", icon: "nav-pagination.svg",  description: "Пагинация",       type: "pagination" },
   { id: "nav-anchor", title: "Anchor", group: "Навигация", icon: "nav-anchor.svg", description: "Якорь для переходов", type: "anchor" },
+  { id: "nav-menu",        title: "Menu",        group: "Навигация", icon: "nav-menu.svg",        description: "Гориз./верт. меню", type: "menu" },
+  { id: "nav-search",      title: "Search",      group: "Навигация", icon: "nav-search.svg",      description: "Поле поиска",        type: "search" },
+  { id: "nav-content-nav", title: "Content nav", group: "Навигация", icon: "nav-content-nav.svg", description: "Навигатор по секциям", type: "contentnav" },
 
   // — Пресеты (позже, составные)
   { id: "preset-bio-card", title: "Bio card", group: "Пресеты", icon: "preset-bio-card.svg", description: "Готовая карточка", type: "unsupported" },

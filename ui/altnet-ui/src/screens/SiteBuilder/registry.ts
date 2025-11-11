@@ -9,6 +9,7 @@ import type {
   TabsBlock, AccordionBlock, BlockquoteBlock, CtaBlock, RatingBlock,
   CounterBlock, ProgressBlock, BreadcrumbsBlock, PaginationBlock, SocialBlock, IconBoxBlock, ImageBoxBlock,
   PriceListBlock, TestimonialsBlock, ShareBlock, ProgressTrackerBlock, AnchorBlock, TocBlock,
+  VideoBlock, GalleryBlock, CarouselBlock, CountdownBlock, MenuBlock, SearchBlock, ContentNavBlock,
 } from "./types";
 
 // Берём точный union InsertChoice из SortableCanvas.
@@ -308,6 +309,85 @@ export function createDefaultBlock(type: InsertChoice): Block {
         items: [
           { id: newId("ti"), label: "Вступление", href: "#intro" },
           { id: newId("ti"), label: "Раздел 1", href: "#section-1" },
+        ],
+      };
+      return b;
+    }
+
+    case "video": {
+      const b: VideoBlock = {
+        id: newId("vid"),
+        type: "video",
+        src: "https://www.w3schools.com/html/mov_bbb.mp4",
+        poster: "",
+        muted: false,
+        loop: false,
+      };
+      return b;
+    }
+    case "gallery": {
+      const b: GalleryBlock = {
+        id: newId("gal"),
+        type: "gallery",
+        cols: 3,
+        items: [
+          { id: newId("gi"), src: "https://picsum.photos/seed/1/800/600", alt: "Фото 1" },
+          { id: newId("gi"), src: "https://picsum.photos/seed/2/800/600", alt: "Фото 2" },
+          { id: newId("gi"), src: "https://picsum.photos/seed/3/800/600", alt: "Фото 3" },
+        ],
+      };
+      return b;
+    }
+    case "carousel": {
+      const b: CarouselBlock = {
+        id: newId("car"),
+        type: "carousel",
+        initial: 0,
+        slides: [
+          { id: newId("cs"), src: "https://picsum.photos/seed/a/1200/600", caption: "Слайд A" },
+          { id: newId("cs"), src: "https://picsum.photos/seed/b/1200/600", caption: "Слайд B" },
+        ],
+      };
+      return b;
+    }
+    case "countdown": {
+      const b: CountdownBlock = {
+        id: newId("cd"),
+        type: "countdown",
+        target: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+      };
+      return b;
+    }
+    case "menu": {
+      const b: MenuBlock = {
+        id: newId("mn"),
+        type: "menu",
+        orientation: "horizontal",
+        items: [
+          { id: newId("mi"), label: "Главная", href: "#" },
+          { id: newId("mi"), label: "Контакты", href: "#" },
+        ],
+      };
+      return b;
+    }
+    case "search": {
+      const b: SearchBlock = {
+        id: newId("sr"),
+        type: "search",
+        placeholder: "Поиск…",
+        action: "#",
+        method: "GET",
+      };
+      return b;
+    }
+    case "contentnav": {
+      const b: ContentNavBlock = {
+        id: newId("cn"),
+        type: "contentnav",
+        orientation: "horizontal",
+        items: [
+          { id: newId("ci"), label: "Вступление", href: "#intro" },
+          { id: newId("ci"), label: "Раздел 1", href: "#section-1" },
         ],
       };
       return b;

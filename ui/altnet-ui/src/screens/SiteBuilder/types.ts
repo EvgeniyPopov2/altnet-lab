@@ -36,7 +36,14 @@ export type BlockType =
   | "share"
   | "progresstracker"
   | "anchor"
-  | "toc";
+  | "toc"
+  | "video"
+  | "gallery"
+  | "carousel"
+  | "countdown"
+  | "menu"
+  | "search"
+  | "contentnav";
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
 export type Align = "left" | "center" | "right";
@@ -385,14 +392,72 @@ export type TocBlock = {
   items: TocItem[];          // пока ручной список; авто-скан добавим позже
 };
 
+// ── B6.f: video/gallery/carousel/countdown/menu/search/contentnav ────────────
+export type VideoBlock = {
+  id: string;
+  type: "video";
+  src?: string;       // https:, ipfs:, data: — санитизируем
+  poster?: string;
+  loop?: boolean;
+  muted?: boolean;
+};
+
+export type GalleryItem = { id: string; src: string; alt?: string };
+export type GalleryBlock = {
+  id: string;
+  type: "gallery";
+  cols?: 2 | 3 | 4;
+  items: GalleryItem[];
+};
+
+export type CarouselSlide = { id: string; src: string; alt?: string; caption?: string };
+export type CarouselBlock = {
+  id: string;
+  type: "carousel";
+  slides: CarouselSlide[];
+  initial?: number;
+};
+
+export type CountdownBlock = {
+  id: string;
+  type: "countdown";
+  target: string;  // ISO-дата/время
+};
+
+export type MenuItem = { id: string; label: string; href: string };
+export type MenuOrientation = "horizontal" | "vertical";
+export type MenuBlock = {
+  id: string;
+  type: "menu";
+  items: MenuItem[];
+  orientation?: MenuOrientation;
+};
+
+export type SearchBlock = {
+  id: string;
+  type: "search";
+  placeholder?: string;
+  action?: string; // по умолчанию '#'
+  method?: "GET" | "POST";
+};
+
+export type ContentNavItem = { id: string; label: string; href: string }; // href="#id"
+export type ContentNavBlock = {
+  id: string;
+  type: "contentnav";
+  items: ContentNavItem[];
+  orientation?: MenuOrientation;
+};
+
 export type Block =
   | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock
   | DividerBlock | SpacerBlock | Cols2Block | SectionBlock | GridBlock
   | IconBlock | IconListBlock | AlertBlock | HtmlBlock | CodeBlock
   | TabsBlock | AccordionBlock | BlockquoteBlock | CtaBlock | RatingBlock
   | CounterBlock | ProgressBlock | BreadcrumbsBlock | PaginationBlock | SocialBlock
-  | IconBoxBlock | ImageBoxBlock
-  | PriceListBlock | TestimonialsBlock | ShareBlock | ProgressTrackerBlock | AnchorBlock | TocBlock;
+  | IconBoxBlock | ImageBoxBlock | PriceListBlock | TestimonialsBlock | ShareBlock
+  | ProgressTrackerBlock | AnchorBlock | TocBlock
+  | VideoBlock | GalleryBlock | CarouselBlock | CountdownBlock | MenuBlock | SearchBlock | ContentNavBlock;
 
 export type Doc = {
   title: string;

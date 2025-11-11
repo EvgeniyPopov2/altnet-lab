@@ -13,7 +13,8 @@ export type InsertChoice =
   | "icon" | "iconlist" | "alert" | "html" | "code"
   | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
   | "counter" | "progress" | "breadcrumbs" | "pagination" | "social" | "iconbox" | "imagebox"
-  | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc";
+  | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
+  | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav";
 
 type Props<T extends SortableLike> = {
   cols?: 1 | 2 | 3 | 4;
