@@ -72,9 +72,9 @@ export function createDefaultBlock(type: InsertChoice): Block {
       const b: SectionBlock = {
         id: newId("sec"),
         type: "section",
-        theme: "default",
+        theme: "auto",
         pad: "md",
-        bg: "transparent",
+        bg: "none",
         align: "left",
         title: "",
         text: ""
