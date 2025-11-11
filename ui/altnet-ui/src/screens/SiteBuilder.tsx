@@ -281,6 +281,13 @@ export default function SiteBuilder() {
   const [canvasCols, setCanvasCols] = useState<1 | 2 | 3 | 4>(3);
   const [canvasGapX, setCanvasGapX] = useState<number>(16);
   const [canvasGapY, setCanvasGapY] = useState<number>(16);
+type Breakpoint = "desktop" | "tablet" | "mobile";
+type BlockStyle = { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyle };
+
+const [bp, setBp] = useState<Breakpoint>("desktop");
+const [iframeMode, setIframeMode] = useState<"fit" | Breakpoint>("fit");
+const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
 
   // выбор блока
   const [selId, setSelId] = useState<string | null>(null);
@@ -309,6 +316,8 @@ export default function SiteBuilder() {
       return { ...d, blocks: next };
     });
   }, []);
+  
+  
 
   const moveBlock = useCallback((id: string, dir: -1 | 1) => {
     setDoc((d) => {
@@ -323,16 +332,27 @@ export default function SiteBuilder() {
     });
   }, []);
 
-  const styleInline = (b: any): React.CSSProperties => {
-    const s = (b && b.style) || {};
-    const px = (v: any) => (typeof v === "number" ? v : undefined);
-    return {
-      marginTop: px(s.mt),
-      marginBottom: px(s.mb),
-      paddingTop: px(s.pt ?? s.py),
-      paddingBottom: px(s.pb ?? s.py),
-    };
+  const resolveStyle = (b: any, cur: Breakpoint): BlockStyle => {
+  const base: BlockStyle = (b && b.style) || {};
+  const perAll: StyleByBp = (b && b.styleByBp) || {};
+  const per: BlockStyle = (perAll && (perAll as any)[cur]) || {};
+  return { ...base, ...per };
+};
+
+const styleInline = useCallback((b: any): React.CSSProperties => {
+  const s = resolveStyle(b, bp);
+  const pt = s.py != null ? s.py : s.pt;
+  const pb = s.py != null ? s.py : s.pb;
+  const mt = s.mt;
+  const mb = s.mb;
+  return {
+    ...(pt != null ? { paddingTop: Number(pt) } : {}),
+    ...(pb != null ? { paddingBottom: Number(pb) } : {}),
+    ...(mt != null ? { marginTop: Number(mt) } : {}),
+    ...(mb != null ? { marginBottom: Number(mb) } : {}),
   };
+}, [bp]);
+
 
   // ── Превью блоков (мини-карточки на канвасе) ────────────────────────────────
   const renderPreviewBlock = useCallback((b: Block) => {
@@ -377,11 +397,11 @@ export default function SiteBuilder() {
 
   // ── Полноценное превью для «мини-сайта» внутри карточки блока (инлайн правка текстов)
   const previewOf = useCallback((b: Block) => {
-    const commonWrap = (children: React.ReactNode, pad = true) => (
-      <div className={pad ? "p-3" : ""}>{children}</div>
-    );
+    // общий враппер: применяем отступы/паддинги текущего устройства через styleInline
     const wrapStyled = (children: React.ReactNode, pad = true) => (
-      <div style={styleInline(b as any)}>{commonWrap(children, pad)}</div>
+      <div style={styleInline(b as any)} className={pad ? "p-3" : ""}>
+        {children}
+      </div>
     );
 
     if ((b as any).hidden) {
@@ -483,8 +503,8 @@ export default function SiteBuilder() {
             <a
               href={bt.href || "#"}
               className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${bt.variant === "secondary"
-                ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
-                : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                  ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
+                  : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
                 }`}
               rel="noopener noreferrer nofollow"
               onClick={(e) => e.preventDefault()}
@@ -502,13 +522,14 @@ export default function SiteBuilder() {
       }
 
       case "spacer": {
-        return <div style={styleInline(b as any)}><div className="h-8" /></div>;
+        return wrapStyled(<div className="h-8" />, false);
       }
 
       default:
         return wrapStyled(<div className="text-xs text-[#9aa3b2]">[Превью для типа «{(b as any).type}» пока нет]</div>);
     }
-  }, [patchBlock, setSelId]);
+  }, [patchBlock, setSelId, styleInline]);
+
 
 
   // Вставка нового блока в «слот» канваса
@@ -569,7 +590,8 @@ export default function SiteBuilder() {
   const [previewHtml, setPreviewHtml] = useState<string>("");
   const [autoPreview, setAutoPreview] = useState<boolean>(true);
   const [isBuilding, setIsBuilding] = useState<boolean>(false);
-
+  
+void setBp; void iframeMode; void setIframeMode; void widthByBp; // временно отключаем варнинги кнопки устройств/iframe, появятся «неиспользуется …»
   // Скрытые блоки вырезаем из модели для экспорта/предпросмотра
   const docForBuild = useMemo(() => ({ ...doc, blocks: doc.blocks.filter((b) => !(b as any).hidden) }), [doc]);
 
