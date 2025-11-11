@@ -41,6 +41,12 @@ import CountdownView from "./countdown/view";
 import MenuView from "./menu/view";
 import SearchView from "./search/view";
 import ContentNavView from "./contentnav/view";
+import MapView from "./map/view";
+import LottieView from "./lottie/view";
+import MediaCarouselView from "./mediacarousel/view";
+import SlidesView from "./slides/view";
+import VideoPlaylistView from "./videoplaylist/view";
+import HotspotView from "./hotspot/view";
 
 /** Возвращает React-элемент превью для любого блока. */
 export function renderBlockView(b: Block) {
@@ -86,6 +92,12 @@ export function renderBlockView(b: Block) {
     case "menu":        return <MenuView block={b} />;
     case "search":      return <SearchView block={b} />;
     case "contentnav":  return <ContentNavView block={b} />;
+    case "map":            return <MapView block={b} />;
+    case "lottie":         return <LottieView block={b} />;
+    case "mediacarousel":  return <MediaCarouselView block={b} />;
+    case "slides":         return <SlidesView block={b} />;
+    case "videoplaylist":  return <VideoPlaylistView block={b} />;
+    case "hotspot":        return <HotspotView block={b} />;
     default:
       return <div className="text-sm text-[#6b7390]">Превью для блока пока не реализовано.</div>;
   }

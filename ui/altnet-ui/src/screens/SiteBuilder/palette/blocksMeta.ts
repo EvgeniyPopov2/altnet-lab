@@ -60,6 +60,11 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "basic-video",   title: "Video",     group: "Базовые",        icon: "basic-video.svg",   description: "HTML5 видео",           type: "video" },
   { id: "cnt-gallery",   title: "Gallery",   group: "Контент/Медиа",  icon: "cnt-gallery.svg",   description: "Галерея изображений",   type: "gallery" },
   { id: "cnt-carousel",  title: "Carousel",  group: "Контент/Медиа",  icon: "cnt-carousel.svg",  description: "Карусель слайдов",      type: "carousel" },
+  { id: "cnt-lottie",            title: "Lottie",         group: "Контент/Медиа",  icon: "cnt-lottie.svg",            description: "Анимация Lottie (превью)",       type: "lottie" },
+  { id: "cnt-media-carousel",    title: "Media carousel", group: "Контент/Медиа",  icon: "cnt-media-carousel.svg",    description: "Карусель медиа",                 type: "mediacarousel" },
+  { id: "cnt-slides",            title: "Slides",         group: "Контент/Медиа",  icon: "cnt-slides.svg",            description: "Текстовые слайды",               type: "slides" },
+  { id: "cnt-video-playlist",    title: "Video playlist", group: "Контент/Медиа",  icon: "cnt-video-playlist.svg",    description: "Плейлист видео",                  type: "videoplaylist" },
+  { id: "cnt-hotspot",           title: "Hotspot",        group: "Контент/Медиа",  icon: "cnt-hotspot.svg",           description: "Изображение с метками",          type: "hotspot" },
 
   // — Встраивания
   { id: "emb-html",      title: "HTML (Safe)", group: "Встраивания", icon: "emb-html.svg", description: "Санитизированный HTML", type: "html" },
@@ -76,6 +81,7 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "util-share",            title: "Share",            group: "Утилиты", icon: "util-share.svg",            description: "Поделиться",        type: "share" },
   { id: "util-progress-tracker", title: "Progress tracker", group: "Утилиты", icon: "util-progress-tracker.svg", description: "Шаги процесса",     type: "progresstracker" },
   { id: "util-countdown", title: "Countdown", group: "Утилиты",       icon: "util-countdown.svg", description: "Обратный отсчёт", type: "countdown" },
+  { id: "util-map",              title: "Map",            group: "Утилиты",       icon: "util-map.svg",              description: "Карта (заглушка + ссылка OSM)", type: "map" },
 
   // — Брендинг (пока как image/presets)
   { id: "brand-logo",    title: "Logo",     group: "Брендинг", icon: "brand-logo.svg", description: "Логотип", type: "img" },

@@ -3,47 +3,15 @@
 // Никакой логики — только описательные интерфейсы/типы.
 
 export type BlockType =
-  | "hero"
-  | "h1"
-  | "heading"
-  | "p"
-  | "btn"
-  | "img"
-  | "divider"
-  | "spacer"
-  | "cols2"
-  | "section"
-  | "grid"
-  | "icon"
-  | "iconlist"
-  | "alert"
-  | "html"
-  | "code"
-  | "tabs"
-  | "accordion"
-  | "blockquote"
-  | "cta"
-  | "rating"
-  | "counter"
-  | "progress"
-  | "breadcrumbs"
-  | "pagination"
-  | "social"
-  | "iconbox"
-  | "imagebox"
-  | "pricelist"
-  | "testimonials"
-  | "share"
-  | "progresstracker"
-  | "anchor"
-  | "toc"
-  | "video"
-  | "gallery"
-  | "carousel"
-  | "countdown"
-  | "menu"
-  | "search"
-  | "contentnav";
+  | "hero" | "h1" | "heading" | "p" | "btn" | "img" | "divider" | "spacer"
+  | "cols2" | "section" | "grid"
+  | "icon" | "iconlist" | "alert" | "html" | "code"
+  | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
+  | "counter" | "progress" | "breadcrumbs" | "pagination" | "social"
+  | "iconbox" | "imagebox"
+  | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
+  | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
+  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot";
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
 export type Align = "left" | "center" | "right";
@@ -449,6 +417,60 @@ export type ContentNavBlock = {
   orientation?: MenuOrientation;
 };
 
+// ── B6.g: map/lottie/mediacarousel/slides/videoplaylist/hotspot ──────────────
+export type MapBlock = {
+  id: string;
+  type: "map";
+  lat: number;
+  lon: number;
+  zoom?: number;                 // 1..20
+  label?: string;
+  style?: "auto" | "light" | "dark";
+};
+
+export type LottieBlock = {
+  id: string;
+  type: "lottie";
+  src?: string;                  // ссылка на .json (без внешних скриптов)
+  autoplay?: boolean;
+  loop?: boolean;
+  poster?: string;               // картинка-заглушка
+  caption?: string;
+};
+
+export type MediaSlide = { id: string; kind: "img" | "video"; src: string; alt?: string; caption?: string };
+export type MediaCarouselBlock = {
+  id: string;
+  type: "mediacarousel";
+  slides: MediaSlide[];
+  initial?: number;
+};
+
+export type TextSlide = { id: string; title?: string; text?: string; ctaLabel?: string; ctaHref?: string };
+export type SlidesBlock = {
+  id: string;
+  type: "slides";
+  slides: TextSlide[];
+  initial?: number;
+};
+
+export type VideoItem = { id: string; src: string; title?: string; poster?: string };
+export type VideoPlaylistBlock = {
+  id: string;
+  type: "videoplaylist";
+  items: VideoItem[];
+  initial?: number;
+};
+
+export type HotspotMarker = { id: string; x: number; y: number; label?: string; href?: string }; // x/y — проценты 0..100
+export type HotspotBlock = {
+  id: string;
+  type: "hotspot";
+  src: string;
+  alt?: string;
+  markers: HotspotMarker[];
+};
+
 export type Block =
   | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock
   | DividerBlock | SpacerBlock | Cols2Block | SectionBlock | GridBlock
@@ -457,7 +479,8 @@ export type Block =
   | CounterBlock | ProgressBlock | BreadcrumbsBlock | PaginationBlock | SocialBlock
   | IconBoxBlock | ImageBoxBlock | PriceListBlock | TestimonialsBlock | ShareBlock
   | ProgressTrackerBlock | AnchorBlock | TocBlock
-  | VideoBlock | GalleryBlock | CarouselBlock | CountdownBlock | MenuBlock | SearchBlock | ContentNavBlock;
+  | VideoBlock | GalleryBlock | CarouselBlock | CountdownBlock | MenuBlock | SearchBlock | ContentNavBlock
+  | MapBlock | LottieBlock | MediaCarouselBlock | SlidesBlock | VideoPlaylistBlock | HotspotBlock;
 
 export type Doc = {
   title: string;

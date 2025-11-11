@@ -10,6 +10,7 @@ import type {
   CounterBlock, ProgressBlock, BreadcrumbsBlock, PaginationBlock, SocialBlock, IconBoxBlock, ImageBoxBlock,
   PriceListBlock, TestimonialsBlock, ShareBlock, ProgressTrackerBlock, AnchorBlock, TocBlock,
   VideoBlock, GalleryBlock, CarouselBlock, CountdownBlock, MenuBlock, SearchBlock, ContentNavBlock,
+  MapBlock, LottieBlock, MediaCarouselBlock, SlidesBlock, VideoPlaylistBlock, HotspotBlock,
 } from "./types";
 
 // Берём точный union InsertChoice из SortableCanvas.
@@ -388,6 +389,65 @@ export function createDefaultBlock(type: InsertChoice): Block {
         items: [
           { id: newId("ci"), label: "Вступление", href: "#intro" },
           { id: newId("ci"), label: "Раздел 1", href: "#section-1" },
+        ],
+      };
+      return b;
+    }
+
+    case "map": {
+      const b: MapBlock = { id: newId("map"), type: "map", lat: 55.751244, lon: 37.618423, zoom: 12, label: "Метка", style: "auto" };
+      return b;
+    }
+    case "lottie": {
+      const b: LottieBlock = { id: newId("lot"), type: "lottie", src: "", poster: "", autoplay: true, loop: true, caption: "Lottie (превью)" };
+      return b;
+    }
+    case "mediacarousel": {
+      const b: MediaCarouselBlock = {
+        id: newId("mc"),
+        type: "mediacarousel",
+        initial: 0,
+        slides: [
+          { id: newId("ms"), kind: "img",   src: "https://picsum.photos/seed/m1/1200/600", caption: "Кадр 1" },
+          { id: newId("ms"), kind: "video", src: "https://www.w3schools.com/html/mov_bbb.mp4", caption: "Видео" },
+          { id: newId("ms"), kind: "img",   src: "https://picsum.photos/seed/m2/1200/600", caption: "Кадр 2" },
+        ],
+      };
+      return b;
+    }
+    case "slides": {
+      const b: SlidesBlock = {
+        id: newId("sl"),
+        type: "slides",
+        initial: 0,
+        slides: [
+          { id: newId("ts"), title: "Слайд 1", text: "Описание", ctaLabel: "Подробнее", ctaHref: "#" },
+          { id: newId("ts"), title: "Слайд 2", text: "Ещё текст" },
+        ],
+      };
+      return b;
+    }
+    case "videoplaylist": {
+      const b: VideoPlaylistBlock = {
+        id: newId("vp"),
+        type: "videoplaylist",
+        initial: 0,
+        items: [
+          { id: newId("vi"), src: "https://www.w3schools.com/html/mov_bbb.mp4", title: "Демо 1" },
+          { id: newId("vi"), src: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", title: "Демо 2" },
+        ],
+      };
+      return b;
+    }
+    case "hotspot": {
+      const b: HotspotBlock = {
+        id: newId("hs"),
+        type: "hotspot",
+        src: "https://picsum.photos/seed/spot/1200/600",
+        alt: "Изображение с маркерами",
+        markers: [
+          { id: newId("hm"), x: 25, y: 40, label: "Точка A", href: "#" },
+          { id: newId("hm"), x: 70, y: 55, label: "Точка B", href: "#" },
         ],
       };
       return b;
