@@ -3,6 +3,7 @@ import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc 
 import Canvas from "./SiteBuilder/canvas/Canvas";
 import Outline from "./SiteBuilder/outline/Outline";
 import Palette from "./SiteBuilder/palette/Palette";
+import { renderBlockView } from "./SiteBuilder/blocks";
 import { createDefaultBlock } from "./SiteBuilder/registry";
 import Inspector from "./SiteBuilder/inspector/Inspector";
 import Field from "./SiteBuilder/ui/Field";
@@ -204,48 +205,6 @@ export default function SiteBuilder() {
       ...(mb != null ? { marginBottom: Number(mb) } : {}),
     };
   }, [bp]);
-
-
-  // ── Превью блоков (мини-карточки на канвасе) ────────────────────────────────
-  const renderPreviewBlock = useCallback((b: Block) => {
-    switch (b.type) {
-      case "h1":
-        return <h3 className="text-lg font-extrabold tracking-tight">{(b as H1Block).text || "Заголовок"}</h3>;
-      case "heading":
-        return <h4 className="text-base font-semibold">{(b as HeadingBlock).text || "Заголовок"}</h4>;
-      case "p":
-        return <p className="text-sm opacity-80">{(b as PBlock).text || "Абзац"}</p>;
-      case "img":
-        return (
-          <img
-            className="rounded-xl border border-[#2a2f45]"
-            src={(b as any).src || (b as ImgBlock).cid || ""}
-            alt={(b as ImgBlock).alt || ""}
-          />
-        );
-      case "btn":
-        return <button className="btn">{(b as BtnBlock).label || "Кнопка"}</button>;
-      case "spacer":
-        return <div className="h-6 opacity-40" />;
-      case "divider":
-        return <div className="h-px bg-[#2a2f45]" />;
-      case "cols2":
-        return <div className="grid grid-cols-2 gap-4 opacity-70">Две колонки</div>;
-      case "section":
-        return <div className="section-band pad-md">Секция</div>;
-      case "grid":
-        return <div className="grid grid-cols-3 gap-3 opacity-70">Сетка 1–4</div>;
-      case "hero":
-        return (
-          <div className="hero">
-            <h2>{(b as HeroBlock).title || "Заголовок"}</h2>
-            <p className="muted">{(b as HeroBlock).subtitle || ""}</p>
-          </div>
-        );
-      default:
-        return <div className="text-xs opacity-60">[{(b as any).type}]</div>;
-    }
-  }, []);
 
   // ── Полноценное превью для «мини-сайта» внутри карточки блока (инлайн правка текстов)
   const previewOf = useCallback((b: Block) => {
@@ -1581,7 +1540,7 @@ export default function SiteBuilder() {
                     onClick={() => setSelId(b.id)}
                     className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"} bg-white p-3 cursor-pointer`}
                   >
-                    {selId === b.id ? previewOf(b) : renderPreviewBlock(b)}
+                    {selId === b.id ? previewOf(b) : renderBlockView(b)}
                   </div>
                 )}
                 onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
