@@ -11,6 +11,11 @@ import HeroView from "./hero/view";
 import Cols2View from "./cols2/view";
 import SectionView from "./section/view";
 import GridView from "./grid/view";
+import IconView from "./icon/view";
+import IconListView from "./iconlist/view";
+import AlertView from "./alert/view";
+import HtmlView from "./html/view";
+import CodeView from "./code/view";
 
 /** Возвращает React-элемент превью для любого блока. */
 export function renderBlockView(b: Block) {
@@ -26,11 +31,12 @@ export function renderBlockView(b: Block) {
     case "cols2":   return <Cols2View block={b} />;
     case "section": return <SectionView block={b} />;
     case "grid":    return <GridView block={b} />;
+    case "icon":    return <IconView block={b} />;
+    case "iconlist":return <IconListView block={b} />;
+    case "alert":   return <AlertView block={b} />;
+    case "html":    return <HtmlView block={b} />;
+    case "code":    return <CodeView block={b} />;
     default:
-  return (
-    <div className="text-sm text-[#6b7390]">
-      Превью для блока пока не реализовано.
-    </div>
-  );
+      return <div className="text-sm text-[#6b7390]">Превью для блока пока не реализовано.</div>;
   }
 }

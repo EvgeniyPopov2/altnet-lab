@@ -7,14 +7,18 @@ export type BlockType =
   | "h1"
   | "heading"
   | "p"
-  | "img"
   | "btn"
-  | "cols2"
-  | "spacer"
+  | "img"
   | "divider"
+  | "spacer"
+  | "cols2"
   | "section"
-  | "grid";
-
+  | "grid"
+  | "icon"
+  | "iconlist"
+  | "alert"
+  | "html"
+  | "code";
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
 export type Align = "left" | "center" | "right";
@@ -179,18 +183,65 @@ export type GridBlock = {
   styleByBp?: HeroBlock["styleByBp"];
 };
 
+// ── B6: лёгкие контент-блоки ─────────────────────────────────────────────────
+export type IconName = "star" | "check" | "heart" | "shield" | "alert";
+
+export type IconBlock = {
+  id: string;
+  type: "icon";
+  name: IconName;
+  size?: "sm" | "md" | "lg" | "xl"; // 16 / 24 / 32 / 48
+  color?: string; // tailwind-класс цвета текста, напр. "text-[#2a3b8f]"
+};
+
+export type IconListItem = { id: string; icon: IconName; text: string };
+
+export type IconListBlock = {
+  id: string;
+  type: "iconlist";
+  items: IconListItem[];
+};
+
+export type AlertVariant = "info" | "success" | "warning" | "danger";
+
+export type AlertBlock = {
+  id: string;
+  type: "alert";
+  variant: AlertVariant;
+  title?: string;
+  text?: string;
+};
+
+export type HtmlBlock = {
+  id: string;
+  type: "html";
+  html: string; // будет жёстко санитизироваться при рендере
+};
+
+export type CodeBlock = {
+  id: string;
+  type: "code";
+  code: string;
+  lang?: string;
+};
+
 export type Block =
-  | HeroBlock
-  | H1Block
-  | HeadingBlock
-  | PBlock
-  | ImgBlock
+  | HeroBlock 
+  | H1Block 
+  | HeadingBlock 
+  | PBlock 
+  | ImgBlock 
   | BtnBlock
-  | Cols2Block
-  | SpacerBlock
-  | DividerBlock
-  | SectionBlock
-  | GridBlock;
+  | DividerBlock 
+  | SpacerBlock 
+  | Cols2Block 
+  | SectionBlock 
+  | GridBlock
+  | IconBlock 
+  | IconListBlock 
+  | AlertBlock 
+  | HtmlBlock 
+  | CodeBlock;
 
 export type Doc = {
   title: string;

@@ -6,10 +6,11 @@ import { CSS } from "@dnd-kit/utilities";
 
 type SortableLike = { id: string };
 
-type InsertChoice =
+export type InsertChoice =
   | "h1" | "heading" | "p" | "btn" | "img"
   | "divider" | "spacer"
-  | "hero" | "cols2" | "section" | "grid";
+  | "hero" | "cols2" | "section" | "grid"
+  | "icon" | "iconlist" | "alert" | "html" | "code";
 
 type Props<T extends SortableLike> = {
   cols?: 1 | 2 | 3 | 4;
@@ -19,13 +20,7 @@ type Props<T extends SortableLike> = {
   renderBlock: (b: T) => React.ReactNode;
   onReorder: (next: T[]) => void;
   /** Вставка нового блока в индекс (0..N). Вызывается при клике «+» и выборе типа. */
-  onInsertAt?: (
-  index: number,
-  type:
-    | "h1" | "heading" | "p" | "btn" | "img"
-    | "divider" | "spacer"
-    | "hero" | "cols2" | "section" | "grid"
-) => void;
+  onInsertAt?: (index: number, type: InsertChoice) => void;
 };
 
 function DragHandle(props: React.HTMLAttributes<HTMLDivElement>) {

@@ -46,6 +46,11 @@ export default function Palette({ onInsert }: Props) {
         <Item type="cols2" label="2 колонки" onClick={onInsert} />
         <Item type="section" label="Секция" onClick={onInsert} />
         <Item type="grid" label="Сетка" onClick={onInsert} />
+        <Item type="icon" label="Icon" onClick={onInsert} />
+        <Item type="iconlist" label="Icon List" onClick={onInsert} />
+        <Item type="alert" label="Alert" onClick={onInsert} />
+        <Item type="html" label="HTML (Safe)" onClick={onInsert} />
+        <Item type="code" label="Code" onClick={onInsert} />
       </Group>
     </div>
   );
