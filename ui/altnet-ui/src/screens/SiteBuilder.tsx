@@ -13,7 +13,7 @@ import type {
   ColsRatio, Cols2Block, SectionBlock,
   GridBlock, Block, Doc
 } from "./SiteBuilder/types";
-
+import DeviceSwitch from "./SiteBuilder/ui/DeviceSwitch";
 type CheckItem = { id: string; ok: boolean; text: string };
 
 
@@ -1671,6 +1671,14 @@ export default function SiteBuilder() {
             </button>
           </div>
         </div>
+
+        {/* Верхняя responsive-панель (как у Elementor) */}
+        <DeviceSwitch
+          bp={bp}
+          onChangeBp={setBp}
+          mode={iframeMode}
+          onChangeMode={setIframeMode}
+        />
 
         <div className="flex justify-center">
           <div className="w-full" style={{ maxWidth: `${doc.theme?.container ?? 960}px` }}>
