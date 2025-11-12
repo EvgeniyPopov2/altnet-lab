@@ -1569,53 +1569,7 @@ export default function SiteBuilder() {
           </button>
         </div>
 
-        {/* Палитра элементов */}
-        <div className="mb-4">
-          <div className="mb-2 text-sm text-[#9aa3b2]">Элементы</div>
-
-          <input
-            className="w-full mb-2 px-3 py-2 rounded-md bg-[#0f1420] border border-[#2a2f45] text-[#e6e9f4]"
-            placeholder="Поиск виджета…"
-            value={elQuery}
-            onChange={(e) => setElQuery(e.target.value)}
-          />
-
-          <div className="text-xs text-[#9aa3b2] mb-1">Layout</div>
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            {layoutFiltered.map(([t, label]) => (
-              <button
-                key={t}
-                onClick={() => addBlock(t)}
-                onDragStart={(e) => e.dataTransfer.setData("application/x-block", t)}
-                draggable
-                className="flex items-center justify-center h-9 rounded-md bg-[#F8FAFC] border border-[#e5e7eb] text-xs text-[#111827] hover:bg-white"
-                title={label}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="text-xs text-[#9aa3b2] mb-1">Базовый</div>
-          <div className="grid grid-cols-2 gap-2">
-            {basicFiltered.map(([t, label]) => (
-              <button
-                key={t}
-                onClick={() => addBlock(t)}
-                onDragStart={(e) => e.dataTransfer.setData("application/x-block", t)}
-                draggable
-                className="flex items-center justify-center h-9 rounded-md bg-[#F8FAFC] border border-[#e5e7eb] text-xs text-[#111827] hover:bg-white"
-                title={label}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-2 text-xs text-[#9aa3b2]">
-            Совет: перетащите элемент на канвас между слотами «+ Добавить блок».
-          </div>
-        </div>
+        
 
         {showChecklist && (
           <div className="mb-4 rounded-xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
@@ -1639,52 +1593,7 @@ export default function SiteBuilder() {
 
       {/* Средняя панель — Канвас */}
       <div className="md:col-[2] min-h-0 overflow-y-auto p-4">
-        <div className="sticky top-0 z-10 mb-3 flex items-center gap-2 rounded-lg border border-[#e5e7eb] bg-white p-2 shadow-sm">
-          {/* Переключатели устройств как в Elementor */}
-          <div className="flex items-center gap-1 text-xs">
-            <button className={`px-2 py-1 rounded border ${iframeMode === "fit" ? "border-indigo-500/60" : "border-[#e5e7eb]"}`} onClick={() => setIframeMode("fit")}>Fit</button>
-            <button className={`px-2 py-1 rounded border ${iframeMode === "desktop" ? "border-indigo-500/60" : "border-[#e5e7eb]"}`} onClick={() => { setIframeMode("desktop"); setBp("desktop"); }}>🖥 1280</button>
-            <button className={`px-2 py-1 rounded border ${iframeMode === "tablet" ? "border-indigo-500/60" : "border-[#e5e7eb]"}`} onClick={() => { setIframeMode("tablet"); setBp("tablet"); }}>📱 834</button>
-            <button className={`px-2 py-1 rounded border ${iframeMode === "mobile" ? "border-indigo-500/60" : "border-[#e5e7eb]"}`} onClick={() => { setIframeMode("mobile"); setBp("mobile"); }}>📱 390</button>
-          </div>
 
-          {/* Настройки сетки — в выпадашке */}
-          <details className="ml-2">
-            <summary className="cursor-pointer px-2 py-1 rounded border border-[#e5e7eb] bg-[#F8FAFC] text-xs">Сетка</summary>
-            <div className="mt-2 flex flex-wrap items-center gap-3 p-2 rounded border border-[#e5e7eb] bg-[#F8FAFC]">
-              <label className="text-xs text-[#374151]">
-                Колонки:&nbsp;
-                <select className="px-2 py-1 rounded-md bg-white border border-[#e5e7eb]"
-                  value={canvasCols}
-                  onChange={(e) => setCanvasCols(Number(e.target.value) as 1 | 2 | 3 | 4)}>
-                  <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
-                </select>
-              </label>
-              <label className="text-xs text-[#374151]">
-                Gap X:&nbsp;
-                <input type="number" className="w-20 px-2 py-1 rounded-md bg-white border border-[#e5e7eb]"
-                  value={canvasGapX}
-                  onChange={(e) => setCanvasGapX(Math.max(0, parseInt(e.target.value || "0", 10)))} />
-              </label>
-              <label className="text-xs text-[#374151]">
-                Gap Y:&nbsp;
-                <input type="number" className="w-20 px-2 py-1 rounded-md bg-white border border-[#e5e7eb]"
-                  value={canvasGapY}
-                  onChange={(e) => setCanvasGapY(Math.max(0, parseInt(e.target.value || "0", 10)))} />
-              </label>
-            </div>
-          </details>
-
-          {/* Кнопки справа */}
-          <div className="ml-auto flex items-center gap-2">
-            <button className="px-3 py-1.5 rounded-md bg-[#1f2937] text-white" onClick={onOpenPreviewTab} title="Открыть предпросмотр">
-              Предпросмотр
-            </button>
-            <button className="px-3 py-1.5 rounded-md bg-[#10B981] text-white" onClick={onExportSingle} title="Экспорт одним HTML">
-              Опубликовать
-            </button>
-          </div>
-        </div>
 
         {/* Верхняя responsive-панель (как у Elementor) */}
         <Topbar
@@ -1692,6 +1601,51 @@ export default function SiteBuilder() {
           onChangeBp={setBp}
           mode={iframeMode}
           onChangeMode={setIframeMode}
+          right={
+            <div className="flex items-center gap-2">
+              {/* Экспорт Single HTML */}
+              <button
+                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
+                onClick={async () => {
+                  // Собираем документ и сохраняем как single HTML
+                  const adapted = adaptFromSiteBuilderDoc(doc);
+                  const res = await exportSingleHtml(adapted);
+                  const blob = (res as any)?.blob ?? res;                 // совместимость с разными сигнатурами
+                  const filename = (res as any)?.filename ?? "site.html";
+                  downloadBlob(blob, filename);
+                }}
+                title="Экспорт в одиночный HTML-файл"
+              >
+                Экспорт HTML
+              </button>
+
+              {/* Экспорт ZIP */}
+              <button
+                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
+                onClick={async () => {
+                  const adapted = adaptFromSiteBuilderDoc(doc);
+                  const res = await exportSiteZip(adapted);
+                  const blob = (res as any)?.blob ?? res;
+                  const filename = (res as any)?.filename ?? "site.zip";
+                  downloadBlob(blob, filename);
+                }}
+                title="Экспорт в ZIP-архив (HTML + assets)"
+              >
+                Экспорт ZIP
+              </button>
+
+              {/* Автопревью — если включено, предпросмотр обновляется сам */}
+              <label className="ml-2 inline-flex items-center gap-2 text-xs text-[#cfd5e6]">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-[#2a2f45] bg-[#0f1420]"
+                  checked={autoPreview}
+                  onChange={(e) => setAutoPreview(e.target.checked)}
+                />
+                Автопревью
+              </label>
+            </div>
+          }
         />
 
         <div className="flex justify-center">
@@ -1757,54 +1711,7 @@ export default function SiteBuilder() {
         </div>
       </div>
 
-      {/* Правая панель — Свойства + Предпросмотр */}
-      <div className="md:col-[3] h-full overflow-y-auto border-l border-[#1c2030] bg-[#0b0e18] p-4 flex flex-col gap-4">
-        <div className="rounded-2xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
-          <div className="mb-2 text-sm text-[#cfd5e6]">Свойства блока</div>
-          <Editor />
-        </div>
 
-        <div className="rounded-2xl border border-[#1c2030] bg-[#0b0e18] overflow-hidden flex flex-col min-h-[320px]">
-          <div className="flex items-center w-full gap-2">
-            <span className="text-sm opacity-80">Предпросмотр (sandbox)</span>
-
-            <div className="flex items-center gap-2 text-xs ml-4">
-              <button className={`px-2 py-1 rounded border ${iframeMode === "fit" ? "border-indigo-500/60" : "border-[#2a2f45]"}`} onClick={() => setIframeMode("fit")}>Fit</button>
-              <button className={`px-2 py-1 rounded border ${iframeMode === "desktop" ? "border-indigo-500/60" : "border-[#2a2f45]"}`} onClick={() => { setIframeMode("desktop"); setBp("desktop"); }}>🖥 1280</button>
-              <button className={`px-2 py-1 rounded border ${iframeMode === "tablet" ? "border-indigo-500/60" : "border-[#2a2f45]"}`} onClick={() => { setIframeMode("tablet"); setBp("tablet"); }}>📱 834</button>
-              <button className={`px-2 py-1 rounded border ${iframeMode === "mobile" ? "border-indigo-500/60" : "border-[#2a2f45]"}`} onClick={() => { setIframeMode("mobile"); setBp("mobile"); }}>📱 390</button>
-            </div>
-
-            <div className="ml-auto flex items-center gap-3">
-              <label className="flex items-center gap-1 text-xs opacity-80">
-                <input type="checkbox" checked={autoPreview} onChange={(e) => setAutoPreview(e.target.checked)} />
-                автообновление
-              </label>
-              <button
-                className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] hover:bg-[#1f2336] text-xs"
-                onClick={() => void buildPreview()}
-                disabled={isBuilding}
-
-              >
-                {isBuilding ? "Сборка…" : "Обновить"}
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 w-full overflow-auto">
-            <iframe
-              title="preview"
-              sandbox="allow-same-origin"
-              className="block"
-              style={{
-                width: iframeMode === "fit" ? "100%" : `${widthByBp[iframeMode as Breakpoint]}px`,
-                height: "100%",
-                margin: "0 auto",
-              }}
-              srcDoc={previewHtml}
-            />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
