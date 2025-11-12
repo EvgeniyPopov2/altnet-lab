@@ -13,7 +13,7 @@ import type {
   ColsRatio, Cols2Block, SectionBlock,
   GridBlock, Block, Doc
 } from "./SiteBuilder/types";
-import DeviceSwitch from "./SiteBuilder/ui/DeviceSwitch";
+import Topbar from "./SiteBuilder/layout/Topbar";
 type CheckItem = { id: string; ok: boolean; text: string };
 
 
@@ -1687,7 +1687,7 @@ export default function SiteBuilder() {
         </div>
 
         {/* Верхняя responsive-панель (как у Elementor) */}
-        <DeviceSwitch
+        <Topbar
           bp={bp}
           onChangeBp={setBp}
           mode={iframeMode}
