@@ -143,6 +143,7 @@ export default function SiteBuilder() {
 
   // выбор блока
   const [selId, setSelId] = useState<string | null>(null);
+  const selBlock = useMemo(() => doc.blocks.find((b: any) => b.id === selId), [doc.blocks, selId]);
   const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
   useEffect(() => { setEditorTab("content"); }, [selId]);
   const sel = useMemo(() => doc.blocks.find((b) => b.id === selId) ?? null, [doc.blocks, selId]);
@@ -1533,13 +1534,20 @@ export default function SiteBuilder() {
                   });
                 }}
               />
-              {/* Навигатор блоков (пока только выбор). Показываем на широком экране. */}
+              <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
+              {/* Правая панель — Инспектор */}
               <div className="mt-4 hidden xl:block">
-                <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
+                <Inspector
+                  block={selBlock}
+                  onPatch={(patch) =>
+                    setDoc((d: any) => ({
+                      ...d,
+                      blocks: d.blocks.map((b: any) => (b.id === selId ? { ...b, ...patch } : b)),
+                    }))
+                  }
+                />
               </div>
-              {/* Inspector (каркас). Пока просто ниже; затем перенесём в правую колонку. */}
-              <div className="mt-4">
-                <Inspector block={doc.blocks.find((b) => b.id === selId)} />
+              <div>
               </div>
             </div>
           </div>

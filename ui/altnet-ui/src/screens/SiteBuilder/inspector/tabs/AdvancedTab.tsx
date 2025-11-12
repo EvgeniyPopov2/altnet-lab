@@ -1,18 +1,30 @@
-// src/screens/SiteBuilder/inspector/tabs/AdvancedTab.tsx
-import type { Block } from "../../types";
+import Field from "../../ui/Field";
 
-type Props = { block?: Block; onChange?: (patch: Partial<Block>) => void };
+type Props = {
+  block: any;
+  onPatch: (patch: Record<string, any>) => void;
+  device: "desktop" | "tablet" | "mobile";
+};
 
-export default function AdvancedTab({ block, onChange }: Props) {
-  void onChange;
-  if (!block) return null;
-
+export default function AdvancedTab({ block, onPatch }: Props) {
   return (
-    <div className="grid gap-2 text-sm">
-      <div className="text-[#9aa3b2]">Advanced (каркас): якорь, CSS class, visibility, responsive…</div>
-      <div className="rounded-lg border border-[#1f2751] bg-[#0f1630] p-2 text-[#e6e9f4]">
-        Расширенные свойства для <b>{block.type}</b>
-      </div>
+    <div className="grid gap-3">
+      <Field label="CSS class">
+        <input
+          className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751]"
+          value={block.className || ""}
+          onChange={(e) => onPatch({ className: e.target.value })}
+          placeholder="например: my-card"
+        />
+      </Field>
+      <Field label="Anchor (id)">
+        <input
+          className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751]"
+          value={block.anchor || ""}
+          onChange={(e) => onPatch({ anchor: e.target.value })}
+          placeholder="например: section-1"
+        />
+      </Field>
     </div>
   );
 }
