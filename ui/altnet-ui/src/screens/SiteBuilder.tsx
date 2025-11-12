@@ -1101,31 +1101,51 @@ export default function SiteBuilder() {
             />
           </Field>
           {/* Палитра (левая колонка) */}
-          <Palette
-            onInsert={(type) => {
-              const make = createDefaultBlock as (t: any) => any;
-              const fresh = make(type as any);
-              if (!fresh) return;
-              const withId = { ...(fresh as any), id: uid() };
+          {/* Левая панель: если выбран блок — показываем редактор; иначе — палитру */}
+          {selBlock ? (
+            <>
+              <div className="text-xs text-[#9aa3b2] mb-2">Редактор блока</div>
+              <InspectorTabs active={editorTab} onChange={(t) => setEditorTab(t)} />
+              <Inspector
+                block={selBlock}
+                onPatch={(patch) =>
+                  setDoc((d: any) => ({
+                    ...d,
+                    blocks: d.blocks.map((b: any) => (b.id === selId ? { ...b, ...patch } : b)),
+                  }))
+                }
+              />
+            </>
+          ) : (
+            <Palette
+              onInsert={(type) => {
+                const make = createDefaultBlock as (t: any) => any;
+                const fresh = make(type as any);
+                if (!fresh) return;
+                const withId = { ...(fresh as any), id: uid() };
 
-              setDoc((d) => {
-                const idx = selId ? d.blocks.findIndex((b) => b.id === selId) : -1;
-                const next = d.blocks.slice();
-                if (idx >= 0) next.splice(idx + 1, 0, withId);
-                else next.push(withId);
-                return { ...d, blocks: next };
-              });
-            }}
-          />
+                setDoc((d) => {
+                  const idx = selId ? d.blocks.findIndex((b) => b.id === selId) : -1;
+                  const next = d.blocks.slice();
+                  if (idx >= 0) next.splice(idx + 1, 0, withId);
+                  else next.push(withId);
+                  return { ...d, blocks: next };
+                });
+
+                setSelId(withId.id);
+              }}
+            />
+          )}
         </div>
 
 
 
         {/* Навигатор */}
+        {!selBlock && (
         <div>
-          <div className="text-xs text-[#9aa3b2] mb-2">Навигатор</div>
-          <Navigator />
-        </div>
+            <div className="text-xs text-[#9aa3b2] mb-2">Навигатор</div>
+            <Navigator />
+          </div>
 
         {/* Чек-лист качества */}
         <div className="rounded-lg border border-[#2a2f45] p-3">
@@ -1140,6 +1160,7 @@ export default function SiteBuilder() {
               ))}
             </ul>
           )}
+          )}
         </div>
 
         {/* Импорт/Экспорт JSON */}
@@ -1153,7 +1174,7 @@ export default function SiteBuilder() {
       </div>
 
       {/* Центральная колонка — Канвас + Палитра (вставка после выбранного) */}
-      <div className="col-[2] h-[100dvh] overflow-y-auto">
+      <div className="col-[2] h-[100dvh] overflow-y-auto" onClick={() => setSelId(null)}>
         <Topbar
           bp={bp}
           onChangeBp={setBp}
@@ -1201,7 +1222,7 @@ export default function SiteBuilder() {
             blocks={doc.blocks}
             renderBlock={(b) => (
               <div
-                onClick={() => setSelId(b.id)}
+                onClick={(e) => { e.stopPropagation(); setSelId(b.id); }}
                 className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"} bg-white p-3 cursor-pointer`}
               >
                 {selId === b.id ? previewOf(b) : renderBlockView(b)}
@@ -1222,26 +1243,10 @@ export default function SiteBuilder() {
           <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
         </div>
       </div>
-      <div className="rounded-lg border border-[#2a2f45] p-3 mb-3">
-        <div className="text-xs text-[#9aa3b2] mb-2">Редактор блока</div>
-        {Editor()}
-      </div>
+      
       {/* Правая колонка — Инспектор + мини-предпросмотр */}
       <div className="col-[3] h-[calc(100dvh-16px)] overflow-y-auto p-2 sticky top-0">
-        <div className="rounded-lg border border-[#2a2f45] p-3">
-          <div className="text-xs text-[#9aa3b2] mb-2">Инспектор</div>
-          {/* Вкладки инспектора */}
-          <InspectorTabs active={editorTab} onChange={(t) => setEditorTab(t)} />
-          <Inspector
-            block={selBlock}
-            onPatch={(patch) =>
-              setDoc((d: any) => ({
-                ...d,
-                blocks: d.blocks.map((b: any) => (b.id === selId ? { ...b, ...patch } : b)),
-              }))
-            }
-          />
-        </div>
+        {/* Правая панель инспектора отключена — редактор теперь слева */}
 
         <div className="mt-3 rounded-lg border border-[#2a2f45] p-3">
           <div className="text-xs text-[#9aa3b2] mb-2">Мини-предпросмотр</div>
