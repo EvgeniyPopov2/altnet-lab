@@ -136,21 +136,21 @@ export default function SiteBuilder() {
   const [canvasGapY, setCanvasGapY] = useState<number>(16);
   type Breakpoint = "desktop" | "tablet" | "mobile";
   type BlockStyle = {
-  mt?: number; mb?: number; pt?: number; pb?: number; py?: number;
-  // C2 — типографика
-  fs?: number;  // font-size (px)
-  fw?: number;  // font-weight (300..800)
-  lh?: number;  // line-height (число -> px)
-  ta?: "left" | "center" | "right" | "justify"; // text-align
-  // C2 — цвета, бордеры, тени
-  tc?: string;  // text color (например: "#e6e9f4")
-  bg?: string;  // background color
-  bw?: number;  // border-width (px)
-  bc?: string;  // border-color
-  bs?: "none" | "solid" | "dashed" | "dotted"; // border-style
-  br?: number;  // border-radius (px)
-  sh?: string;  // box-shadow (строка)
-};
+    mt?: number; mb?: number; pt?: number; pb?: number; py?: number;
+    // C2 — типографика
+    fs?: number;  // font-size (px)
+    fw?: number;  // font-weight (300..800)
+    lh?: number;  // line-height (число -> px)
+    ta?: "left" | "center" | "right" | "justify"; // text-align
+    // C2 — цвета, бордеры, тени
+    tc?: string;  // text color (например: "#e6e9f4")
+    bg?: string;  // background color
+    bw?: number;  // border-width (px)
+    bc?: string;  // border-color
+    bs?: "none" | "solid" | "dashed" | "dotted"; // border-style
+    br?: number;  // border-radius (px)
+    sh?: string;  // box-shadow (строка)
+  };
   type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyle };
 
   const [bp, setBp] = useState<Breakpoint>("desktop");
@@ -216,31 +216,31 @@ export default function SiteBuilder() {
     const mt = s.mt;
     const mb = s.mb;
     return {
-  // отступы
-  ...(pt != null ? { paddingTop: Number(pt) } : {}),
-  ...(pb != null ? { paddingBottom: Number(pb) } : {}),
-  ...(mt != null ? { marginTop: Number(mt) } : {}),
-  ...(mb != null ? { marginBottom: Number(mb) } : {}),
+      // отступы
+      ...(pt != null ? { paddingTop: Number(pt) } : {}),
+      ...(pb != null ? { paddingBottom: Number(pb) } : {}),
+      ...(mt != null ? { marginTop: Number(mt) } : {}),
+      ...(mb != null ? { marginBottom: Number(mb) } : {}),
 
-  // типографика
-  ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
-  ...(s.fw != null ? { fontWeight: Number(s.fw) as any } : {}),
-  ...(s.lh != null ? { lineHeight: Number(s.lh) } : {}),
-  ...(s.ta ? { textAlign: s.ta as any } : {}),
+      // типографика
+      ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
+      ...(s.fw != null ? { fontWeight: Number(s.fw) as any } : {}),
+      ...(s.lh != null ? { lineHeight: Number(s.lh) } : {}),
+      ...(s.ta ? { textAlign: s.ta as any } : {}),
 
-  // цвета
-  ...(s.tc ? { color: s.tc } : {}),
-  ...(s.bg ? { backgroundColor: s.bg } : {}),
+      // цвета
+      ...(s.tc ? { color: s.tc } : {}),
+      ...(s.bg ? { backgroundColor: s.bg } : {}),
 
-  // границы
-  ...(s.bw != null ? { borderWidth: Number(s.bw) } : {}),
-  ...(s.bs ? { borderStyle: s.bs as any } : {}),
-  ...(s.bc ? { borderColor: s.bc } : {}),
-  ...(s.br != null ? { borderRadius: Number(s.br) } : {}),
+      // границы
+      ...(s.bw != null ? { borderWidth: Number(s.bw) } : {}),
+      ...(s.bs ? { borderStyle: s.bs as any } : {}),
+      ...(s.bc ? { borderColor: s.bc } : {}),
+      ...(s.br != null ? { borderRadius: Number(s.br) } : {}),
 
-  // тень
-  ...(s.sh ? { boxShadow: s.sh } : {}),
-};
+      // тень
+      ...(s.sh ? { boxShadow: s.sh } : {}),
+    };
   }, [bp]);
 
   // ── Полноценное превью для «мини-сайта» внутри карточки блока (инлайн правка текстов)
@@ -856,14 +856,14 @@ export default function SiteBuilder() {
 
     // принимаем string|number, нормализуем -> number|undefined
     const updCur = (patch: Partial<Record<keyof BlockStyle, string | number>>) => {
-  // какие ключи числовые (остальные — строковые)
-  const numericKeys: (keyof BlockStyle)[] = ["mt","mb","pt","pb","py","fs","fw","lh","bw","br"];
-  const normalized = Object.fromEntries(
-    Object.entries(patch).map(([k, v]) => {
-      if (v === "" || v == null) return [k, undefined];
-      return [k, numericKeys.includes(k as keyof BlockStyle) ? Number(v) : v];
-    })
-  ) as Partial<BlockStyle>;
+      // какие ключи числовые (остальные — строковые)
+      const numericKeys: (keyof BlockStyle)[] = ["mt", "mb", "pt", "pb", "py", "fs", "fw", "lh", "bw", "br"];
+      const normalized = Object.fromEntries(
+        Object.entries(patch).map(([k, v]) => {
+          if (v === "" || v == null) return [k, undefined];
+          return [k, numericKeys.includes(k as keyof BlockStyle) ? Number(v) : v];
+        })
+      ) as Partial<BlockStyle>;
 
       const next: BlockStyle = { ...(sBy[bp] || {}), ...normalized };
       patchBlock(sel.id, { styleByBp: { ...sBy, [bp]: next } } as any);
@@ -947,10 +947,139 @@ export default function SiteBuilder() {
             />
           </Field>
         </div>
+        {/* ─────────────────────────── Типографика ─────────────────────────── */}
+        <div className="mt-3 text-xs text-[#9aa3b2]">Типографика</div>
+        <div className="grid grid-cols-5 gap-2">
+          <Field label="fontSize (px)">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.fs)}
+              onChange={(e) => updCur({ fs: e.target.value })}
+              placeholder="напр. 16"
+              inputMode="numeric"
+            />
+          </Field>
+          <Field label="fontWeight">
+            <select
+              className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.fw)}
+              onChange={(e) => updCur({ fw: e.target.value })}
+            >
+              <option value=""></option>
+              <option value="300">300</option>
+              <option value="400">400</option>
+              <option value="500">500</option>
+              <option value="600">600</option>
+              <option value="700">700</option>
+              <option value="800">800</option>
+            </select>
+          </Field>
+          <Field label="lineHeight">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.lh)}
+              onChange={(e) => updCur({ lh: e.target.value })}
+              placeholder="напр. 22"
+              inputMode="numeric"
+            />
+          </Field>
+          <Field label="textAlign">
+            <select
+              className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={sCur.ta || ""}
+              onChange={(e) => updCur({ ta: e.target.value })}
+            >
+              <option value=""></option>
+              <option value="left">left</option>
+              <option value="center">center</option>
+              <option value="right">right</option>
+              <option value="justify">justify</option>
+            </select>
+          </Field>
+          <div />
+        </div>
+
+        {/* ─────────────────────── Цвета / границы / тени ───────────────────── */}
+        <div className="mt-3 text-xs text-[#9aa3b2]">Цвета, границы, тени</div>
+        <div className="grid grid-cols-6 gap-2">
+          <Field label="textColor">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={sCur.tc || ""}
+              onChange={(e) => updCur({ tc: e.target.value })}
+              placeholder="#e6e9f4"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <Field label="bgColor">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={sCur.bg || ""}
+              onChange={(e) => updCur({ bg: e.target.value })}
+              placeholder="#0b0e18"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <Field label="borderWidth">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.bw)}
+              onChange={(e) => updCur({ bw: e.target.value })}
+              placeholder="px"
+              inputMode="numeric"
+            />
+          </Field>
+          <Field label="borderStyle">
+            <select
+              className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={sCur.bs || ""}
+              onChange={(e) => updCur({ bs: e.target.value })}
+            >
+              <option value=""></option>
+              <option value="none">none</option>
+              <option value="solid">solid</option>
+              <option value="dashed">dashed</option>
+              <option value="dotted">dotted</option>
+            </select>
+          </Field>
+          <Field label="borderColor">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={sCur.bc || ""}
+              onChange={(e) => updCur({ bc: e.target.value })}
+              placeholder="#2a2f45"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+          <Field label="radius (px)">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.br)}
+              onChange={(e) => updCur({ br: e.target.value })}
+              placeholder="px"
+              inputMode="numeric"
+            />
+          </Field>
+        </div>
+        <div className="grid grid-cols-1 gap-2">
+          <Field label="boxShadow (CSS)">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={sCur.sh || ""}
+              onChange={(e) => updCur({ sh: e.target.value })}
+              placeholder="0 4px 16px rgba(0,0,0,.25)"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </Field>
+        </div>
       </div>
     );
 
-    
+
     {
       editorTab === "advanced" && (
         <div className="grid gap-3">
