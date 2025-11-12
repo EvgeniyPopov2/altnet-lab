@@ -603,6 +603,12 @@ export default function SiteBuilder() {
           const doc = stage.contentWindow.document;
           doc.open(); doc.write(e.data.html); doc.close();
         }
+          else if(e.data.type === "width"){
+    var m = e.data.mode;
+    if(m === "fit"){ applyWidth("fit"); }
+    else if(typeof m === "number"){ applyWidth(String(m)); }
+    else if(typeof m === "string"){ applyWidth(m); }
+  }
       };
     })();
   </script>
@@ -681,6 +687,14 @@ export default function SiteBuilder() {
       }
     };
   }, [docForBuild]);
+
+  // Синхронизация режима ширины с Live-preview
+  useEffect(() => {
+    if (!livePreviewChannelRef.current) return;
+    const mode = iframeMode === "fit" ? "fit" : String(widthByBp[iframeMode]);
+    // Отправляем «fit» или число в строке, напр. "1280" | "834" | "390"
+    livePreviewChannelRef.current.postMessage({ type: "width", mode });
+  }, [iframeMode, bp]);
 
   // Импорт JSON
   const onImportJsonClick = () => {
