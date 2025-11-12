@@ -7,22 +7,32 @@ import { renderBlockView } from "./SiteBuilder/blocks";
 import { createDefaultBlock } from "./SiteBuilder/registry";
 import Inspector from "./SiteBuilder/inspector/Inspector";
 import Field from "./SiteBuilder/ui/Field";
+import Topbar from "./SiteBuilder/layout/Topbar";
+
 import type {
   BlockType,
-  HeroBlock, H1Block, HeadingBlock, PBlock, ImgBlock, BtnBlock,
-  ColsRatio, Cols2Block, SectionBlock,
-  GridBlock, Block, Doc
+  HeroBlock,
+  H1Block,
+  HeadingBlock,
+  PBlock,
+  ImgBlock,
+  BtnBlock,
+  ColsRatio,
+  Cols2Block,
+  SectionBlock,
+  GridBlock,
+  Block,
+  Doc,
 } from "./SiteBuilder/types";
-import Topbar from "./SiteBuilder/layout/Topbar";
+
 type CheckItem = { id: string; ok: boolean; text: string };
 
-
-
+// ─────────────────────────────────────────────────────────────────────────────
+// Утилиты
+// ─────────────────────────────────────────────────────────────────────────────
 const isHttp = (s: string) => /^https?:\/\//i.test(s || "");
 const isHash = (s: string) => (s || "").trim().startsWith("#");
 const notEmpty = (s?: string) => !!(s && s.trim().length > 0);
-
-
 
 const STORAGE_KEY = "altnet.sitebuilder.v1";
 
@@ -126,55 +136,73 @@ function prettyFileName(title: string, ext: string) {
   return (base || "site") + "." + ext;
 }
 
-/* =========================
- * Основной экран
- * ========================= */
+// ─────────────────────────────────────────────────────────────────────────────
+// Типы для стилей по брейкпоинтам (Style Tab)
+// ─────────────────────────────────────────────────────────────────────────────
+type Breakpoint = "desktop" | "tablet" | "mobile";
+type BlockStyle = {
+  mt?: number; mb?: number; pt?: number; pb?: number; py?: number;
+  fs?: number; fw?: number; lh?: number; ta?: "left" | "center" | "right" | "justify";
+  tc?: string; bg?: string;
+  bw?: number; bc?: string; bs?: "none" | "solid" | "dashed" | "dotted"; br?: number;
+  sh?: string;
+};
+type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyle };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Основной экран
+// ─────────────────────────────────────────────────────────────────────────────
 export default function SiteBuilder() {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
-  const [canvasCols, setCanvasCols] = useState<1 | 2 | 3 | 4>(3);
-  const [canvasGapX, setCanvasGapX] = useState<number>(16);
-  const [canvasGapY, setCanvasGapY] = useState<number>(16);
-  type Breakpoint = "desktop" | "tablet" | "mobile";
-  type BlockStyle = {
-    mt?: number; mb?: number; pt?: number; pb?: number; py?: number;
-    // C2 — типографика
-    fs?: number;  // font-size (px)
-    fw?: number;  // font-weight (300..800)
-    lh?: number;  // line-height (число -> px)
-    ta?: "left" | "center" | "right" | "justify"; // text-align
-    // C2 — цвета, бордеры, тени
-    tc?: string;  // text color (например: "#e6e9f4")
-    bg?: string;  // background color
-    bw?: number;  // border-width (px)
-    bc?: string;  // border-color
-    bs?: "none" | "solid" | "dashed" | "dotted"; // border-style
-    br?: number;  // border-radius (px)
-    sh?: string;  // box-shadow (строка)
-  };
-  type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyle };
 
+  // Канвас: кол-во колонок и зазоры
+  const [canvasCols] = useState<1 | 2 | 3 | 4>(3);
+  const [canvasGapX] = useState<number>(16);
+  const [canvasGapY] = useState<number>(16);
+
+  // Responsive режим
   const [bp, setBp] = useState<Breakpoint>("desktop");
   const [iframeMode, setIframeMode] = useState<"fit" | Breakpoint>("fit");
   const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
 
-  // выбор блока
+  // Выбор блока
   const [selId, setSelId] = useState<string | null>(null);
   const selBlock = useMemo(() => doc.blocks.find((b: any) => b.id === selId), [doc.blocks, selId]);
-  const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
-  useEffect(() => { setEditorTab("content"); }, [selId]);
   const sel = useMemo(() => doc.blocks.find((b) => b.id === selId) ?? null, [doc.blocks, selId]);
 
+  // Табы редактора
+  const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
+  useEffect(() => { setEditorTab("content"); }, [selId]);
+
+  // Поиск по палитре
+  const [elQuery, setElQuery] = useState<string>("");
+
+  // Валидация/чеклист
+  const checks = useMemo(() => validateDoc(doc), [doc]);
+  const okCount = useMemo(() => checks.filter((c) => c.ok).length, [checks]);
+  const [showChecklist, setShowChecklist] = useState(false);
+
+  // Мини-предпросмотр (встроенный iframe) — чтобы не было «не прочитан» у переменных
+  const [previewHtml, setPreviewHtml] = useState<string>("");
+  const [autoPreview, setAutoPreview] = useState<boolean>(true);
+  const [isBuilding, setIsBuilding] = useState<boolean>(false);
+
+  // Для live-preview (отдельная вкладка)
+  const importJsonInputRef = useRef<HTMLInputElement>(null);
+  const livePreviewWindowRef = useRef<Window | null>(null);
+  const livePreviewChannelRef = useRef<BroadcastChannel | null>(null);
+  const livePreviewIdRef = useRef<string>("");
+  const liveDebounceRef = useRef<number | null>(null);
+
+  // ── Хелперы правки документа ───────────────────────────────────────────────
   const patchBlock = useCallback((id: string, patch: Partial<any>) => {
     setDoc((d) => ({ ...d, blocks: d.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
   }, []);
 
-  const removeBlock = useCallback(
-    (id: string) => {
-      setDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) }));
-      if (selId === id) setSelId(null);
-    },
-    [selId]
-  );
+  const removeBlock = useCallback((id: string) => {
+    setDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) }));
+    if (selId === id) setSelId(null);
+  }, [selId]);
 
   const duplicateBlock = useCallback((id: string) => {
     setDoc((d) => {
@@ -186,8 +214,6 @@ export default function SiteBuilder() {
       return { ...d, blocks: next };
     });
   }, []);
-
-
 
   const moveBlock = useCallback((id: string, dir: -1 | 1) => {
     setDoc((d) => {
@@ -202,6 +228,7 @@ export default function SiteBuilder() {
     });
   }, []);
 
+  // ── Style helpers ──────────────────────────────────────────────────────────
   const resolveStyle = (b: any, cur: Breakpoint): BlockStyle => {
     const base: BlockStyle = (b && b.style) || {};
     const perAll: StyleByBp = (b && b.styleByBp) || {};
@@ -216,36 +243,30 @@ export default function SiteBuilder() {
     const mt = s.mt;
     const mb = s.mb;
     return {
-      // отступы
       ...(pt != null ? { paddingTop: Number(pt) } : {}),
       ...(pb != null ? { paddingBottom: Number(pb) } : {}),
       ...(mt != null ? { marginTop: Number(mt) } : {}),
       ...(mb != null ? { marginBottom: Number(mb) } : {}),
 
-      // типографика
       ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
       ...(s.fw != null ? { fontWeight: Number(s.fw) as any } : {}),
       ...(s.lh != null ? { lineHeight: Number(s.lh) } : {}),
       ...(s.ta ? { textAlign: s.ta as any } : {}),
 
-      // цвета
       ...(s.tc ? { color: s.tc } : {}),
       ...(s.bg ? { backgroundColor: s.bg } : {}),
 
-      // границы
       ...(s.bw != null ? { borderWidth: Number(s.bw) } : {}),
       ...(s.bs ? { borderStyle: s.bs as any } : {}),
       ...(s.bc ? { borderColor: s.bc } : {}),
       ...(s.br != null ? { borderRadius: Number(s.br) } : {}),
 
-      // тень
       ...(s.sh ? { boxShadow: s.sh } : {}),
     };
   }, [bp]);
 
-  // ── Полноценное превью для «мини-сайта» внутри карточки блока (инлайн правка текстов)
+  // ── Превью блока в канвасе (инлайн правка текстов) ─────────────────────────
   const previewOf = useCallback((b: Block) => {
-    // общий враппер: применяем отступы/паддинги текущего устройства через styleInline
     const wrapStyled = (children: React.ReactNode, pad = true) => (
       <div
         id={(b as any).anchorId || undefined}
@@ -300,7 +321,7 @@ export default function SiteBuilder() {
 
       case "h1": {
         const h = b as H1Block;
-        const align = h.align || "left";
+        const align = (h as any).align || "left";
         return wrapStyled(
           <div
             className={`text-2xl font-semibold text-[#e6e9f4] text-${align}`}
@@ -355,8 +376,8 @@ export default function SiteBuilder() {
             <a
               href={bt.href || "#"}
               className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${bt.variant === "secondary"
-                ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
-                : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                  ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
+                  : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
                 }`}
               rel="noopener noreferrer nofollow"
               onClick={(e) => e.preventDefault()}
@@ -369,57 +390,42 @@ export default function SiteBuilder() {
         );
       }
 
-      case "divider": {
+      case "divider":
         return wrapStyled(<hr className="border-t border-[#2a2f45]" />, false);
-      }
 
-      case "spacer": {
+      case "spacer":
         return wrapStyled(<div className="h-8" />, false);
-      }
 
       default:
         return wrapStyled(<div className="text-xs text-[#9aa3b2]">[Превью для типа «{(b as any).type}» пока нет]</div>);
     }
   }, [patchBlock, setSelId, styleInline]);
 
+  // Ярлык блока
   const labelOf = useCallback((b: Block): string => {
     switch (b.type) {
-      case "hero":
-        return "Hero";
-      case "h1":
-        return "Заголовок (H1)";
-      case "heading":
-        return `Заголовок (${(b as any).level?.toUpperCase() || "H2"})`;
-      case "p":
-        return "Текст";
-      case "img":
-        return "Картинка";
-      case "btn":
-        return "Кнопка";
-      case "cols2":
-        return "Две колонки";
-      case "spacer":
-        return "Разделитель (высота)";
-      case "divider":
-        return "Линия";
-      case "section":
-        return "Секция";
-      case "grid":
-        return "Сетка";
-      default:
-        return String((b as any).type);
+      case "hero": return "Hero";
+      case "h1": return "Заголовок (H1)";
+      case "heading": return `Заголовок (${(b as any).level?.toUpperCase() || "H2"})`;
+      case "p": return "Текст";
+      case "img": return "Картинка";
+      case "btn": return "Кнопка";
+      case "cols2": return "Две колонки";
+      case "spacer": return "Разделитель (высота)";
+      case "divider": return "Линия";
+      case "section": return "Секция";
+      case "grid": return "Сетка";
+      default: return String((b as any).type);
     }
   }, []);
 
-  // — канвас-предпросмотр (сборка в один HTML для iframe справа) —
-  const [previewHtml, setPreviewHtml] = useState<string>("");
-  const [autoPreview, setAutoPreview] = useState<boolean>(true);
-  const [isBuilding, setIsBuilding] = useState<boolean>(false);
-  const [elQuery, setElQuery] = useState<string>("");
+  // ── Документ без скрытых блоков — для экспорта/предпросмотра ───────────────
+  const docForBuild = useMemo(
+    () => ({ ...doc, blocks: doc.blocks.filter((b) => !(b as any).hidden) }),
+    [doc]
+  );
 
-  // Скрытые блоки вырезаем из модели для экспорта/предпросмотра
-  const docForBuild = useMemo(() => ({ ...doc, blocks: doc.blocks.filter((b) => !(b as any).hidden) }), [doc]);
-
+  // ── Сборка встроенного мини-предпросмотра (iframe справа) ──────────────────
   const buildPreview = useCallback(async () => {
     setIsBuilding(true);
     try {
@@ -436,84 +442,11 @@ export default function SiteBuilder() {
 
   useEffect(() => {
     if (!autoPreview) return;
-    const t = setTimeout(() => {
-      void buildPreview();
-    }, 350);
+    const t = setTimeout(() => { void buildPreview(); }, 350);
     return () => clearTimeout(t);
   }, [docForBuild, autoPreview, buildPreview]);
 
-  const checks = useMemo(() => validateDoc(doc), [doc]);
-  const okCount = useMemo(() => checks.filter((c) => c.ok).length, [checks]);
-  const [showChecklist, setShowChecklist] = useState(false);
-
-  const layoutItems: Array<[BlockType, string]> = [
-    ["section", "Контейнер"],
-    ["grid", "Сетка"],
-    ["cols2", "Две колонки"],
-    ["hero", "Hero"],
-  ];
-  const basicItems: Array<[BlockType, string]> = [
-    ["h1", "Заголовок"],
-    ["p", "Текст"],
-    ["img", "Изображение"],
-    ["btn", "Кнопка"],
-    ["divider", "Разделитель"],
-    ["spacer", "Интервал"],
-  ];
-  const q = elQuery.trim().toLowerCase();
-  const layoutFiltered = layoutItems.filter(([, label]) => label.toLowerCase().includes(q));
-  const basicFiltered = basicItems.filter(([, label]) => label.toLowerCase().includes(q));
-
-  const isValidOgImage = (s: string) => {
-    if (!s) return true;
-    const v = s.trim().toLowerCase();
-    return v.startsWith("https://") || v.startsWith("http://") || v.startsWith("altfs://") || v.startsWith("ipfs://") || v.startsWith("data:image/");
-  };
-
-  // Автосохранение
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
-    } catch { }
-  }, [doc]);
-
-  const addBlock = useCallback((type: BlockType) => {
-    const block: Block =
-      type === "hero"
-        ? { id: uid(), type: "hero", title: "Новый раздел", subtitle: "", ctaText: "", ctaLink: "" }
-        : type === "h1"
-          ? { id: uid(), type: "h1", text: "Заголовок" }
-          : type === "heading"
-            ? { id: uid(), type: "heading", text: "Заголовок секции", level: "h2", align: "left" }
-            : type === "p"
-              ? { id: uid(), type: "p", text: "Параграф текста…" }
-              : type === "img"
-                ? { id: uid(), type: "img", cid: "", alt: "" }
-                : type === "cols2"
-                  ? { id: uid(), type: "cols2", title: "Заголовок", text: "Текст…", img: "", alt: "", ratio: "6-6", reverse: false }
-                  : type === "spacer"
-                    ? { id: uid(), type: "spacer", size: "md" }
-                    : type === "divider"
-                      ? { id: uid(), type: "divider" }
-                      : type === "section"
-                        ? { id: uid(), type: "section", title: "Секция", text: "", align: "left", theme: "auto", pad: "md", bg: "none" }
-                        : type === "grid"
-                          ? {
-                            id: uid(),
-                            type: "grid",
-                            cols: 3,
-                            items: [
-                              { id: uid(), src: "", alt: "Изображение 1", caption: "Подпись 1" },
-                              { id: uid(), src: "", alt: "Изображение 2", caption: "Подпись 2" },
-                              { id: uid(), src: "", alt: "Изображение 3", caption: "Подпись 3" },
-                            ],
-                          }
-                          : { id: uid(), type: "btn", label: "Кнопка", href: "#", align: "center" };
-
-    setDoc((d) => ({ ...d, blocks: [...d.blocks, block] }));
-  }, []);
-
-  // Экспорт/импорт/предпросмотр
+  // ── Экспорт / импорт / live-preview ────────────────────────────────────────
   const onExportZip = useCallback(async () => {
     const model = adaptFromSiteBuilderDoc(docForBuild);
     const blob = await exportSiteZip(model, { bundleAssets: true });
@@ -527,15 +460,6 @@ export default function SiteBuilder() {
     downloadBlob(blob, prettyFileName(doc.title || "site", "html"));
   }, [docForBuild, doc.title]);
 
-  const onOpenPreviewTab = useCallback(async () => {
-    const model = adaptFromSiteBuilderDoc(docForBuild);
-    const blob = await exportSingleHtml(model, { bundleAssets: true });
-    const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener,noreferrer");
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  }, [docForBuild]);
-
-  // HTML-оболочка для live-предпросмотра (с responsive-панелью)
   const buildLiveShellHtml = (id: string) => `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"/>
 <meta name="color-scheme" content="dark light"/>
@@ -563,9 +487,7 @@ export default function SiteBuilder() {
     <div class="sep"></div>
     <span>Ширина:</span><input id="w" type="number" min="320" max="1920" step="10" placeholder="px"/>
   </div>
-  <div id="viewport">
-    <iframe id="stage" sandbox="allow-same-origin"></iframe>
-  </div>
+  <div id="viewport"><iframe id="stage" sandbox="allow-same-origin"></iframe></div>
   <script>
     (function(){
       const ch = new BroadcastChannel("altnet_live_preview:${id}");
@@ -575,60 +497,28 @@ export default function SiteBuilder() {
       const LS_KEY = "altnet_live_w:${id}";
       function applyWidth(mode){
         buttons.forEach(b => b.classList.toggle("active", b.dataset.w === mode || (mode==="fit" && b.dataset.w==="fit")));
-        if(mode === "fit"){
-          stage.style.width = "100%";
-          localStorage.setItem(LS_KEY, "fit");
-          input.value = "";
-        }else{
-          const px = parseInt(mode, 10);
-          if(!isFinite(px)) return;
-          stage.style.width = px + "px";
-          localStorage.setItem(LS_KEY, String(px));
-          input.value = String(px);
-        }
+        if(mode === "fit"){ stage.style.width = "100%"; localStorage.setItem(LS_KEY, "fit"); input.value = ""; }
+        else { const px = parseInt(mode, 10); if(!isFinite(px)) return; stage.style.width = px + "px"; localStorage.setItem(LS_KEY, String(px)); input.value = String(px); }
       }
-      (function(){
-        const saved = localStorage.getItem(LS_KEY) || "fit";
-        const isFit = saved === "fit";
-        applyWidth(isFit ? "fit" : saved);
-      })();
-      buttons.forEach(b => { b.addEventListener("click", () => applyWidth(b.dataset.w)); });
-      input.addEventListener("change", () => {
-        const px = parseInt(input.value, 10);
-        if(isFinite(px) && px >= 320 && px <= 1920){ applyWidth(String(px)); }
-      });
+      (function(){ const saved = localStorage.getItem(LS_KEY) || "fit"; applyWidth(saved); })();
+      buttons.forEach(b => b.addEventListener("click", () => applyWidth(b.dataset.w)));
+      input.addEventListener("change", () => { const px = parseInt(input.value, 10); if(isFinite(px) && px >= 320 && px <= 1920){ applyWidth(String(px)); }});
       ch.onmessage = function(e){
         if(!e || !e.data) return;
         if(e.data.type === "html" && typeof e.data.html === "string"){
-          const doc = stage.contentWindow.document;
-          doc.open(); doc.write(e.data.html); doc.close();
-        }
-          else if(e.data.type === "width"){
-    var m = e.data.mode;
-    if(m === "fit"){ applyWidth("fit"); }
-    else if(typeof m === "number"){ applyWidth(String(m)); }
-    else if(typeof m === "string"){ applyWidth(m); }
-  }
+          const doc = stage.contentWindow.document; doc.open(); doc.write(e.data.html); doc.close();
+        } else if(e.data.type === "width"){ var m = e.data.mode; applyWidth(String(m)); }
       };
     })();
   </script>
 </body></html>`;
-
-  // Live-preview: окно, канал и id канала
-  const importJsonInputRef = useRef<HTMLInputElement>(null);
-  const livePreviewWindowRef = useRef<Window | null>(null);
-  const livePreviewChannelRef = useRef<BroadcastChannel | null>(null);
-  const livePreviewIdRef = useRef<string>("");
-  const liveDebounceRef = useRef<number | null>(null);
 
   const onOpenLivePreview = useCallback(async () => {
     const id = `s${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     livePreviewIdRef.current = id;
 
     if (livePreviewChannelRef.current) {
-      try {
-        livePreviewChannelRef.current.close();
-      } catch { }
+      try { livePreviewChannelRef.current.close(); } catch { }
     }
     livePreviewChannelRef.current = new BroadcastChannel(`altnet_live_preview:${id}`);
 
@@ -667,9 +557,7 @@ export default function SiteBuilder() {
   // Авто-обновление live-вкладки при изменениях
   useEffect(() => {
     if (!livePreviewChannelRef.current) return;
-    if (liveDebounceRef.current) {
-      window.clearTimeout(liveDebounceRef.current);
-    }
+    if (liveDebounceRef.current) { window.clearTimeout(liveDebounceRef.current); }
     liveDebounceRef.current = window.setTimeout(async () => {
       try {
         const model = adaptFromSiteBuilderDoc(docForBuild);
@@ -681,10 +569,7 @@ export default function SiteBuilder() {
       }
     }, 400);
     return () => {
-      if (liveDebounceRef.current) {
-        window.clearTimeout(liveDebounceRef.current);
-        liveDebounceRef.current = null;
-      }
+      if (liveDebounceRef.current) { window.clearTimeout(liveDebounceRef.current); liveDebounceRef.current = null; }
     };
   }, [docForBuild]);
 
@@ -692,14 +577,11 @@ export default function SiteBuilder() {
   useEffect(() => {
     if (!livePreviewChannelRef.current) return;
     const mode = iframeMode === "fit" ? "fit" : String(widthByBp[iframeMode]);
-    // Отправляем «fit» или число в строке, напр. "1280" | "834" | "390"
     livePreviewChannelRef.current.postMessage({ type: "width", mode });
   }, [iframeMode, bp]);
 
-  // Импорт JSON
-  const onImportJsonClick = () => {
-    importJsonInputRef.current?.click();
-  };
+  // Импорт/экспорт JSON
+  const onImportJsonClick = () => importJsonInputRef.current?.click();
 
   const onImportJsonChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -715,17 +597,7 @@ export default function SiteBuilder() {
       }
 
       const okTypes = new Set<BlockType>([
-        "hero",
-        "h1",
-        "heading",
-        "p",
-        "img",
-        "btn",
-        "cols2",
-        "spacer",
-        "divider",
-        "section",
-        "grid",
+        "hero", "h1", "heading", "p", "img", "btn", "cols2", "spacer", "divider", "section", "grid",
       ]);
 
       const title = typeof (data as any).title === "string" ? (data as any).title : "Мой сайт";
@@ -741,8 +613,7 @@ export default function SiteBuilder() {
           switch (b.type as BlockType) {
             case "hero":
               return {
-                id,
-                type: "hero",
+                id, type: "hero",
                 title: String(p.title ?? ""),
                 subtitle: String(p.subtitle ?? ""),
                 ctaText: String(p.ctaText ?? p.ctaLabel ?? ""),
@@ -756,15 +627,13 @@ export default function SiteBuilder() {
               return { id, type: "img", cid: String(p.cid ?? p.src ?? ""), alt: String(p.alt ?? "") } as ImgBlock;
             case "btn":
               return {
-                id,
-                type: "btn",
+                id, type: "btn",
                 label: String(p.label ?? p.text ?? "Кнопка"),
                 href: String(p.href ?? p.url ?? "#"),
               } as BtnBlock;
             case "cols2":
               return {
-                id,
-                type: "cols2",
+                id, type: "cols2",
                 title: String(b.title ?? ""),
                 text: String(b.text ?? ""),
                 img: String(b.img ?? ""),
@@ -779,7 +648,6 @@ export default function SiteBuilder() {
         .filter(Boolean) as Block[];
 
       if (!blocks.length) throw new Error("В файле нет валидных блоков.");
-
       if (!confirm("Импортировать JSON и заменить текущий документ?")) return;
       setDoc({ title, description, blocks });
     } catch (err: any) {
@@ -796,81 +664,63 @@ export default function SiteBuilder() {
 
   const resetDoc = useCallback(() => {
     setDoc(DEFAULT_DOC);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch { }
+    try { localStorage.removeItem(STORAGE_KEY); } catch { }
   }, []);
 
-  // — Навигатор (Outline) —
-  const Navigator = useCallback(
-    () => (
-      <div className="grid gap-2">
-        {doc.blocks.map((b, idx) => (
-          <div
-            key={b.id}
-            className={`group flex items-center justify-between gap-2 rounded-lg border ${selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
-              } px-2 py-1`}
-          >
-            <button
-              onClick={() => setSelId(b.id)}
-              className={`rounded-xl border ${selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
-                } bg-[#0c0f1a] p-3 cursor-pointer`}
-              title={labelOf(b)}
-            >
-              <span className="opacity-60 mr-1">#{idx + 1}</span>
-              {labelOf(b)}
-            </button>
-            <div className="flex items-center gap-1">
-              <button title="Вверх" onClick={() => moveBlock(b.id, -1)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">
-                ↑
-              </button>
-              <button title="Вниз" onClick={() => moveBlock(b.id, 1)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">
-                ↓
-              </button>
-              <button
-                title={(b as any).hidden ? "Показать" : "Скрыть"}
-                onClick={() => patchBlock(b.id, { hidden: !((b as any).hidden) })}
-                className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
-              >
-                {(b as any).hidden ? "👁" : "👁‍🗨"}
-              </button>
-              <button
-                title={(b as any).locked ? "Разблокировать" : "Заблокировать"}
-                onClick={() => patchBlock(b.id, { locked: !((b as any).locked) })}
-                className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
-              >
-                {(b as any).locked ? "🔓" : "🔒"}
-              </button>
-              <button title="Дублировать" onClick={() => duplicateBlock(b.id)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">
-                ⧉
-              </button>
-              <button
-                title="Удалить"
-                onClick={() => removeBlock(b.id)}
-                className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs text-[#ffb3a8]"
-              >
-                🗑
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    ),
-    [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock]
-  );
+  // Автосохранение
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(doc)); } catch { }
+  }, [doc]);
 
-  // — Редактор свойств выбранного блока —
+  // ── Навигатор (Outline) ────────────────────────────────────────────────────
+  const Navigator = useCallback(() => (
+    <div className="grid gap-2">
+      {doc.blocks.map((b, idx) => (
+        <div
+          key={b.id}
+          className={`group flex items-center justify-between gap-2 rounded-lg border ${selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
+            } px-2 py-1`}
+        >
+          <button
+            onClick={() => setSelId(b.id)}
+            className={`rounded-xl border ${selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
+              } bg-[#0c0f1a] p-3 cursor-pointer`}
+            title={labelOf(b)}
+          >
+            <span className="opacity-60 mr-1">#{idx + 1}</span>
+            {labelOf(b)}
+          </button>
+          <div className="flex items-center gap-1">
+            <button title="Вверх" onClick={() => moveBlock(b.id, -1)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">↑</button>
+            <button title="Вниз" onClick={() => moveBlock(b.id, 1)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">↓</button>
+            <button
+              title={(b as any).hidden ? "Показать" : "Скрыть"}
+              onClick={() => patchBlock(b.id, { hidden: !((b as any).hidden) })}
+              className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
+            >{(b as any).hidden ? "👁" : "👁‍🗨"}</button>
+            <button
+              title={(b as any).locked ? "Разблокировать" : "Заблокировать"}
+              onClick={() => patchBlock(b.id, { locked: !((b as any).locked) })}
+              className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
+            >{(b as any).locked ? "🔓" : "🔒"}</button>
+            <button title="Дублировать" onClick={() => duplicateBlock(b.id)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">⧉</button>
+            <button title="Удалить" onClick={() => removeBlock(b.id)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs text-[#ffb3a8]">🗑</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  ), [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock]);
+
+  // ── Редактор свойств выбранного блока ──────────────────────────────────────
   const Editor = useCallback(() => {
     if (!sel) return <div className="text-xs text-[#9aa3b2]">Выберите блок слева.</div>;
+
     const sBy: StyleByBp = (sel as any).styleByBp || {};
     const sCur: BlockStyle = sBy[bp] || {};
 
-    // показываем число как строку в input
     const readNum = (v: any) => (v == null ? "" : String(v));
 
-    // принимаем string|number, нормализуем -> number|undefined
     const updCur = (patch: Partial<Record<keyof BlockStyle, string | number>>) => {
-      // какие ключи числовые (остальные — строковые)
       const numericKeys: (keyof BlockStyle)[] = ["mt", "mb", "pt", "pb", "py", "fs", "fw", "lh", "bw", "br"];
       const normalized = Object.fromEntries(
         Object.entries(patch).map(([k, v]) => {
@@ -878,7 +728,6 @@ export default function SiteBuilder() {
           return [k, numericKeys.includes(k as keyof BlockStyle) ? Number(v) : v];
         })
       ) as Partial<BlockStyle>;
-
       const next: BlockStyle = { ...(sBy[bp] || {}), ...normalized };
       patchBlock(sel.id, { styleByBp: { ...sBy, [bp]: next } } as any);
     };
@@ -888,16 +737,16 @@ export default function SiteBuilder() {
       }`;
     const id = sel.id;
     const row = (children: React.ReactNode) => <div className="grid gap-3">{children}</div>;
-
-    // Вкладки
-    const Tabs = (
+    const TabsBar: React.FC = () => (
       <div className="mb-3 flex items-center gap-2">
-        {(["content", "style", "advanced"] as const).map(t => (
+        {(["content", "style", "advanced"] as const).map((t) => (
           <button
             key={t}
             className={[
               "px-2.5 py-1.5 rounded-md border text-xs",
-              editorTab === t ? "border-[#6E59F2] bg-[#121528] text-[#e6e9f4]" : "border-[#2a2f45] bg-[#0c0f1a] text-[#cfd5e6]"
+              editorTab === t
+                ? "border-[#6E59F2] bg-[#121528] text-[#e6e9f4]"
+                : "border-[#2a2f45] bg-[#0c0f1a] text-[#cfd5e6]"
             ].join(" ")}
             onClick={() => setEditorTab(t)}
           >
@@ -907,7 +756,8 @@ export default function SiteBuilder() {
       </div>
     );
 
-    // --- StyleTab: отступы по брейкпоинтам (Desktop/Tablet/Mobile) ---
+
+    // Style tab (по брейкпоинтам)
     const styleByBpNode = (
       <div className="grid gap-3">
         <div className="flex items-center gap-1 text-xs">
@@ -918,209 +768,52 @@ export default function SiteBuilder() {
           <span className="ml-2 opacity-70">({bp})</span>
         </div>
 
-        {/* Значения для текущего брейкпоинта */}
         <div className="grid grid-cols-5 gap-2">
-          <Field label="mt">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.mt)}
-              onChange={(e) => updCur({ mt: e.target.value })}
-              placeholder="px"
-            />
-          </Field>
-          <Field label="mb">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.mb)}
-              onChange={(e) => updCur({ mb: e.target.value })}
-              placeholder="px"
-            />
-          </Field>
-          <Field label="pt">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.pt)}
-              onChange={(e) => updCur({ pt: e.target.value })}
-              placeholder="px"
-            />
-          </Field>
-          <Field label="pb">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.pb)}
-              onChange={(e) => updCur({ pb: e.target.value })}
-              placeholder="px"
-            />
-          </Field>
-          <Field label="py">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.py)}
-              onChange={(e) => updCur({ py: e.target.value })}
-              placeholder="px"
-            />
-          </Field>
+          <Field label="mt"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.mt)} onChange={(e) => updCur({ mt: e.target.value })} placeholder="px" /></Field>
+          <Field label="mb"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.mb)} onChange={(e) => updCur({ mb: e.target.value })} placeholder="px" /></Field>
+          <Field label="pt"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.pt)} onChange={(e) => updCur({ pt: e.target.value })} placeholder="px" /></Field>
+          <Field label="pb"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.pb)} onChange={(e) => updCur({ pb: e.target.value })} placeholder="px" /></Field>
+          <Field label="py"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.py)} onChange={(e) => updCur({ py: e.target.value })} placeholder="px" /></Field>
         </div>
-        {/* ─────────────────────────── Типографика ─────────────────────────── */}
+
         <div className="mt-3 text-xs text-[#9aa3b2]">Типографика</div>
         <div className="grid grid-cols-5 gap-2">
-          <Field label="fontSize (px)">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.fs)}
-              onChange={(e) => updCur({ fs: e.target.value })}
-              placeholder="напр. 16"
-              inputMode="numeric"
-            />
-          </Field>
+          <Field label="fontSize (px)"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.fs)} onChange={(e) => updCur({ fs: e.target.value })} placeholder="напр. 16" inputMode="numeric" /></Field>
           <Field label="fontWeight">
-            <select
-              className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.fw)}
-              onChange={(e) => updCur({ fw: e.target.value })}
-            >
-              <option value=""></option>
-              <option value="300">300</option>
-              <option value="400">400</option>
-              <option value="500">500</option>
-              <option value="600">600</option>
-              <option value="700">700</option>
-              <option value="800">800</option>
+            <select className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.fw)} onChange={(e) => updCur({ fw: e.target.value })}>
+              <option value=""></option><option value="300">300</option><option value="400">400</option><option value="500">500</option>
+              <option value="600">600</option><option value="700">700</option><option value="800">800</option>
             </select>
           </Field>
-          <Field label="lineHeight">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.lh)}
-              onChange={(e) => updCur({ lh: e.target.value })}
-              placeholder="напр. 22"
-              inputMode="numeric"
-            />
-          </Field>
+          <Field label="lineHeight"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.lh)} onChange={(e) => updCur({ lh: e.target.value })} placeholder="напр. 22" inputMode="numeric" /></Field>
           <Field label="textAlign">
-            <select
-              className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={sCur.ta || ""}
-              onChange={(e) => updCur({ ta: e.target.value })}
-            >
-              <option value=""></option>
-              <option value="left">left</option>
-              <option value="center">center</option>
-              <option value="right">right</option>
-              <option value="justify">justify</option>
+            <select className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={sCur.ta || ""} onChange={(e) => updCur({ ta: e.target.value })}>
+              <option value=""></option><option value="left">left</option><option value="center">center</option><option value="right">right</option><option value="justify">justify</option>
             </select>
           </Field>
           <div />
         </div>
 
-        {/* ─────────────────────── Цвета / границы / тени ───────────────────── */}
         <div className="mt-3 text-xs text-[#9aa3b2]">Цвета, границы, тени</div>
         <div className="grid grid-cols-6 gap-2">
-          <Field label="textColor">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={sCur.tc || ""}
-              onChange={(e) => updCur({ tc: e.target.value })}
-              placeholder="#e6e9f4"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
-          <Field label="bgColor">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={sCur.bg || ""}
-              onChange={(e) => updCur({ bg: e.target.value })}
-              placeholder="#0b0e18"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
-          <Field label="borderWidth">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.bw)}
-              onChange={(e) => updCur({ bw: e.target.value })}
-              placeholder="px"
-              inputMode="numeric"
-            />
-          </Field>
+          <Field label="textColor"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={sCur.tc || ""} onChange={(e) => updCur({ tc: e.target.value })} placeholder="#e6e9f4" autoComplete="off" spellCheck={false} /></Field>
+          <Field label="bgColor"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={sCur.bg || ""} onChange={(e) => updCur({ bg: e.target.value })} placeholder="#0b0e18" autoComplete="off" spellCheck={false} /></Field>
+          <Field label="borderWidth"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.bw)} onChange={(e) => updCur({ bw: e.target.value })} placeholder="px" inputMode="numeric" /></Field>
           <Field label="borderStyle">
-            <select
-              className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={sCur.bs || ""}
-              onChange={(e) => updCur({ bs: e.target.value })}
-            >
-              <option value=""></option>
-              <option value="none">none</option>
-              <option value="solid">solid</option>
-              <option value="dashed">dashed</option>
-              <option value="dotted">dotted</option>
+            <select className="px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={sCur.bs || ""} onChange={(e) => updCur({ bs: e.target.value })}>
+              <option value=""></option><option value="none">none</option><option value="solid">solid</option><option value="dashed">dashed</option><option value="dotted">dotted</option>
             </select>
           </Field>
-          <Field label="borderColor">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={sCur.bc || ""}
-              onChange={(e) => updCur({ bc: e.target.value })}
-              placeholder="#2a2f45"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
-          <Field label="radius (px)">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={readNum(sCur.br)}
-              onChange={(e) => updCur({ br: e.target.value })}
-              placeholder="px"
-              inputMode="numeric"
-            />
-          </Field>
+          <Field label="borderColor"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={sCur.bc || ""} onChange={(e) => updCur({ bc: e.target.value })} placeholder="#2a2f45" autoComplete="off" spellCheck={false} /></Field>
+          <Field label="radius (px)"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.br)} onChange={(e) => updCur({ br: e.target.value })} placeholder="px" inputMode="numeric" /></Field>
         </div>
         <div className="grid grid-cols-1 gap-2">
-          <Field label="boxShadow (CSS)">
-            <input
-              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={sCur.sh || ""}
-              onChange={(e) => updCur({ sh: e.target.value })}
-              placeholder="0 4px 16px rgba(0,0,0,.25)"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
+          <Field label="boxShadow (CSS)"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={sCur.sh || ""} onChange={(e) => updCur({ sh: e.target.value })} placeholder="0 4px 16px rgba(0,0,0,.25)" autoComplete="off" spellCheck={false} /></Field>
         </div>
       </div>
     );
 
-
-    {
-      editorTab === "advanced" && (
-        <div className="grid gap-3">
-          <div className="flex gap-2">
-            <button className="px-2 py-1 rounded border border-[#2a2f45] bg-[#0c0f1a]" onClick={() => patchBlock(sel.id, { hidden: !((sel as any).hidden) } as any)}>
-              {(sel as any).hidden ? "Показать" : "Скрыть"}
-            </button>
-            <button className="px-2 py-1 rounded border border-[#2a2f45] bg-[#0c0f1a]" onClick={() => patchBlock(sel.id, { locked: !((sel as any).locked) } as any)}>
-              {(sel as any).locked ? "Разблокировать" : "Заблокировать"}
-            </button>
-          </div>
-          <Field label="ID (якорь)">
-            <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={(sel as any).anchorId || ""}
-              onChange={e => patchBlock(sel.id, { anchorId: e.target.value } as any)} />
-          </Field>
-          <Field label="CSS класс">
-            <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={(sel as any).className || ""}
-              onChange={e => patchBlock(sel.id, { className: e.target.value } as any)} />
-          </Field>
-        </div>
-      )
-    }
-    { editorTab !== "content" && <></> }
-
-    // Контентные формы (как было)
+    // Контентные формы
     let contentNode: React.ReactNode = null;
     switch (sel.type) {
       case "hero": {
@@ -1129,20 +822,20 @@ export default function SiteBuilder() {
           <>
             <Field label="Заголовок">
               <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.title} onChange={e => patchBlock(id, { title: e.target.value })} autoComplete="off" spellCheck={false} />
+                value={b.title} onChange={(e) => patchBlock(id, { title: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <Field label="Подзаголовок">
               <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.subtitle || ""} onChange={e => patchBlock(id, { subtitle: e.target.value })} autoComplete="off" spellCheck={false} />
+                value={b.subtitle || ""} onChange={(e) => patchBlock(id, { subtitle: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Текст кнопки">
                 <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.ctaText || ""} onChange={e => patchBlock(id, { ctaText: e.target.value })} autoComplete="off" spellCheck={false} />
+                  value={b.ctaText || ""} onChange={(e) => patchBlock(id, { ctaText: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
               <Field label="Ссылка (http/altfs/ipfs/#)">
                 <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.ctaLink || ""} onChange={e => patchBlock(id, { ctaLink: e.target.value })} autoComplete="off" spellCheck={false} />
+                  value={b.ctaLink || ""} onChange={(e) => patchBlock(id, { ctaLink: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
             </div>
           </>
@@ -1154,7 +847,7 @@ export default function SiteBuilder() {
         contentNode = row(
           <Field label="Текст H1">
             <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} autoComplete="off" spellCheck={false} />
+              value={b.text} onChange={(e) => patchBlock(id, { text: e.target.value })} autoComplete="off" spellCheck={false} />
           </Field>
         );
         break;
@@ -1165,18 +858,18 @@ export default function SiteBuilder() {
           <>
             <Field label="Текст заголовка">
               <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} autoComplete="off" spellCheck={false} />
+                value={b.text} onChange={(e) => patchBlock(id, { text: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Уровень">
                 <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.level || "h2"} onChange={e => patchBlock(id, { level: e.target.value as any })}>
+                  value={b.level || "h2"} onChange={(e) => patchBlock(id, { level: e.target.value as any })}>
                   <option value="h2">H2</option><option value="h3">H3</option><option value="h4">H4</option>
                 </select>
               </Field>
               <Field label="Выравнивание">
                 <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.align || "left"} onChange={e => patchBlock(id, { align: e.target.value as any })}>
+                  value={b.align || "left"} onChange={(e) => patchBlock(id, { align: e.target.value as any })}>
                   <option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option>
                 </select>
               </Field>
@@ -1191,11 +884,11 @@ export default function SiteBuilder() {
           <>
             <Field label="Текст">
               <textarea className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[96px]"
-                value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} spellCheck={false} />
+                value={b.text} onChange={(e) => patchBlock(id, { text: e.target.value })} spellCheck={false} />
             </Field>
             <Field label="Выравнивание">
               <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                value={b.align || "left"} onChange={e => patchBlock(id, { align: e.target.value as any })}>
+                value={b.align || "left"} onChange={(e) => patchBlock(id, { align: e.target.value as any })}>
                 <option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option>
               </select>
             </Field>
@@ -1209,11 +902,11 @@ export default function SiteBuilder() {
           <>
             <Field label="CID/URL изображения">
               <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.cid} onChange={e => patchBlock(id, { cid: e.target.value })} autoComplete="off" spellCheck={false} />
+                value={b.cid} onChange={(e) => patchBlock(id, { cid: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <Field label="Alt-текст (доступность/SEO)">
               <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.alt || ""} onChange={e => patchBlock(id, { alt: e.target.value })} autoComplete="off" spellCheck={false} />
+                value={b.alt || ""} onChange={(e) => patchBlock(id, { alt: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
           </>
         );
@@ -1226,23 +919,23 @@ export default function SiteBuilder() {
             <div className="grid grid-cols-2 gap-3">
               <Field label="Текст кнопки">
                 <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.label} onChange={e => patchBlock(id, { label: e.target.value })} autoComplete="off" spellCheck={false} />
+                  value={b.label} onChange={(e) => patchBlock(id, { label: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
               <Field label="Ссылка">
                 <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.href} onChange={e => patchBlock(id, { href: e.target.value })} autoComplete="off" spellCheck={false} />
+                  value={b.href} onChange={(e) => patchBlock(id, { href: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Стиль">
                 <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.variant || "primary"} onChange={e => patchBlock(id, { variant: e.target.value as any })}>
+                  value={b.variant || "primary"} onChange={(e) => patchBlock(id, { variant: e.target.value as any })}>
                   <option value="primary">Primary</option><option value="secondary">Secondary</option>
                 </select>
               </Field>
               <Field label="Выравнивание">
                 <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.align || "center"} onChange={e => patchBlock(id, { align: e.target.value as any })}>
+                  value={b.align || "center"} onChange={(e) => patchBlock(id, { align: e.target.value as any })}>
                   <option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option>
                 </select>
               </Field>
@@ -1257,32 +950,32 @@ export default function SiteBuilder() {
           <>
             <Field label="Заголовок">
               <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.title} onChange={e => patchBlock(id, { title: e.target.value })} autoComplete="off" spellCheck={false} />
+                value={b.title} onChange={(e) => patchBlock(id, { title: e.target.value })} autoComplete="off" spellCheck={false} />
             </Field>
             <Field label="Текст">
               <textarea className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[96px]"
-                value={b.text} onChange={e => patchBlock(id, { text: e.target.value })} spellCheck={false} />
+                value={b.text} onChange={(e) => patchBlock(id, { text: e.target.value })} spellCheck={false} />
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Изображение (CID/URL)">
                 <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.img} onChange={e => patchBlock(id, { img: e.target.value })} autoComplete="off" spellCheck={false} />
+                  value={b.img} onChange={(e) => patchBlock(id, { img: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
               <Field label="Alt">
                 <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                  value={b.alt} onChange={e => patchBlock(id, { alt: e.target.value })} autoComplete="off" spellCheck={false} />
+                  value={b.alt} onChange={(e) => patchBlock(id, { alt: e.target.value })} autoComplete="off" spellCheck={false} />
               </Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Соотношение колонок">
                 <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.ratio} onChange={e => patchBlock(id, { ratio: e.target.value as ColsRatio })}>
+                  value={b.ratio} onChange={(e) => patchBlock(id, { ratio: e.target.value as ColsRatio })}>
                   <option value="5-7">5–7</option><option value="6-6">6–6</option><option value="7-5">7–5</option>
                 </select>
               </Field>
               <Field label="Порядок (реверс)">
                 <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                  value={b.reverse ? "1" : "0"} onChange={e => patchBlock(id, { reverse: e.target.value === "1" })}>
+                  value={b.reverse ? "1" : "0"} onChange={(e) => patchBlock(id, { reverse: e.target.value === "1" })}>
                   <option value="0">Обычный</option><option value="1">Реверс</option>
                 </select>
               </Field>
@@ -1297,28 +990,28 @@ export default function SiteBuilder() {
           <>
             <Field label="Заголовок секции">
               <input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={b.title || ""} onChange={e => patchBlock(id, { title: e.target.value })} />
+                value={b.title || ""} onChange={(e) => patchBlock(id, { title: e.target.value })} />
             </Field>
             <Field label="Текст секции">
               <textarea className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4] min-h-[72px]"
-                value={b.text || ""} onChange={e => patchBlock(id, { text: e.target.value })} />
+                value={b.text || ""} onChange={(e) => patchBlock(id, { text: e.target.value })} />
             </Field>
             <div className="grid grid-cols-3 gap-3">
               <Field label="Тема">
                 <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.theme || "auto"}
-                  onChange={e => patchBlock(id, { theme: e.target.value as any })}>
+                  onChange={(e) => patchBlock(id, { theme: e.target.value as any })}>
                   <option value="auto">Auto</option><option value="light">Light</option><option value="dark">Dark</option>
                 </select>
               </Field>
               <Field label="Паддинги">
                 <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.pad || "md"}
-                  onChange={e => patchBlock(id, { pad: e.target.value as any })}>
+                  onChange={(e) => patchBlock(id, { pad: e.target.value as any })}>
                   <option value="sm">sm</option><option value="md">md</option><option value="lg">lg</option>
                 </select>
               </Field>
               <Field label="Фон">
                 <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.bg || "none"}
-                  onChange={e => patchBlock(id, { bg: e.target.value as any })}>
+                  onChange={(e) => patchBlock(id, { bg: e.target.value as any })}>
                   <option value="none">none</option><option value="subtle">subtle</option><option value="card">card</option><option value="accent">accent</option>
                 </select>
               </Field>
@@ -1333,7 +1026,7 @@ export default function SiteBuilder() {
           <>
             <Field label="Кол-во колонок">
               <select className="px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={b.cols}
-                onChange={e => patchBlock(id, { cols: Number(e.target.value) as any })}>
+                onChange={(e) => patchBlock(id, { cols: Number(e.target.value) as any })}>
                 <option value={1}>1</option><option value={2}>2</option><option value={3}>3</option><option value={4}>4</option>
               </select>
             </Field>
@@ -1342,11 +1035,11 @@ export default function SiteBuilder() {
                 <div key={it.id} className="rounded-lg border border-[#2a2f45] p-2 grid gap-2">
                   <div className="text-xs text-[#9aa3b2]">Элемент {i + 1}</div>
                   <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                    value={it.src} onChange={e => { const items = b.items.slice(); items[i] = { ...items[i], src: e.target.value }; patchBlock(id, { items }); }} placeholder="CID/URL" />
+                    value={it.src} onChange={(e) => { const items = b.items.slice(); items[i] = { ...items[i], src: e.target.value }; patchBlock(id, { items }); }} placeholder="CID/URL" />
                   <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                    value={it.alt || ""} onChange={e => { const items = b.items.slice(); items[i] = { ...items[i], alt: e.target.value }; patchBlock(id, { items }); }} placeholder="Alt" />
+                    value={it.alt || ""} onChange={(e) => { const items = b.items.slice(); items[i] = { ...items[i], alt: e.target.value }; patchBlock(id, { items }); }} placeholder="Alt" />
                   <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-                    value={it.caption || ""} onChange={e => { const items = b.items.slice(); items[i] = { ...items[i], caption: e.target.value }; patchBlock(id, { items }); }} placeholder="Подпись" />
+                    value={it.caption || ""} onChange={(e) => { const items = b.items.slice(); items[i] = { ...items[i], caption: e.target.value }; patchBlock(id, { items }); }} placeholder="Подпись" />
                 </div>
               ))}
               <button className="px-2 py-1 rounded bg-[#1a1d2e] border border-[#2a2f45] text-[#b8c1ff]"
@@ -1362,163 +1055,129 @@ export default function SiteBuilder() {
         contentNode = <div className="text-xs text-[#9aa3b2]">Редактор для этого блока пока не реализован.</div>;
     }
 
-
-
-    // Advanced (минимум: скрыть/заблокировать)
-    const advancedNode = row(
-      <>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Скрыть блок">
-            <button
-              className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4]"
-              onClick={() => patchBlock(id, { hidden: !((sel as any).hidden) })}
-            >
-              {((sel as any).hidden ? "Показан → Скрыть" : "Скрыт → Показать")}
-            </button>
-          </Field>
-          <Field label="Блокировка">
-            <button
-              className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4]"
-              onClick={() => patchBlock(id, { locked: !((sel as any).locked) })}
-            >
-              {((sel as any).locked ? "Разблокировать" : "Заблокировать")}
-            </button>
-          </Field>
-        </div>
-      </>
+    const advancedNode = (
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Скрыть блок">
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4]"
+            onClick={() => patchBlock(sel.id, { hidden: !((sel as any).hidden) })}>
+            {(sel as any).hidden ? "Показан → Скрыть" : "Скрыт → Показать"}
+          </button>
+        </Field>
+        <Field label="Блокировка">
+          <button className="px-3 py-2 rounded-lg bg-[#1a1d2e] border border-[#2a2f45] text-[#e6e9f4]"
+            onClick={() => patchBlock(sel.id, { locked: !((sel as any).locked) })}>
+            {(sel as any).locked ? "Разблокировать" : "Заблокировать"}
+          </button>
+        </Field>
+        <Field label="ID (якорь)">
+          <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+            value={(sel as any).anchorId || ""} onChange={(e) => patchBlock(sel.id, { anchorId: e.target.value } as any)} />
+        </Field>
+        <Field label="CSS класс">
+          <input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+            value={(sel as any).className || ""} onChange={(e) => patchBlock(sel.id, { className: e.target.value } as any)} />
+        </Field>
+      </div>
     );
 
     return (
       <>
-        {Tabs}
+        <TabsBar />
         {editorTab === "content" ? contentNode : editorTab === "style" ? styleByBpNode : advancedNode}
       </>
     );
   }, [sel, patchBlock, bp, editorTab]);
 
+  // ── Разметка: слева палитра/навигация, центр канвас, справа свойства+предпросмотр ──
+  const layoutItems: Array<[BlockType, string]> = [
+    ["section", "Контейнер"],
+    ["grid", "Сетка"],
+    ["cols2", "Две колонки"],
+    ["hero", "Hero"],
+  ];
+  const basicItems: Array<[BlockType, string]> = [
+    ["h1", "Заголовок"],
+    ["p", "Текст"],
+    ["img", "Изображение"],
+    ["btn", "Кнопка"],
+    ["divider", "Разделитель"],
+    ["spacer", "Интервал"],
+  ];
+  const q = elQuery.trim().toLowerCase();
+  const layoutFiltered = layoutItems.filter(([, label]) => label.toLowerCase().includes(q));
+  const basicFiltered = basicItems.filter(([, label]) => label.toLowerCase().includes(q));
 
-  // Разметка: 3 колонки — слева настройки/палитра, центр — канвас, справа — свойства + предпросмотр
   return (
-    <div className="h-full grid grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)_360px] xl:grid-cols-[340px_minmax(0,1fr)_420px] gap-4">
-      {/* Левая панель — настройки, кнопки, палитра, чек-лист, навигатор */}
-      <div className="md:col-[1] h-full overflow-y-auto border-r border-[#1c2030] bg-[#0b0e18] p-4">
-        <div className="mb-4">
-          <Field label="Название сайта">
+    <div className="h-full grid grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)_420px] xl:grid-cols-[340px_minmax(0,1fr)_480px] gap-4">
+      {/* Левая колонка */}
+      <div className="grid content-start gap-4">
+        <div className="mt-3">
+          <Field label="Поиск виджета">
             <input
               className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={doc.title}
-              onChange={(e) => setDoc((d) => ({ ...d, title: e.target.value }))}
-              autoComplete="off"
-              spellCheck={false}
+              value={elQuery} onChange={(e) => setElQuery(e.target.value)}
+              placeholder="Найти: заголовок, кнопка, сетка…" autoComplete="off" spellCheck={false}
             />
           </Field>
         </div>
 
-        <div className="mb-4">
-          {(() => {
-            const desc = doc.description || "";
-            const max = 160;
-            const left = max - desc.length;
-            const tooLong = left < 0;
-            return (
-              <Field label="Описание сайта (meta description, до 160 символов)">
-                <textarea
-                  className={`w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none text-[#cfd5e6] min-h-[72px] resize-vertical ${tooLong ? "border-[#ff6b6b] focus:border-[#ff6b6b]" : "border-[#1f2751] focus:border-[#2a3a8f]"
-                    }`}
-                  value={desc}
-                  onChange={(e) => setDoc((d) => ({ ...d, description: e.target.value }))}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-                <div className="text-xs mt-1" style={{ color: tooLong ? "#ff9b9b" : "#9aa3b2" }}>
-                  Осталось {Math.max(0, left)} символов{tooLong ? " (лишнее не попадёт в сниппеты)" : ""}
-                </div>
-              </Field>
-            );
-          })()}
-        </div>
-
-        <div className="mb-4">
-          <div className="mb-2 text-sm text-[#9aa3b2]">Настройки темы</div>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="grid gap-1">
-              <span className="text-xs text-[#9aa3b2]">Акцентный цвет</span>
-              <input
-                type="text"
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={doc.theme?.accent || ""}
-                onChange={(e) => setDoc((d) => ({ ...d, theme: { ...(d.theme || {}), accent: e.target.value.trim() } }))}
-                placeholder="#5865F2"
-                spellCheck={false}
-                autoComplete="off"
-              />
-            </label>
-            <label className="grid gap-1">
-              <span className="text-xs text-[#9aa3b2]">Ширина контейнера, px</span>
-              <input
-                type="number"
-                min={640}
-                max={1920}
-                step={10}
-                className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-                value={String(doc.theme?.container ?? 960)}
-                onChange={(e) =>
-                  setDoc((d) => ({
-                    ...d,
-                    theme: { ...(d.theme || {}), container: Math.max(640, Math.min(1920, parseInt(e.target.value || "960", 10))) },
-                  }))
-                }
-              />
-            </label>
+        <div>
+          <div className="text-xs text-[#9aa3b2] mb-2">Планировка</div>
+          <div className="grid grid-cols-2 gap-2">
+            {layoutFiltered.map(([type, label]) => (
+              <button key={type} onClick={() => setDoc(d => ({ ...d, blocks: [...d.blocks, createDefaultBlock(type)] }))}
+                className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0c0f1a] text-[#e6e9f4] hover:bg-[#121528]">
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="mb-4">
-          <Field label="OG-картинка (CID/URL)">
-            <input
-              className={
-                "w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border outline-none " +
-                (isValidOgImage(doc.ogImage || "") ? "border-[#1f2751] text-[#e6e9f4]" : "border-red-500 text-red-300")
-              }
-              value={doc.ogImage || ""}
-              onChange={(e) => setDoc((d) => ({ ...d, ogImage: e.target.value }))}
-              placeholder="altfs://CID или https://… или data:image/…"
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </Field>
-          {!isValidOgImage(doc.ogImage || "") && (
-            <div className="mt-1 text-xs text-red-400">Разрешены: https://, http://, altfs://, ipfs:// или data:image/…</div>
+        <div>
+          <div className="text-xs text-[#9aa3b2] mb-2">Базовые</div>
+          <div className="grid grid-cols-2 gap-2">
+            {basicFiltered.map(([type, label]) => (
+              <button key={type} onClick={() => setDoc(d => ({ ...d, blocks: [...d.blocks, createDefaultBlock(type)] }))}
+                className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0c0f1a] text-[#e6e9f4] hover:bg-[#121528]">
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Навигатор */}
+        <div>
+          <div className="text-xs text-[#9aa3b2] mb-2">Навигатор</div>
+          <Navigator />
+        </div>
+
+        {/* Чек-лист качества */}
+        <div className="rounded-lg border border-[#2a2f45] p-3">
+          <div className="text-xs text-[#9aa3b2] flex items-center justify-between">
+            <span>Проверки ({okCount}/{checks.length})</span>
+            <button className="px-2 py-0.5 rounded border border-[#2a2f45]" onClick={() => setShowChecklist(v => !v)}>{showChecklist ? "−" : "+"}</button>
+          </div>
+          {showChecklist && (
+            <ul className="mt-2 grid gap-1 text-xs">
+              {checks.map(c => (
+                <li key={c.id} className={c.ok ? "text-[#9dd79d]" : "text-[#ffb3a8]"}>• {c.text}</li>
+              ))}
+            </ul>
           )}
         </div>
 
-        
-
-        {showChecklist && (
-          <div className="mb-4 rounded-xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
-            <div className="text-sm mb-2 text-[#9aa3b2]">Проверки качества</div>
-            <ul className="space-y-1 text-sm">
-              {checks.map((it) => (
-                <li key={it.id} className="flex items-start gap-2">
-                  <span className={it.ok ? "text-green-400" : "text-red-400"}>{it.ok ? "✔" : "✖"}</span>
-                  <span className={it.ok ? "text-[#9aa3b2]" : "text-[#ffb3a8]"}>{it.text}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="mt-4 rounded-2xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
-          <div className="mb-2 text-sm text-[#cfd5e6]">Навигатор</div>
-          <Navigator />
+        {/* Импорт/Экспорт JSON */}
+        <div className="grid grid-cols-2 gap-2">
+          <button className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={onExportJson}>Скачать JSON</button>
+          <button className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={onImportJsonClick}>Импорт JSON</button>
+          <input ref={importJsonInputRef} className="hidden" type="file" accept="application/json" onChange={onImportJsonChange} />
+          <button className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={resetDoc}>Сбросить</button>
+          <button className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={onOpenLivePreview}>Live-предпросмотр</button>
         </div>
       </div>
 
-      {/* Средняя панель — Канвас */}
-      <div className="md:col-[2] min-h-0 overflow-y-auto p-4">
-
-
-        {/* Верхняя responsive-панель (как у Elementor) */}
+      {/* Центральная колонка — Канвас + Палитра (вставка после выбранного) */}
+      <div className="md:col-[2] h-full overflow-y-auto">
         <Topbar
           bp={bp}
           onChangeBp={setBp}
@@ -1526,115 +1185,101 @@ export default function SiteBuilder() {
           onChangeMode={setIframeMode}
           right={
             <div className="flex items-center gap-2">
-              {/* Экспорт Single HTML */}
-              <button
-                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
-                onClick={async () => {
-                  // Собираем документ и сохраняем как single HTML
-                  const adapted = adaptFromSiteBuilderDoc(doc);
-                  const res = await exportSingleHtml(adapted);
-                  const blob = (res as any)?.blob ?? res;                 // совместимость с разными сигнатурами
-                  const filename = (res as any)?.filename ?? "site.html";
-                  downloadBlob(blob, filename);
-                }}
-                title="Экспорт в одиночный HTML-файл"
-              >
+              <button className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]" onClick={onExportSingle}>
                 Экспорт HTML
               </button>
-
-              {/* Экспорт ZIP */}
-              <button
-                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
-                onClick={async () => {
-                  const adapted = adaptFromSiteBuilderDoc(doc);
-                  const res = await exportSiteZip(adapted);
-                  const blob = (res as any)?.blob ?? res;
-                  const filename = (res as any)?.filename ?? "site.zip";
-                  downloadBlob(blob, filename);
-                }}
-                title="Экспорт в ZIP-архив (HTML + assets)"
-              >
+              <button className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]" onClick={onExportZip}>
                 Экспорт ZIP
               </button>
-
-              {/* Автопревью — если включено, предпросмотр обновляется сам */}
               <label className="ml-2 inline-flex items-center gap-2 text-xs text-[#cfd5e6]">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-[#2a2f45] bg-[#0f1420]"
-                  checked={autoPreview}
-                  onChange={(e) => setAutoPreview(e.target.checked)}
-                />
+                <input type="checkbox" className="h-4 w-4 rounded border-[#2a2f45] bg-[#0f1420]" checked={autoPreview} onChange={(e) => setAutoPreview(e.target.checked)} />
                 Автопревью
               </label>
             </div>
           }
         />
 
-        <div className="flex justify-center">
-          <div className="w-full" style={{ maxWidth: `${doc.theme?.container ?? 960}px` }}>
-            <div className="rounded-2xl bg-white text-[#0f172a] shadow-[0_10px_40px_rgba(0,0,0,0.35)] border border-[#e5e7eb] p-6">
-              {/* Палитра блоков (каркас). Вставляет после выбранного, иначе — в конец. */}
-              <div className="mb-4">
-                <Palette
-                  onInsert={(type) => {
-                    const pos = doc.blocks.findIndex((b) => b.id === selId);
-                    const index = pos >= 0 ? pos + 1 : doc.blocks.length;
-                    setDoc((d) => {
-                      const blocks = [...d.blocks];
-                      const clamped = Math.max(0, Math.min(index, blocks.length));
-                      const nb = createDefaultBlock(type);
-                      blocks.splice(clamped, 0, nb);
-                      return { ...d, blocks };
-                    });
-                  }}
-                />
+        <div className="mx-auto w-full max-w-[960px] grid gap-4 p-2">
+          {/* Палитра-каркас, вставляет после выбранного */}
+          <div className="mb-2">
+            <Palette
+              onInsert={(type) => {
+                const pos = doc.blocks.findIndex((b) => b.id === selId);
+                const index = pos >= 0 ? pos + 1 : doc.blocks.length;
+                setDoc((d) => {
+                  const blocks = [...d.blocks];
+                  const clamped = Math.max(0, Math.min(index, blocks.length));
+                  const nb = createDefaultBlock(type);
+                  blocks.splice(clamped, 0, nb);
+                  return { ...d, blocks };
+                });
+              }}
+            />
+          </div>
+
+          {/* Канвас */}
+          <Canvas
+            cols={canvasCols}
+            gapX={canvasGapX}
+            gapY={canvasGapY}
+            blocks={doc.blocks}
+            renderBlock={(b) => (
+              <div
+                onClick={() => setSelId(b.id)}
+                className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"} bg-white p-3 cursor-pointer`}
+              >
+                {selId === b.id ? previewOf(b) : renderBlockView(b)}
               </div>
-              <Canvas
-                cols={canvasCols}
-                gapX={canvasGapX}
-                gapY={canvasGapY}
-                blocks={doc.blocks}
-                renderBlock={(b) => (
-                  <div
-                    onClick={() => setSelId(b.id)}
-                    className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"} bg-white p-3 cursor-pointer`}
-                  >
-                    {selId === b.id ? previewOf(b) : renderBlockView(b)}
-                  </div>
-                )}
-                onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
-                onInsertAt={(index, type) => {
-                  setDoc((d) => {
-                    const blocks = [...d.blocks];
-                    const clamped = Math.max(0, Math.min(index, blocks.length));
-                    const nb = createDefaultBlock(type);
-                    blocks.splice(clamped, 0, nb);
-                    return { ...d, blocks };
-                  });
-                }}
-              />
-              <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
-              {/* Правая панель — Инспектор */}
-              <div className="mt-4 hidden xl:block">
-                <Inspector
-                  block={selBlock}
-                  onPatch={(patch) =>
-                    setDoc((d: any) => ({
-                      ...d,
-                      blocks: d.blocks.map((b: any) => (b.id === selId ? { ...b, ...patch } : b)),
-                    }))
-                  }
-                />
-              </div>
-              <div>
-              </div>
-            </div>
+            )}
+            onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
+            onInsertAt={(index, type) => {
+              setDoc((d) => {
+                const blocks = [...d.blocks];
+                const clamped = Math.max(0, Math.min(index, blocks.length));
+                const nb = createDefaultBlock(type);
+                blocks.splice(clamped, 0, nb);
+                return { ...d, blocks };
+              });
+            }}
+          />
+
+          <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
+        </div>
+      </div>
+      <div className="rounded-lg border border-[#2a2f45] p-3 mb-3">
+        <div className="text-xs text-[#9aa3b2] mb-2">Редактор блока</div>
+        {Editor()}
+      </div>
+      {/* Правая колонка — Инспектор + мини-предпросмотр */}
+      <div className="hidden md:block md:col-[3] h-full overflow-y-auto p-2">
+        <div className="rounded-lg border border-[#2a2f45] p-3">
+          <div className="text-xs text-[#9aa3b2] mb-2">Инспектор</div>
+          <Inspector
+            block={selBlock}
+            onPatch={(patch) =>
+              setDoc((d: any) => ({
+                ...d,
+                blocks: d.blocks.map((b: any) => (b.id === selId ? { ...b, ...patch } : b)),
+              }))
+            }
+          />
+        </div>
+
+        <div className="mt-3 rounded-lg border border-[#2a2f45] p-3">
+          <div className="text-xs text-[#9aa3b2] mb-2">Мини-предпросмотр</div>
+          <div className="rounded overflow-hidden border border-[#2a2f45]">
+            <iframe title="preview" className="w-full h-[360px] bg-[#0b0f17] border-0" sandbox="allow-same-origin" srcDoc={previewHtml || "<!doctype html><html><body style='background:#0b0f17;color:#9aa3b2;font:14px system-ui;display:flex;align-items:center;justify-content:center;height:100%'>Пока пусто…</body></html>"} />
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <button className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={buildPreview} disabled={isBuilding}>
+              {isBuilding ? "Сборка…" : "Собрать"}
+            </button>
+            <button className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={onRefreshLivePreview}>
+              В live-вкладку
+            </button>
           </div>
         </div>
       </div>
-
-
     </div>
   );
 }
