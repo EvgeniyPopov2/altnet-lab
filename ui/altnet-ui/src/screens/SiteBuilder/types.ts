@@ -592,6 +592,20 @@ export type Block =
   | MapBlock | LottieBlock | MediaCarouselBlock | SlidesBlock | VideoPlaylistBlock | HotspotBlock
   | ContainerBlock | SidebarBlock | OffcanvasBlock | ShortcodeBlock | PriceTableBlock;
 
+// ── C1.b: Респонсив-стили для блоков ───────────────────────────────────────────
+export type Device = "desktop" | "tablet" | "mobile";
+
+export type ResponsiveStyle = Partial<
+  Record<Device, {
+    padding?: string; // например: "16px 24px" или "1rem"
+    margin?: string;  // например: "0 auto" или "24px 0"
+    radius?: string;  // например: "12px" или "0.75rem"
+  }>
+>;
+
+/** Утилита, если захочешь сузить типизацию блока в пропсах */
+export type WithStyle = { style?: ResponsiveStyle };
+  
 export type Doc = {
   title: string;
   description?: string; // meta description
