@@ -13,6 +13,7 @@ import type {
   ColsRatio, Cols2Block, SectionBlock,
   GridBlock, Block, Doc
 } from "./SiteBuilder/types";
+
 type CheckItem = { id: string; ok: boolean; text: string };
 
 
@@ -852,28 +853,64 @@ export default function SiteBuilder() {
       </div>
     );
 
-    {/* STYLE: общие отступы по устройствам */ }
-    {
-      editorTab === "style" && (
-        <div className="grid gap-3">
-          <div className="flex items-center gap-1 text-xs">
-            <span className="opacity-70">Устройство:</span>
-            <button className={tabBtn("content").replace("text-sm", "text-xs")} onClick={() => setBp("desktop")}>Desktop</button>
-            <button className={tabBtn("content").replace("text-sm", "text-xs")} onClick={() => setBp("tablet")}>Tablet</button>
-            <button className={tabBtn("content").replace("text-sm", "text-xs")} onClick={() => setBp("mobile")}>Mobile</button>
-            <span className="ml-2 opacity-70">({bp})</span>
-          </div>
-          <div className="grid grid-cols-5 gap-2">
-            <Field label="mt"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.mt)} onChange={e => updCur({ mt: e.target.value })} placeholder="px" /></Field>
-            <Field label="mb"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.mb)} onChange={e => updCur({ mb: e.target.value })} placeholder="px" /></Field>
-            <Field label="pt"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.pt)} onChange={e => updCur({ pt: e.target.value })} placeholder="px" /></Field>
-            <Field label="pb"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.pb)} onChange={e => updCur({ pb: e.target.value })} placeholder="px" /></Field>
-            <Field label="py"><input className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]" value={readNum(sCur.py)} onChange={e => updCur({ py: e.target.value })} placeholder="px" /></Field>
-          </div>
+    // --- StyleTab: отступы по брейкпоинтам (Desktop/Tablet/Mobile) ---
+    const styleByBpNode = (
+      <div className="grid gap-3">
+        <div className="flex items-center gap-1 text-xs">
+          <span className="opacity-70">Устройство:</span>
+          <button className={tabBtn("content").replace("text-sm", "text-xs")} onClick={() => setBp("desktop")}>Desktop</button>
+          <button className={tabBtn("content").replace("text-sm", "text-xs")} onClick={() => setBp("tablet")}>Tablet</button>
+          <button className={tabBtn("content").replace("text-sm", "text-xs")} onClick={() => setBp("mobile")}>Mobile</button>
+          <span className="ml-2 opacity-70">({bp})</span>
         </div>
-      )
-    }
-    { editorTab === "style" && <></> }
+
+        {/* Значения для текущего брейкпоинта */}
+        <div className="grid grid-cols-5 gap-2">
+          <Field label="mt">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.mt)}
+              onChange={(e) => updCur({ mt: e.target.value })}
+              placeholder="px"
+            />
+          </Field>
+          <Field label="mb">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.mb)}
+              onChange={(e) => updCur({ mb: e.target.value })}
+              placeholder="px"
+            />
+          </Field>
+          <Field label="pt">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.pt)}
+              onChange={(e) => updCur({ pt: e.target.value })}
+              placeholder="px"
+            />
+          </Field>
+          <Field label="pb">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.pb)}
+              onChange={(e) => updCur({ pb: e.target.value })}
+              placeholder="px"
+            />
+          </Field>
+          <Field label="py">
+            <input
+              className="w-full px-2 py-1 rounded bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
+              value={readNum(sCur.py)}
+              onChange={(e) => updCur({ py: e.target.value })}
+              placeholder="px"
+            />
+          </Field>
+        </div>
+      </div>
+    );
+
+    
     {
       editorTab === "advanced" && (
         <div className="grid gap-3">
@@ -1142,32 +1179,7 @@ export default function SiteBuilder() {
         contentNode = <div className="text-xs text-[#9aa3b2]">Редактор для этого блока пока не реализован.</div>;
     }
 
-    // Стиль (общий для всех типов)
-    const s = ((sel as any).style || {}) as { mt?: number; mb?: number; py?: number; pt?: number; pb?: number };
-    const styleNode = row(
-      <>
-        <div className="grid grid-cols-3 gap-3">
-          <Field label="Отступ сверху (px)">
-            <input type="number" className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={s.mt ?? 0}
-              onChange={(e) => patchBlock(id, { style: { ...(s || {}), mt: Math.max(0, parseInt(e.target.value || "0", 10)) } } as any)} />
-          </Field>
-          <Field label="Отступ снизу (px)">
-            <input type="number" className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={s.mb ?? 0}
-              onChange={(e) => patchBlock(id, { style: { ...(s || {}), mb: Math.max(0, parseInt(e.target.value || "0", 10)) } } as any)} />
-          </Field>
-          <Field label="Паддинг по Y (px)">
-            <input type="number" className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]"
-              value={s.py ?? 0}
-              onChange={(e) => patchBlock(id, { style: { ...(s || {}), py: Math.max(0, parseInt(e.target.value || "0", 10)) } } as any)} />
-          </Field>
-        </div>
-        <div className="text-xs text-[#9aa3b2]">
-          Вдохновлено Elementor → Basic Spacing. Breakpoints и другие стили добавим на следующих шагах.
-        </div>
-      </>
-    );
+
 
     // Advanced (минимум: скрыть/заблокировать)
     const advancedNode = row(
@@ -1196,7 +1208,7 @@ export default function SiteBuilder() {
     return (
       <>
         {Tabs}
-        {editorTab === "content" ? contentNode : editorTab === "style" ? styleNode : advancedNode}
+        {editorTab === "content" ? contentNode : editorTab === "style" ? styleByBpNode : advancedNode}
       </>
     );
   }, [sel, patchBlock, bp, editorTab]);
