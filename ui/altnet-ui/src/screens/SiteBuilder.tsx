@@ -376,8 +376,8 @@ export default function SiteBuilder() {
             <a
               href={bt.href || "#"}
               className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${bt.variant === "secondary"
-                  ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
-                  : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
+                : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
                 }`}
               rel="noopener noreferrer nofollow"
               onClick={(e) => e.preventDefault()}
@@ -1088,29 +1088,10 @@ export default function SiteBuilder() {
     );
   }, [sel, patchBlock, bp, editorTab]);
 
-  // ── Разметка: слева палитра/навигация, центр канвас, справа свойства+предпросмотр ──
-  const layoutItems: Array<[BlockType, string]> = [
-    ["section", "Контейнер"],
-    ["grid", "Сетка"],
-    ["cols2", "Две колонки"],
-    ["hero", "Hero"],
-  ];
-  const basicItems: Array<[BlockType, string]> = [
-    ["h1", "Заголовок"],
-    ["p", "Текст"],
-    ["img", "Изображение"],
-    ["btn", "Кнопка"],
-    ["divider", "Разделитель"],
-    ["spacer", "Интервал"],
-  ];
-  const q = elQuery.trim().toLowerCase();
-  const layoutFiltered = layoutItems.filter(([, label]) => label.toLowerCase().includes(q));
-  const basicFiltered = basicItems.filter(([, label]) => label.toLowerCase().includes(q));
-
   return (
-    <div className="h-full grid grid-cols-1 md:grid-cols-[320px_minmax(0,1fr)_420px] xl:grid-cols-[340px_minmax(0,1fr)_480px] gap-4">
+    <div className="h-[100dvh] min-w-[980px] grid grid-cols-[300px_minmax(0,1fr)_420px] xl:grid-cols-[340px_minmax(0,1fr)_480px] gap-4 overflow-hidden">
       {/* Левая колонка */}
-      <div className="grid content-start gap-4">
+      <div className="grid content-start gap-4 sticky top-0 h-[calc(100dvh-16px)] overflow-y-auto pr-1">
         <div className="mt-3">
           <Field label="Поиск виджета">
             <input
@@ -1119,31 +1100,26 @@ export default function SiteBuilder() {
               placeholder="Найти: заголовок, кнопка, сетка…" autoComplete="off" spellCheck={false}
             />
           </Field>
+          {/* Палитра (левая колонка) */}
+          <Palette
+            onInsert={(type) => {
+              const make = createDefaultBlock as (t: any) => any;
+              const fresh = make(type as any);
+              if (!fresh) return;
+              const withId = { ...(fresh as any), id: uid() };
+
+              setDoc((d) => {
+                const idx = selId ? d.blocks.findIndex((b) => b.id === selId) : -1;
+                const next = d.blocks.slice();
+                if (idx >= 0) next.splice(idx + 1, 0, withId);
+                else next.push(withId);
+                return { ...d, blocks: next };
+              });
+            }}
+          />
         </div>
 
-        <div>
-          <div className="text-xs text-[#9aa3b2] mb-2">Планировка</div>
-          <div className="grid grid-cols-2 gap-2">
-            {layoutFiltered.map(([type, label]) => (
-              <button key={type} onClick={() => setDoc(d => ({ ...d, blocks: [...d.blocks, createDefaultBlock(type)] }))}
-                className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0c0f1a] text-[#e6e9f4] hover:bg-[#121528]">
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
 
-        <div>
-          <div className="text-xs text-[#9aa3b2] mb-2">Базовые</div>
-          <div className="grid grid-cols-2 gap-2">
-            {basicFiltered.map(([type, label]) => (
-              <button key={type} onClick={() => setDoc(d => ({ ...d, blocks: [...d.blocks, createDefaultBlock(type)] }))}
-                className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0c0f1a] text-[#e6e9f4] hover:bg-[#121528]">
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
 
         {/* Навигатор */}
         <div>
@@ -1177,7 +1153,7 @@ export default function SiteBuilder() {
       </div>
 
       {/* Центральная колонка — Канвас + Палитра (вставка после выбранного) */}
-      <div className="md:col-[2] h-full overflow-y-auto">
+      <div className="col-[2] h-[100dvh] overflow-y-auto">
         <Topbar
           bp={bp}
           onChangeBp={setBp}
@@ -1200,8 +1176,8 @@ export default function SiteBuilder() {
         />
 
         <div className="mx-auto w-full max-w-[960px] grid gap-4 p-2">
-          {/* Палитра-каркас, вставляет после выбранного */}
-          <div className="mb-2">
+          {/* Палитра-каркас, вставляет после выбранного — скрыта, т.к. есть левая панель */}
+          <div className="mb-2 hidden">
             <Palette
               onInsert={(type) => {
                 const pos = doc.blocks.findIndex((b) => b.id === selId);
@@ -1251,7 +1227,7 @@ export default function SiteBuilder() {
         {Editor()}
       </div>
       {/* Правая колонка — Инспектор + мини-предпросмотр */}
-      <div className="hidden md:block md:col-[3] h-full overflow-y-auto p-2">
+      <div className="col-[3] h-[calc(100dvh-16px)] overflow-y-auto p-2 sticky top-0">
         <div className="rounded-lg border border-[#2a2f45] p-3">
           <div className="text-xs text-[#9aa3b2] mb-2">Инспектор</div>
           <Inspector
