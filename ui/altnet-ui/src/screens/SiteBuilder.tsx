@@ -8,7 +8,7 @@ import { createDefaultBlock } from "./SiteBuilder/registry";
 import Inspector from "./SiteBuilder/inspector/Inspector";
 import Field from "./SiteBuilder/ui/Field";
 import Topbar from "./SiteBuilder/layout/Topbar";
-
+import InspectorTabs from "./SiteBuilder/inspector/InspectorTabs";
 import type {
   BlockType,
   HeroBlock,
@@ -1230,6 +1230,8 @@ export default function SiteBuilder() {
       <div className="col-[3] h-[calc(100dvh-16px)] overflow-y-auto p-2 sticky top-0">
         <div className="rounded-lg border border-[#2a2f45] p-3">
           <div className="text-xs text-[#9aa3b2] mb-2">Инспектор</div>
+          {/* Вкладки инспектора */}
+          <InspectorTabs active={editorTab} onChange={(t) => setEditorTab(t)} />
           <Inspector
             block={selBlock}
             onPatch={(patch) =>
