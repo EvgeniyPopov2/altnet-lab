@@ -13,14 +13,11 @@ import type {
   BlockType,
   HeroBlock,
   H1Block,
-  HeadingBlock,
   PBlock,
   ImgBlock,
   BtnBlock,
   ColsRatio,
   Cols2Block,
-  SectionBlock,
-  GridBlock,
   Block,
   Doc,
 } from "./SiteBuilder/types";
@@ -168,7 +165,7 @@ export default function SiteBuilder() {
   // Выбор блока
   const [selId, setSelId] = useState<string | null>(null);
   const selBlock = useMemo(() => doc.blocks.find((b: any) => b.id === selId), [doc.blocks, selId]);
-  const sel = useMemo(() => doc.blocks.find((b) => b.id === selId) ?? null, [doc.blocks, selId]);
+  
 
   // Табы редактора
   const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
