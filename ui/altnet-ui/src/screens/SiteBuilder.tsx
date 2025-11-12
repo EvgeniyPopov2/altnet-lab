@@ -135,7 +135,22 @@ export default function SiteBuilder() {
   const [canvasGapX, setCanvasGapX] = useState<number>(16);
   const [canvasGapY, setCanvasGapY] = useState<number>(16);
   type Breakpoint = "desktop" | "tablet" | "mobile";
-  type BlockStyle = { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+  type BlockStyle = {
+  mt?: number; mb?: number; pt?: number; pb?: number; py?: number;
+  // C2 — типографика
+  fs?: number;  // font-size (px)
+  fw?: number;  // font-weight (300..800)
+  lh?: number;  // line-height (число -> px)
+  ta?: "left" | "center" | "right" | "justify"; // text-align
+  // C2 — цвета, бордеры, тени
+  tc?: string;  // text color (например: "#e6e9f4")
+  bg?: string;  // background color
+  bw?: number;  // border-width (px)
+  bc?: string;  // border-color
+  bs?: "none" | "solid" | "dashed" | "dotted"; // border-style
+  br?: number;  // border-radius (px)
+  sh?: string;  // box-shadow (строка)
+};
   type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyle };
 
   const [bp, setBp] = useState<Breakpoint>("desktop");
@@ -201,11 +216,31 @@ export default function SiteBuilder() {
     const mt = s.mt;
     const mb = s.mb;
     return {
-      ...(pt != null ? { paddingTop: Number(pt) } : {}),
-      ...(pb != null ? { paddingBottom: Number(pb) } : {}),
-      ...(mt != null ? { marginTop: Number(mt) } : {}),
-      ...(mb != null ? { marginBottom: Number(mb) } : {}),
-    };
+  // отступы
+  ...(pt != null ? { paddingTop: Number(pt) } : {}),
+  ...(pb != null ? { paddingBottom: Number(pb) } : {}),
+  ...(mt != null ? { marginTop: Number(mt) } : {}),
+  ...(mb != null ? { marginBottom: Number(mb) } : {}),
+
+  // типографика
+  ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
+  ...(s.fw != null ? { fontWeight: Number(s.fw) as any } : {}),
+  ...(s.lh != null ? { lineHeight: Number(s.lh) } : {}),
+  ...(s.ta ? { textAlign: s.ta as any } : {}),
+
+  // цвета
+  ...(s.tc ? { color: s.tc } : {}),
+  ...(s.bg ? { backgroundColor: s.bg } : {}),
+
+  // границы
+  ...(s.bw != null ? { borderWidth: Number(s.bw) } : {}),
+  ...(s.bs ? { borderStyle: s.bs as any } : {}),
+  ...(s.bc ? { borderColor: s.bc } : {}),
+  ...(s.br != null ? { borderRadius: Number(s.br) } : {}),
+
+  // тень
+  ...(s.sh ? { boxShadow: s.sh } : {}),
+};
   }, [bp]);
 
   // ── Полноценное превью для «мини-сайта» внутри карточки блока (инлайн правка текстов)
@@ -821,9 +856,14 @@ export default function SiteBuilder() {
 
     // принимаем string|number, нормализуем -> number|undefined
     const updCur = (patch: Partial<Record<keyof BlockStyle, string | number>>) => {
-      const normalized = Object.fromEntries(
-        Object.entries(patch).map(([k, v]) => [k, v === "" || v == null ? undefined : Number(v)])
-      ) as Partial<BlockStyle>;
+  // какие ключи числовые (остальные — строковые)
+  const numericKeys: (keyof BlockStyle)[] = ["mt","mb","pt","pb","py","fs","fw","lh","bw","br"];
+  const normalized = Object.fromEntries(
+    Object.entries(patch).map(([k, v]) => {
+      if (v === "" || v == null) return [k, undefined];
+      return [k, numericKeys.includes(k as keyof BlockStyle) ? Number(v) : v];
+    })
+  ) as Partial<BlockStyle>;
 
       const next: BlockStyle = { ...(sBy[bp] || {}), ...normalized };
       patchBlock(sel.id, { styleByBp: { ...sBy, [bp]: next } } as any);
