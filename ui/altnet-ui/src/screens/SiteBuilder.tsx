@@ -420,27 +420,6 @@ export default function SiteBuilder() {
     [doc]
   );
 
-  // ── Сборка встроенного мини-предпросмотра (iframe справа) ──────────────────
-  const buildPreview = useCallback(async () => {
-    setIsBuilding(true);
-    try {
-      const model = adaptFromSiteBuilderDoc(docForBuild);
-      const blob = await exportSingleHtml(model, { bundleAssets: true });
-      const html = await blob.text();
-      setPreviewHtml(html);
-    } catch (e) {
-      console.error("Preview build failed:", e);
-    } finally {
-      setIsBuilding(false);
-    }
-  }, [docForBuild]);
-
-  useEffect(() => {
-    if (!autoPreview) return;
-    const t = setTimeout(() => { void buildPreview(); }, 350);
-    return () => clearTimeout(t);
-  }, [docForBuild, autoPreview, buildPreview]);
-
   // ── Экспорт / импорт / live-preview ────────────────────────────────────────
   const onExportZip = useCallback(async () => {
     const model = adaptFromSiteBuilderDoc(docForBuild);
