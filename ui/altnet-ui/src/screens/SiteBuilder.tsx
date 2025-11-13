@@ -777,7 +777,8 @@ export default function SiteBuilder() {
         {/* Кнопка сворачивания / раскрытия левой панели */}
         <button
           type="button"
-          className="absolute top-3 left-0 z-20 -translate-x-1/2 rounded-full border border-[#2a2f45] bg-[#050814]/80 px-2 py-1 text-xs text-[#cfd5e6] hover:bg-[#0c1020]"
+          className="fixed top-20 z-30 flex h-10 w-6 items-center justify-center rounded-r-full border border-r-0 border-[#2a2f45] bg-[#050814] text-sm text-[#cfd5e6] hover:bg-[#0c1020]"
+          style={{ left: sidebarCollapsed ? 0 : 300 }}
           onClick={(e) => {
             e.stopPropagation();
             setSidebarCollapsed((v) => !v);
