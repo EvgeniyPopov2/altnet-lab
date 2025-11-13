@@ -180,9 +180,7 @@ export default function SiteBuilder() {
   const [showChecklist, setShowChecklist] = useState(false);
 
   // Мини-предпросмотр (встроенный iframe) — чтобы не было «не прочитан» у переменных
-  const [previewHtml, setPreviewHtml] = useState<string>("");
   const [autoPreview, setAutoPreview] = useState<boolean>(true);
-  const [isBuilding, setIsBuilding] = useState<boolean>(false);
 
   // Для live-preview (отдельная вкладка)
   const importJsonInputRef = useRef<HTMLInputElement>(null);
@@ -535,21 +533,6 @@ export default function SiteBuilder() {
       }
     }, 200);
   }, [docForBuild]);
-
-  const onRefreshLivePreview = useCallback(async () => {
-    if (!livePreviewChannelRef.current || !livePreviewIdRef.current) {
-      await onOpenLivePreview();
-      return;
-    }
-    try {
-      const model = adaptFromSiteBuilderDoc(docForBuild);
-      const blob = await exportSingleHtml(model, { bundleAssets: true });
-      const html = await blob.text();
-      livePreviewChannelRef.current.postMessage({ type: "html", html });
-    } catch (e) {
-      console.error("Live preview refresh error:", e);
-    }
-  }, [docForBuild, onOpenLivePreview]);
 
   // Авто-обновление live-вкладки при изменениях
   useEffect(() => {
