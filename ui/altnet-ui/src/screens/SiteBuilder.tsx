@@ -165,7 +165,9 @@ export default function SiteBuilder() {
   // Выбор блока
   const [selId, setSelId] = useState<string | null>(null);
   const selBlock = useMemo(() => doc.blocks.find((b: any) => b.id === selId), [doc.blocks, selId]);
-  
+
+  // Сворачивание левой панели (как в Elementor)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Табы редактора
   const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
@@ -670,12 +672,13 @@ export default function SiteBuilder() {
     </div>
   ), [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock]);
 
-  
+
 
   return (
     <div className="h-[100dvh] min-w-[980px] grid grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)] gap-4 overflow-hidden">
       {/* Левая колонка */}
-      <div className="grid content-start gap-4 sticky top-0 h-[calc(100dvh-16px)] overflow-y-auto pr-1">
+      <div className={"grid content-start gap-4 sticky top-0 h-[calc(100dvh-16px)] overflow-y-auto pr-1" +
+        (sidebarCollapsed ? " hidden" : "")}>
         <div className="mt-3">
           <Field label="Поиск виджета">
             <input
@@ -685,51 +688,51 @@ export default function SiteBuilder() {
             />
           </Field>
           {/* Палитра (левая колонка) */}
-{/* Левая панель: если выбран блок — показываем редактор; иначе — палитру */}
-{selBlock ? (
-  <>
-    <div className="text-xs text-[#9aa3b2] mb-2">Редактор блока</div>
-    <InspectorTabs active={editorTab} onChange={(t) => setEditorTab(t)} />
-    <Inspector
-      block={selBlock}
-      onPatch={(patch) =>
-        setDoc((d: any) => ({
-          ...d,
-          blocks: d.blocks.map((b: any) =>
-            b.id === selId ? { ...b, ...patch } : b
-          ),
-        }))
-      }
-    />
-  </>
-) : (
-  <Palette
-    onInsert={(type) => {
-      const make = createDefaultBlock as (t: any) => any;
-      const fresh = make(type as any);
-      if (!fresh) return;
-      const withId = { ...(fresh as any), id: uid() };
+          {/* Левая панель: если выбран блок — показываем редактор; иначе — палитру */}
+          {selBlock ? (
+            <>
+              <div className="text-xs text-[#9aa3b2] mb-2">Редактор блока</div>
+              <InspectorTabs active={editorTab} onChange={(t) => setEditorTab(t)} />
+              <Inspector
+                block={selBlock}
+                onPatch={(patch) =>
+                  setDoc((d: any) => ({
+                    ...d,
+                    blocks: d.blocks.map((b: any) =>
+                      b.id === selId ? { ...b, ...patch } : b
+                    ),
+                  }))
+                }
+              />
+            </>
+          ) : (
+            <Palette
+              onInsert={(type) => {
+                const make = createDefaultBlock as (t: any) => any;
+                const fresh = make(type as any);
+                if (!fresh) return;
+                const withId = { ...(fresh as any), id: uid() };
 
-      setDoc((d) => {
-        const idx = selId ? d.blocks.findIndex((b) => b.id === selId) : -1;
-        const next = d.blocks.slice();
-        if (idx >= 0) next.splice(idx + 1, 0, withId);
-        else next.push(withId);
-        return { ...d, blocks: next };
-      });
+                setDoc((d) => {
+                  const idx = selId ? d.blocks.findIndex((b) => b.id === selId) : -1;
+                  const next = d.blocks.slice();
+                  if (idx >= 0) next.splice(idx + 1, 0, withId);
+                  else next.push(withId);
+                  return { ...d, blocks: next };
+                });
 
-      setSelId(withId.id);
-    }}
-  />
-)}
+                setSelId(withId.id);
+              }}
+            />
+          )}
 
-          
+
         </div>
 
 
 
-         {/* Навигатор */}
-         
+        {/* Навигатор */}
+
         {!selBlock && (
           <div>
             <div className="text-xs text-[#9aa3b2] mb-2">Навигатор</div>
@@ -768,7 +771,20 @@ export default function SiteBuilder() {
       </div>
 
       {/* Центральная колонка — Канвас + Палитра (вставка после выбранного) */}
-      <div className="col-[2] h-[100dvh] overflow-y-auto" onClick={() => setSelId(null)}>
+      <div className={(sidebarCollapsed ? "col-span-2 " : "col-[2] ") + "h-[100dvh] overflow-y-auto relative"}
+        onClick={() => setSelId(null)}
+      >
+        {/* Кнопка сворачивания / раскрытия левой панели */}
+        <button
+          type="button"
+          className="absolute top-3 left-0 z-20 -translate-x-1/2 rounded-full border border-[#2a2f45] bg-[#050814]/80 px-2 py-1 text-xs text-[#cfd5e6] hover:bg-[#0c1020]"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSidebarCollapsed((v) => !v);
+          }}
+        >
+          {sidebarCollapsed ? "›" : "‹"}
+        </button>
         <Topbar
           bp={bp}
           onChangeBp={setBp}
@@ -837,7 +853,7 @@ export default function SiteBuilder() {
           <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
         </div>
       </div>
-      
+
 
     </div>
   );
