@@ -675,10 +675,15 @@ export default function SiteBuilder() {
 
 
   return (
-    <div className="h-[100dvh] min-w-[980px] grid grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)] gap-4 overflow-hidden">
+    <div className="w-full max-w-[1440px] mx-auto grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
       {/* Левая колонка */}
-      <div className={"grid content-start gap-4 sticky top-0 h-[calc(100dvh-16px)] overflow-y-auto pr-1" +
-        (sidebarCollapsed ? " hidden" : "")}>
+      <div
+        className={
+          "grid content-start gap-4 max-h-[calc(100dvh-140px)] overflow-y-auto pr-1 " +
+          "rounded-2xl bg-[#050816]/90 border border-[#1f2751] px-3 py-3" +
+          (sidebarCollapsed ? " hidden" : "")
+        }
+      >
         <div className="mt-3">
           <Field label="Поиск виджета">
             <input
