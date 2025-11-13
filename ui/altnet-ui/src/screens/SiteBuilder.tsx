@@ -675,11 +675,11 @@ export default function SiteBuilder() {
 
 
   return (
-    <div className="relative w-full max-w-[1440px] mx-auto grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
+    <div className="relative w-full grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
       <button
         type="button"
         className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 flex h-16 w-6 items-center justify-center rounded-r-full border border-l-0 border-[#2a2f45] bg-[#050816] text-xs text-[#cfd5e6] hover:bg-[#0c1020]"
-        style={{ left: sidebarCollapsed ? 0 : 280 }}
+        style={{ left: sidebarCollapsed ? 12 : 280 }}
         onClick={(e) => {
           e.stopPropagation();
           setSidebarCollapsed((v) => !v);
