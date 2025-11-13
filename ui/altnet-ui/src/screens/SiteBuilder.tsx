@@ -675,7 +675,18 @@ export default function SiteBuilder() {
 
 
   return (
-    <div className="w-full max-w-[1440px] mx-auto grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
+    <div className="relative w-full max-w-[1440px] mx-auto grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
+      <button
+        type="button"
+        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 flex h-16 w-6 items-center justify-center rounded-r-full border border-l-0 border-[#2a2f45] bg-[#050816] text-xs text-[#cfd5e6] hover:bg-[#0c1020]"
+        style={{ left: sidebarCollapsed ? 0 : 280 }}
+        onClick={(e) => {
+          e.stopPropagation();
+          setSidebarCollapsed((v) => !v);
+        }}
+      >
+        {sidebarCollapsed ? "›" : "‹"}
+      </button>
       {/* Левая колонка */}
       <div
         className={
@@ -780,17 +791,6 @@ export default function SiteBuilder() {
         onClick={() => setSelId(null)}
       >
         {/* Кнопка сворачивания / раскрытия левой панели */}
-        <button
-          type="button"
-          className="fixed top-20 z-30 flex h-10 w-6 items-center justify-center rounded-r-full border border-r-0 border-[#2a2f45] bg-[#050814] text-sm text-[#cfd5e6] hover:bg-[#0c1020]"
-          style={{ left: sidebarCollapsed ? 0 : 300 }}
-          onClick={(e) => {
-            e.stopPropagation();
-            setSidebarCollapsed((v) => !v);
-          }}
-        >
-          {sidebarCollapsed ? "›" : "‹"}
-        </button>
         <Topbar
           bp={bp}
           onChangeBp={setBp}
