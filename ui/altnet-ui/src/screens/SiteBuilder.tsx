@@ -711,7 +711,7 @@ export default function SiteBuilder() {
   
 
   return (
-    <div className="h-[100dvh] min-w-[980px] grid grid-cols-[300px_minmax(0,1fr)_420px] xl:grid-cols-[340px_minmax(0,1fr)_480px] gap-4 overflow-hidden">
+    <div className="h-[100dvh] min-w-[980px] grid grid-cols-[300px_minmax(0,1fr)] xl:grid-cols-[340px_minmax(0,1fr)] gap-4 overflow-hidden">
       {/* Левая колонка */}
       <div className="grid content-start gap-4 sticky top-0 h-[calc(100dvh-16px)] overflow-y-auto pr-1">
         <div className="mt-3">
@@ -876,25 +876,7 @@ export default function SiteBuilder() {
         </div>
       </div>
       
-      {/* Правая колонка — Инспектор + мини-предпросмотр */}
-      <div className="col-[3] h-[calc(100dvh-16px)] overflow-y-auto p-2 sticky top-0">
-        {/* Правая панель инспектора отключена — редактор теперь слева */}
 
-        <div className="mt-3 rounded-lg border border-[#2a2f45] p-3">
-          <div className="text-xs text-[#9aa3b2] mb-2">Мини-предпросмотр</div>
-          <div className="rounded overflow-hidden border border-[#2a2f45]">
-            <iframe title="preview" className="w-full h-[360px] bg-[#0b0f17] border-0" sandbox="allow-same-origin" srcDoc={previewHtml || "<!doctype html><html><body style='background:#0b0f17;color:#9aa3b2;font:14px system-ui;display:flex;align-items:center;justify-content:center;height:100%'>Пока пусто…</body></html>"} />
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <button className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={buildPreview} disabled={isBuilding}>
-              {isBuilding ? "Сборка…" : "Собрать"}
-            </button>
-            <button className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={onRefreshLivePreview}>
-              В live-вкладку
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
