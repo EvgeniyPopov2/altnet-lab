@@ -164,6 +164,18 @@ export default function SiteBuilder() {
 
   // Выбор блока
   const [selId, setSelId] = useState<string | null>(null);
+
+  // Плавающая панель «Структура» (Navigator как в Elementor)
+  const [isOutlineOpen, setIsOutlineOpen] = useState<boolean>(true);
+  const [outlinePos, setOutlinePos] = useState<{ x: number; y: number }>({
+    x: 40,
+    y: 80,
+  });
+  const [outlineSize, setOutlineSize] = useState<{ w: number; h: number }>({
+    w: 320,
+    h: 400,
+  });
+
   const selBlock = useMemo(() => doc.blocks.find((b: any) => b.id === selId), [doc.blocks, selId]);
 
   // Сворачивание левой панели (как в Elementor)
@@ -798,6 +810,28 @@ export default function SiteBuilder() {
           onChangeMode={setIframeMode}
           right={
             <div className="flex items-center gap-2">
+              {/* Кнопка открытия панели «Структура» */}
+              <button
+                type="button"
+                className={
+                  "inline-flex h-8 w-8 items-center justify-center rounded-md border text-xs " +
+                  (isOutlineOpen
+                    ? "border-[#6E59F2] bg-[#15192c] text-[#e6e9f4]"
+                    : "border-[#2a2f45] bg-[#050816] text-[#cfd5e6] hover:border-[#6E59F2]")
+                }
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOutlineOpen((v) => !v);
+                }}
+                title="Структура"
+              >
+                {/* Иконка «слои» как в Elementor */}
+                <span className="relative block h-3 w-3">
+                  <span className="absolute inset-x-0 top-0 h-[2px] rounded-sm bg-current" />
+                  <span className="absolute inset-x-0 top-[4px] h-[2px] rounded-sm bg-current" />
+                  <span className="absolute inset-x-0 top-[8px] h-[2px] rounded-sm bg-current" />
+                </span>
+              </button>
               <button className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]" onClick={onExportSingle}>
                 Экспорт HTML
               </button>
@@ -812,7 +846,7 @@ export default function SiteBuilder() {
           }
         />
 
-        <div className="mx-auto w-full max-w-[960px] grid gap-4 p-2">
+       <div className="mx-auto w-full max-w-[1200px] grid gap-4 p-2">
           {/* Палитра-каркас, вставляет после выбранного — скрыта, т.к. есть левая панель */}
           <div className="mb-2 hidden">
             <Palette
@@ -830,37 +864,107 @@ export default function SiteBuilder() {
             />
           </div>
 
-          {/* Канвас */}
-          <Canvas
-            cols={canvasCols}
-            gapX={canvasGapX}
-            gapY={canvasGapY}
-            blocks={doc.blocks}
-            renderBlock={(b) => (
-              <div
-                onClick={(e) => { e.stopPropagation(); setSelId(b.id); }}
-                className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"} bg-white p-3 cursor-pointer`}
-              >
-                {selId === b.id ? previewOf(b) : renderBlockView(b)}
-              </div>
-            )}
-            onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
-            onInsertAt={(index, type) => {
-              setDoc((d) => {
-                const blocks = [...d.blocks];
-                const clamped = Math.max(0, Math.min(index, blocks.length));
-                const nb = createDefaultBlock(type);
-                blocks.splice(clamped, 0, nb);
-                return { ...d, blocks };
-              });
-            }}
-          />
+          {/* Внутренняя сетка: канвас + панель «Структура» справа */}
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px] items-start">
+            {/* Канвас + структура под ним на узких экранах */}
+            <div>
+              {/* Канвас */}
+              <Canvas
+                cols={canvasCols}
+                gapX={canvasGapX}
+                gapY={canvasGapY}
+                blocks={doc.blocks}
+                renderBlock={(b) => (
+                  <div
+                    onClick={(e) => { e.stopPropagation(); setSelId(b.id); }}
+                    className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"} bg-white p-3 cursor-pointer`}
+                  >
+                    {selId === b.id ? previewOf(b) : renderBlockView(b)}
+                  </div>
+                )}
+                onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
+                onInsertAt={(index, type) => {
+                  setDoc((d) => {
+                    const blocks = [...d.blocks];
+                    const clamped = Math.max(0, Math.min(index, blocks.length));
+                    const nb = createDefaultBlock(type);
+                    blocks.splice(clamped, 0, nb);
+                    return { ...d, blocks };
+                  });
+                }}
+              />
 
-          <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
+              {/* Структура под канвасом на мобильных/узких экранах */}
+              <div className="mt-4 xl:hidden rounded-2xl border border-[#1f2751] bg-[#050816]/90">
+                <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
+                  Структура
+                </div>
+                <div className="p-3">
+                  <Outline
+                    blocks={doc.blocks}
+                    selId={selId}
+                    onSelect={(id) => setSelId(id)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Структура справа (десктоп ≥ xl) */}
+            <div className="hidden xl:flex flex-col rounded-2xl border border-[#1f2751] bg-[#050816]/90 max-h-[calc(100dvh-160px)]">
+              <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
+                Структура
+              </div>
+              <div className="flex-1 overflow-y-auto p-3">
+                <Outline
+                  blocks={doc.blocks}
+                  selId={selId}
+                  onSelect={(id) => setSelId(id)}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* Плавающая панель «Структура» (Navigator как в Elementor) */}
+      {bp === "desktop" && isOutlineOpen && (
+        <div
+          className="fixed z-40 rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
+          style={{
+            left: outlinePos.x,
+            top: outlinePos.y,
+            width: outlineSize.w,
+            height: outlineSize.h,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Хедер: название + закрыть, зона для drag (drag добавим следующим шагом) */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-[#1f2751] cursor-move select-none">
+            <div className="text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
+              Структура
+            </div>
+            <button
+              type="button"
+              className="h-6 w-6 inline-flex items-center justify-center rounded-md hover:bg-[#15192c] text-[#9aa3b2]"
+              onClick={() => setIsOutlineOpen(false)}
+            >
+              ✕
+            </button>
+          </div>
 
+          {/* Содержимое панели */}
+          <div className="h-[calc(100%-36px)] overflow-y-auto p-3 text-sm">
+            <Outline
+              blocks={doc.blocks}
+              selId={selId}
+              onSelect={(id) => setSelId(id)}
+            />
+          </div>
+
+          {/* Ручка для изменения размера (пока без логики — сделаем на следующем шаге) */}
+          <div className="absolute bottom-1 right-1 h-3 w-3 cursor-se-resize rounded-sm border border-[#2a2f45] bg-[#15192c]" />
+        </div>
+      )}
     </div>
   );
 }
