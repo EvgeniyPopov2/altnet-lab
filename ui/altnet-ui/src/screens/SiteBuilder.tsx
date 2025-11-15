@@ -180,6 +180,14 @@ export default function SiteBuilder() {
     startTop: number;
   } | null>(null);
 
+  // Временное состояние resize для панели «Структура»
+  const outlineResizeRef = useRef<{
+    startX: number;
+    startY: number;
+    startW: number;
+    startH: number;
+  } | null>(null);
+
   const handleOutlineHeaderMouseDown = (
     e: React.MouseEvent<HTMLDivElement>
   ) => {
@@ -194,22 +202,54 @@ export default function SiteBuilder() {
     };
   };
 
+  const handleOutlineResizeMouseDown = (
+    e: React.MouseEvent<HTMLDivElement>
+  ) => {
+    // Запоминаем начальные размеры панели и положение мыши
+    e.preventDefault();
+    e.stopPropagation();
+    outlineResizeRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startW: outlineSize.w,
+      startH: outlineSize.h,
+    };
+  };
+
   const handleOutlineMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!outlineDragRef.current) return;
+    if (!outlineDragRef.current && !outlineResizeRef.current) return;
     e.preventDefault();
 
-    const dx = e.clientX - outlineDragRef.current.startX;
-    const dy = e.clientY - outlineDragRef.current.startY;
+    // Ресайз панели
+    if (outlineResizeRef.current) {
+      const dx = e.clientX - outlineResizeRef.current.startX;
+      const dy = e.clientY - outlineResizeRef.current.startY;
 
-    setOutlinePos({
-      x: outlineDragRef.current.startLeft + dx,
-      y: outlineDragRef.current.startTop + dy,
-    });
+      const minW = 260;
+      const minH = 200;
+
+      setOutlineSize({
+        w: Math.max(minW, outlineResizeRef.current.startW + dx),
+        h: Math.max(minH, outlineResizeRef.current.startH + dy),
+      });
+    }
+
+    // Перетаскивание панели
+    if (outlineDragRef.current) {
+      const dx = e.clientX - outlineDragRef.current.startX;
+      const dy = e.clientY - outlineDragRef.current.startY;
+
+      setOutlinePos({
+        x: outlineDragRef.current.startLeft + dx,
+        y: outlineDragRef.current.startTop + dy,
+      });
+    }
   };
 
   const handleOutlineMouseUp = () => {
-    // Отпустили мышку — заканчиваем drag
+    // Отпустили мышку — заканчиваем drag и ресайз
     outlineDragRef.current = null;
+    outlineResizeRef.current = null;
   };
 
 
@@ -1037,9 +1077,10 @@ export default function SiteBuilder() {
             />
           </div>
 
-          {/* Ручка для будущего изменения размера (логику добавим позже) */}
+           {/* Ручка для изменения размера панели */}
           <div
             className="absolute bottom-1 right-1 h-3 w-3 cursor-se-resize rounded-sm border border-[#2a2f45] bg-[#15192c]"
+            onMouseDown={handleOutlineResizeMouseDown}
           />
         </div>
       )}
