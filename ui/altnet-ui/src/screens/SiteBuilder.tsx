@@ -176,6 +176,19 @@ export default function SiteBuilder() {
     h: 400,
   });
 
+  // При первом рендере на desktop смещаем панель к правому краю,
+  // чтобы не перекрывать левую колонку
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setOutlinePos((pos) => {
+      // если пользователь уже двигал панель (x изменился) — не трогаем
+      if (pos.x !== 40) return pos;
+      const margin = 24;
+      const x = window.innerWidth - outlineSize.w - margin;
+      return { ...pos, x: x < 16 ? 16 : x };
+    });
+  }, [outlineSize.w]);
+
   const selBlock = useMemo(() => doc.blocks.find((b: any) => b.id === selId), [doc.blocks, selId]);
 
   // Сворачивание левой панели (как в Elementor)
@@ -810,41 +823,56 @@ export default function SiteBuilder() {
           onChangeMode={setIframeMode}
           right={
             <div className="flex items-center gap-2">
-              {/* Кнопка открытия панели «Структура» */}
+              {/* Кнопка открытия панели «Структура» — только на desktop */}
+              {bp === "desktop" && (
+                <button
+                  type="button"
+                  className={
+                    "inline-flex h-9 w-9 items-center justify-center rounded-md border text-xs " +
+                    (isOutlineOpen
+                      ? "border-[#6E59F2] bg-[#15192c] text-[#e6e9f4]"
+                      : "border-[#2a2f45] bg-[#050816] text-[#cfd5e6] hover:border-[#6E59F2]")
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsOutlineOpen((v) => !v);
+                  }}
+                  title="Структура"
+                >
+                  {/* Иконка «слои» как в Elementor */}
+                  <span className="relative block h-3 w-3">
+                    <span className="absolute inset-x-0 top-0 h-[2px] rounded-sm bg-current" />
+                    <span className="absolute inset-x-0 top-[4px] h-[2px] rounded-sm bg-current" />
+                    <span className="absolute inset-x-0 top-[8px] h-[2px] rounded-sm bg-current" />
+                  </span>
+                </button>
+              )}
+
               <button
-                type="button"
-                className={
-                  "inline-flex h-8 w-8 items-center justify-center rounded-md border text-xs " +
-                  (isOutlineOpen
-                    ? "border-[#6E59F2] bg-[#15192c] text-[#e6e9f4]"
-                    : "border-[#2a2f45] bg-[#050816] text-[#cfd5e6] hover:border-[#6E59F2]")
-                }
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsOutlineOpen((v) => !v);
-                }}
-                title="Структура"
+                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
+                onClick={onExportSingle}
               >
-                {/* Иконка «слои» как в Elementor */}
-                <span className="relative block h-3 w-3">
-                  <span className="absolute inset-x-0 top-0 h-[2px] rounded-sm bg-current" />
-                  <span className="absolute inset-x-0 top-[4px] h-[2px] rounded-sm bg-current" />
-                  <span className="absolute inset-x-0 top-[8px] h-[2px] rounded-sm bg-current" />
-                </span>
-              </button>
-              <button className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]" onClick={onExportSingle}>
                 Экспорт HTML
               </button>
-              <button className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]" onClick={onExportZip}>
+              <button
+                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
+                onClick={onExportZip}
+              >
                 Экспорт ZIP
               </button>
               <label className="ml-2 inline-flex items-center gap-2 text-xs text-[#cfd5e6]">
-                <input type="checkbox" className="h-4 w-4 rounded border-[#2a2f45] bg-[#0f1420]" checked={autoPreview} onChange={(e) => setAutoPreview(e.target.checked)} />
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-[#2a2f45] bg-[#0f1420]"
+                  checked={autoPreview}
+                  onChange={(e) => setAutoPreview(e.target.checked)}
+                />
                 Автопревью
               </label>
             </div>
           }
         />
+
 
        <div className="mx-auto w-full max-w-[1200px] grid gap-4 p-2">
           {/* Палитра-каркас, вставляет после выбранного — скрыта, т.к. есть левая панель */}
@@ -912,19 +940,21 @@ export default function SiteBuilder() {
               )}
             </div>
 
-            {/* Структура справа (десктоп ≥ xl) */}
-            <div className="hidden xl:flex flex-col rounded-2xl border border-[#1f2751] bg-[#050816]/90 max-h-[calc(100dvh-160px)]">
-              <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
-                Структура
+            {/* Структура справа (десктоп ≥ xl, только когда bp === "desktop") */}
+            {bp === "desktop" && (
+              <div className="hidden xl:flex flex-col rounded-2xl border border-[#1f2751] bg-[#050816]/90 max-h-[calc(100dvh-160px)]">
+                <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
+                  Структура
+                </div>
+                <div className="flex-1 overflow-y-auto p-3">
+                  <Outline
+                    blocks={doc.blocks}
+                    selId={selId}
+                    onSelect={(id) => setSelId(id)}
+                  />
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-3">
-                <Outline
-                  blocks={doc.blocks}
-                  selId={selId}
-                  onSelect={(id) => setSelId(id)}
-                />
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
