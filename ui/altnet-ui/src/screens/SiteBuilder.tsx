@@ -894,19 +894,22 @@ export default function SiteBuilder() {
                 }}
               />
 
-              {/* Структура под канвасом на мобильных/узких экранах */}
-              <div className="mt-4 xl:hidden rounded-2xl border border-[#1f2751] bg-[#050816]/90">
-                <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
-                  Структура
+              {/* Структура под канвасом на мобильных/узких экранах (tablet/mobile) */}
+              {bp !== "desktop" && (
+                <div className="mt-4 rounded-2xl border border-[#1f2751] bg-[#050816]/90">
+                  <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
+                    Структура
+                  </div>
+                  <div className="p-3">
+                    <Outline
+                      blocks={doc.blocks}
+                      selId={selId}
+                      onSelect={(id) => setSelId(id)}
+                    />
+                    {/* конец центральной колонки */}
+                  </div>
                 </div>
-                <div className="p-3">
-                  <Outline
-                    blocks={doc.blocks}
-                    selId={selId}
-                    onSelect={(id) => setSelId(id)}
-                  />
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Структура справа (десктоп ≥ xl) */}
