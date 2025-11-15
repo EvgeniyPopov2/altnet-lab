@@ -166,15 +166,52 @@ export default function SiteBuilder() {
   const [selId, setSelId] = useState<string | null>(null);
 
   // Плавающая панель «Структура» (Navigator как в Elementor)
-  const [isOutlineOpen, setIsOutlineOpen] = useState<boolean>(true);
-  const [outlinePos, setOutlinePos] = useState<{ x: number; y: number }>({
-    x: 40,
-    y: 80,
-  });
-  const [outlineSize, setOutlineSize] = useState<{ w: number; h: number }>({
-    w: 320,
-    h: 400,
-  });
+    const [isOutlineOpen, setIsOutlineOpen] = useState(false);
+
+  // Стартовая позиция плавающей панели «Структура» — справа от палитры
+  const [outlinePos, setOutlinePos] = useState({ x: 40, y: 80 });
+  const [outlineSize, setOutlineSize] = useState({ w: 320, h: 420 });
+
+  // Временное состояние drag для панели «Структура»
+  const outlineDragRef = useRef<{
+    startX: number;
+    startY: number;
+    startLeft: number;
+    startTop: number;
+  } | null>(null);
+
+  const handleOutlineHeaderMouseDown = (
+    e: React.MouseEvent<HTMLDivElement>
+  ) => {
+    // Запоминаем начальные координаты мышки и панели
+    e.preventDefault();
+    e.stopPropagation();
+    outlineDragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startLeft: outlinePos.x,
+      startTop: outlinePos.y,
+    };
+  };
+
+  const handleOutlineMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!outlineDragRef.current) return;
+    e.preventDefault();
+
+    const dx = e.clientX - outlineDragRef.current.startX;
+    const dy = e.clientY - outlineDragRef.current.startY;
+
+    setOutlinePos({
+      x: outlineDragRef.current.startLeft + dx,
+      y: outlineDragRef.current.startTop + dy,
+    });
+  };
+
+  const handleOutlineMouseUp = () => {
+    // Отпустили мышку — заканчиваем drag
+    outlineDragRef.current = null;
+  };
+
 
   // При первом рендере на desktop смещаем панель к правому краю,
   // чтобы не перекрывать левую колонку
@@ -970,9 +1007,15 @@ export default function SiteBuilder() {
             height: outlineSize.h,
           }}
           onClick={(e) => e.stopPropagation()}
+          onMouseMove={handleOutlineMouseMove}
+          onMouseUp={handleOutlineMouseUp}
+          onMouseLeave={handleOutlineMouseUp}
         >
-          {/* Хедер: название + закрыть, зона для drag (drag добавим следующим шагом) */}
-          <div className="flex items-center justify-between px-3 py-2 border-b border-[#1f2751] cursor-move select-none">
+          {/* Хедер: название + закрыть, зона для drag */}
+          <div
+            className="flex items-center justify-between px-3 py-2 border-b border-[#1f2751] cursor-move select-none"
+            onMouseDown={handleOutlineHeaderMouseDown}
+          >
             <div className="text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
               Структура
             </div>
@@ -994,10 +1037,13 @@ export default function SiteBuilder() {
             />
           </div>
 
-          {/* Ручка для изменения размера (пока без логики — сделаем на следующем шаге) */}
-          <div className="absolute bottom-1 right-1 h-3 w-3 cursor-se-resize rounded-sm border border-[#2a2f45] bg-[#15192c]" />
+          {/* Ручка для будущего изменения размера (логику добавим позже) */}
+          <div
+            className="absolute bottom-1 right-1 h-3 w-3 cursor-se-resize rounded-sm border border-[#2a2f45] bg-[#15192c]"
+          />
         </div>
       )}
+
     </div>
   );
 }
