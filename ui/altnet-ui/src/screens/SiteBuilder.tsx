@@ -1039,7 +1039,7 @@ export default function SiteBuilder() {
       {/* Плавающая панель «Структура» (Navigator как в Elementor) */}
       {bp === "desktop" && isOutlineOpen && (
         <div
-          className="fixed z-40 rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
+          className="fixed z-40 group rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
           style={{
             left: outlinePos.x,
             top: outlinePos.y,
@@ -1077,13 +1077,17 @@ export default function SiteBuilder() {
             />
           </div>
 
-{/* Ручка для изменения размера панели — правый нижний угол */}
+{/* Ручка для изменения размера панели — ПРАВЫЙ нижний угол */}
 <div
-  className="absolute bottom-1 right-1 h-4 w-4 cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity"
+  className="absolute bottom-1 right-1 h-5 w-5 flex items-end justify-end cursor-se-resize"
   onMouseDown={handleOutlineResizeMouseDown}
+  title="Потяни для изменения размера"
 >
-  {/* Диагональный уголок, как у окон */}
-  <div className="h-full w-full rotate-45 border-r border-b border-[#6E59F2]" />
+  {/* Треугольник SVG — визуально как у окон */}
+  <svg width="20" height="20" className="block" style={{ pointerEvents: "none" }}>
+    <polygon points="0,20 20,20 20,0" fill="#6E59F2" fillOpacity="0.7" />
+    <polygon points="4,20 20,20 20,4" fill="#050816" />
+  </svg>
 </div>
         </div>
       )}
