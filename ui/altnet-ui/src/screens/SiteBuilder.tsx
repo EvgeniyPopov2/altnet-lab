@@ -1077,19 +1077,14 @@ export default function SiteBuilder() {
             />
           </div>
 
-{/* Ручка для изменения размера панели — зона + треугольник */}
-          <div
-            className="group absolute bottom-0 right-0 h-5 w-5 cursor-se-resize"
-            onMouseDown={handleOutlineResizeMouseDown}
-          >
-            {/* Сам треугольник — появляется при наведении */}
-            <div
-              className="absolute bottom-0 right-0 h-0 w-0 
-                         border-b-[10px] border-l-[10px] 
-                         border-b-[#6E59F2] border-l-transparent
-                         opacity-0 group-hover:opacity-100 transition-opacity"
-            />
-          </div>
+{/* Ручка для изменения размера панели — правый нижний угол */}
+<div
+  className="absolute bottom-1 right-1 h-4 w-4 cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity"
+  onMouseDown={handleOutlineResizeMouseDown}
+>
+  {/* Диагональный уголок, как у окон */}
+  <div className="h-full w-full rotate-45 border-r border-b border-[#6E59F2]" />
+</div>
         </div>
       )}
 
