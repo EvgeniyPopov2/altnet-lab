@@ -89,7 +89,9 @@ function validateDoc(doc: Doc): CheckItem[] {
   });
 
   const btnBlocks = doc.blocks.filter((b) => b.type === "btn") as BtnBlock[];
-  const allBtnHrefOk = btnBlocks.every((b) => notEmpty(b.href) && (isHttp(b.href) || isHash(b.href) || b.href.startsWith("/")));
+  const allBtnHrefOk = btnBlocks.every(
+    (b) => notEmpty(b.href) && (isHttp(b.href) || isHash(b.href) || b.href.startsWith("/"))
+  );
   checks.push({
     id: "btn-href",
     ok: allBtnHrefOk || btnBlocks.length === 0,
@@ -138,10 +140,21 @@ function prettyFileName(title: string, ext: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 type Breakpoint = "desktop" | "tablet" | "mobile";
 type BlockStyle = {
-  mt?: number; mb?: number; pt?: number; pb?: number; py?: number;
-  fs?: number; fw?: number; lh?: number; ta?: "left" | "center" | "right" | "justify";
-  tc?: string; bg?: string;
-  bw?: number; bc?: string; bs?: "none" | "solid" | "dashed" | "dotted"; br?: number;
+  mt?: number;
+  mb?: number;
+  pt?: number;
+  pb?: number;
+  py?: number;
+  fs?: number;
+  fw?: number;
+  lh?: number;
+  ta?: "left" | "center" | "right" | "justify";
+  tc?: string;
+  bg?: string;
+  bw?: number;
+  bc?: string;
+  bs?: "none" | "solid" | "dashed" | "dotted";
+  br?: number;
   sh?: string;
 };
 type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyle };
@@ -164,9 +177,13 @@ export default function SiteBuilder() {
 
   // Выбор блока
   const [selId, setSelId] = useState<string | null>(null);
+  const selBlock = useMemo(
+    () => doc.blocks.find((b: any) => b.id === selId),
+    [doc.blocks, selId]
+  );
 
   // Плавающая панель «Структура» (Navigator как в Elementor)
-    const [isOutlineOpen, setIsOutlineOpen] = useState(false);
+  const [isOutlineOpen, setIsOutlineOpen] = useState(false);
 
   // Стартовая позиция плавающей панели «Структура» — справа от палитры
   const [outlinePos, setOutlinePos] = useState({ x: 40, y: 80 });
@@ -182,15 +199,16 @@ export default function SiteBuilder() {
 
   // Временное состояние resize для панели «Структура»
   const outlineResizeRef = useRef<{
+    handle: "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
     startX: number;
     startY: number;
     startW: number;
     startH: number;
+    startLeft: number;
+    startTop: number;
   } | null>(null);
 
-  const handleOutlineHeaderMouseDown = (
-    e: React.MouseEvent<HTMLDivElement>
-  ) => {
+  const handleOutlineHeaderMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     // Запоминаем начальные координаты мышки и панели
     e.preventDefault();
     e.stopPropagation();
@@ -203,16 +221,20 @@ export default function SiteBuilder() {
   };
 
   const handleOutlineResizeMouseDown = (
-    e: React.MouseEvent<HTMLDivElement>
+    e: React.MouseEvent<HTMLDivElement>,
+    handle: "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw"
   ) => {
-    // Запоминаем начальные размеры панели и положение мыши
+    // Запоминаем начальные размеры панели, положение мыши и направление
     e.preventDefault();
     e.stopPropagation();
     outlineResizeRef.current = {
+      handle,
       startX: e.clientX,
       startY: e.clientY,
       startW: outlineSize.w,
       startH: outlineSize.h,
+      startLeft: outlinePos.x,
+      startTop: outlinePos.y,
     };
   };
 
@@ -220,18 +242,49 @@ export default function SiteBuilder() {
     if (!outlineDragRef.current && !outlineResizeRef.current) return;
     e.preventDefault();
 
+    const minW = 260;
+    const minH = 200;
+
     // Ресайз панели
     if (outlineResizeRef.current) {
-      const dx = e.clientX - outlineResizeRef.current.startX;
-      const dy = e.clientY - outlineResizeRef.current.startY;
+      const { handle, startX, startY, startW, startH, startLeft, startTop } = outlineResizeRef.current;
 
-      const minW = 260;
-      const minH = 200;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
 
-      setOutlineSize({
-        w: Math.max(minW, outlineResizeRef.current.startW + dx),
-        h: Math.max(minH, outlineResizeRef.current.startH + dy),
-      });
+      let newX = startLeft;
+      let newY = startTop;
+      let newW = startW;
+      let newH = startH;
+
+      // Логика для Горизонтального ресайза (West/East)
+      if (handle.includes("e")) {
+        newW = Math.max(minW, startW + dx);
+      } else if (handle.includes("w")) {
+        const potentialW = startW - dx;
+        newW = Math.max(minW, potentialW);
+        if (newW === minW) {
+          newX = startLeft + (startW - minW);
+        } else {
+          newX = startLeft + dx;
+        }
+      }
+
+      // Логика для Вертикального ресайза (North/South)
+      if (handle.includes("s")) {
+        newH = Math.max(minH, startH + dy);
+      } else if (handle.includes("n")) {
+        const potentialH = startH - dy;
+        newH = Math.max(minH, potentialH);
+        if (newH === minH) {
+          newY = startTop + (startH - minH);
+        } else {
+          newY = startTop + dy;
+        }
+      }
+
+      setOutlineSize({ w: newW, h: newH });
+      setOutlinePos({ x: newX, y: newY });
     }
 
     // Перетаскивание панели
@@ -252,28 +305,37 @@ export default function SiteBuilder() {
     outlineResizeRef.current = null;
   };
 
-
   // При первом рендере на desktop смещаем панель к правому краю,
   // чтобы не перекрывать левую колонку
   useEffect(() => {
     if (typeof window === "undefined") return;
     setOutlinePos((pos) => {
-      // если пользователь уже двигал панель (x изменился) — не трогаем
-      if (pos.x !== 40) return pos;
-      const margin = 24;
-      const x = window.innerWidth - outlineSize.w - margin;
-      return { ...pos, x: x < 16 ? 16 : x };
-    });
-  }, [outlineSize.w]);
+      // Если пользователь уже двигал панель — не трогаем
+      if (pos.x !== 40 && pos.y !== 80) return pos;
 
-  const selBlock = useMemo(() => doc.blocks.find((b: any) => b.id === selId), [doc.blocks, selId]);
+      const margin = 24;
+      const newX = window.innerWidth - outlineSize.w - margin;
+      const newY = pos.y < 80 ? 80 : pos.y; // минимальная высота от верха
+
+      // Не даём уйти слишком вниз
+      const maxHeight = window.innerHeight - outlineSize.h - 40;
+      const safeY = Math.min(pos.y, maxHeight);
+
+      return {
+        x: newX < 16 ? 16 : newX,
+        y: safeY < 80 ? 80 : safeY,
+      };
+    });
+  }, [outlineSize.w, outlineSize.h]);
 
   // Сворачивание левой панели (как в Elementor)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Табы редактора
   const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
-  useEffect(() => { setEditorTab("content"); }, [selId]);
+  useEffect(() => {
+    setEditorTab("content");
+  }, [selId]);
 
   // Поиск по палитре
   const [elQuery, setElQuery] = useState<string>("");
@@ -298,10 +360,13 @@ export default function SiteBuilder() {
     setDoc((d) => ({ ...d, blocks: d.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
   }, []);
 
-  const removeBlock = useCallback((id: string) => {
-    setDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) }));
-    if (selId === id) setSelId(null);
-  }, [selId]);
+  const removeBlock = useCallback(
+    (id: string) => {
+      setDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) }));
+      if (selId === id) setSelId(null);
+    },
+    [selId]
+  );
 
   const duplicateBlock = useCallback((id: string) => {
     setDoc((d) => {
@@ -335,186 +400,209 @@ export default function SiteBuilder() {
     return { ...base, ...per };
   };
 
-  const styleInline = useCallback((b: any): React.CSSProperties => {
-    const s = resolveStyle(b, bp);
-    const pt = s.py != null ? s.py : s.pt;
-    const pb = s.py != null ? s.py : s.pb;
-    const mt = s.mt;
-    const mb = s.mb;
-    return {
-      ...(pt != null ? { paddingTop: Number(pt) } : {}),
-      ...(pb != null ? { paddingBottom: Number(pb) } : {}),
-      ...(mt != null ? { marginTop: Number(mt) } : {}),
-      ...(mb != null ? { marginBottom: Number(mb) } : {}),
+  const styleInline = useCallback(
+    (b: any): React.CSSProperties => {
+      const s = resolveStyle(b, bp);
+      const pt = s.py != null ? s.py : s.pt;
+      const pb = s.py != null ? s.py : s.pb;
+      const mt = s.mt;
+      const mb = s.mb;
+      return {
+        ...(pt != null ? { paddingTop: Number(pt) } : {}),
+        ...(pb != null ? { paddingBottom: Number(pb) } : {}),
+        ...(mt != null ? { marginTop: Number(mt) } : {}),
+        ...(mb != null ? { marginBottom: Number(mb) } : {}),
 
-      ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
-      ...(s.fw != null ? { fontWeight: Number(s.fw) as any } : {}),
-      ...(s.lh != null ? { lineHeight: Number(s.lh) } : {}),
-      ...(s.ta ? { textAlign: s.ta as any } : {}),
+        ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
+        ...(s.fw != null ? { fontWeight: Number(s.fw) as any } : {}),
+        ...(s.lh != null ? { lineHeight: Number(s.lh) } : {}),
+        ...(s.ta ? { textAlign: s.ta as any } : {}),
 
-      ...(s.tc ? { color: s.tc } : {}),
-      ...(s.bg ? { backgroundColor: s.bg } : {}),
+        ...(s.tc ? { color: s.tc } : {}),
+        ...(s.bg ? { backgroundColor: s.bg } : {}),
 
-      ...(s.bw != null ? { borderWidth: Number(s.bw) } : {}),
-      ...(s.bs ? { borderStyle: s.bs as any } : {}),
-      ...(s.bc ? { borderColor: s.bc } : {}),
-      ...(s.br != null ? { borderRadius: Number(s.br) } : {}),
+        ...(s.bw != null ? { borderWidth: Number(s.bw) } : {}),
+        ...(s.bs ? { borderStyle: s.bs as any } : {}),
+        ...(s.bc ? { borderColor: s.bc } : {}),
+        ...(s.br != null ? { borderRadius: Number(s.br) } : {}),
 
-      ...(s.sh ? { boxShadow: s.sh } : {}),
-    };
-  }, [bp]);
+        ...(s.sh ? { boxShadow: s.sh } : {}),
+      };
+    },
+    [bp]
+  );
 
   // ── Превью блока в канвасе (инлайн правка текстов) ─────────────────────────
-  const previewOf = useCallback((b: Block) => {
-    const wrapStyled = (children: React.ReactNode, pad = true) => (
-      <div
-        id={(b as any).anchorId || undefined}
-        className={`${pad ? "p-3 " : ""}${(b as any).className || ""}`}
-        style={styleInline(b as any)}
-      >
-        {children}
-      </div>
-    );
+  const previewOf = useCallback(
+    (b: Block) => {
+      const wrapStyled = (children: React.ReactNode, pad = true) => (
+        <div
+          id={(b as any).anchorId || undefined}
+          className={`${pad ? "p-3 " : ""}${(b as any).className || ""}`}
+          style={styleInline(b as any)}
+        >
+          {children}
+        </div>
+      );
 
-    if ((b as any).hidden) {
-      return wrapStyled(<div className="text-xs text-[#9aa3b2] italic">Блок скрыт</div>);
-    }
+      if ((b as any).hidden) {
+        return wrapStyled(<div className="text-xs text-[#9aa3b2] italic">Блок скрыт</div>);
+      }
 
-    switch (b.type) {
-      case "hero": {
-        const hb = b as HeroBlock;
-        return wrapStyled(
-          <div className="rounded-xl border border-[#2a2f45] bg-gradient-to-br from-[#0e1327] to-[#0c0f1a] p-6">
+      switch (b.type) {
+        case "hero": {
+          const hb = b as HeroBlock;
+          return wrapStyled(
+            <div className="rounded-xl border border-[#2a2f45] bg-gradient-to-br from-[#0e1327] to-[#0c0f1a] p-6">
+              <div
+                className="text-2xl font-bold text-[#e6e9f4] mb-1"
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={(e) => patchBlock(b.id, { title: e.currentTarget.innerText })}
+                onDoubleClick={() => setSelId(b.id)}
+              >
+                {hb.title || "Заголовок героя"}
+              </div>
+              <div
+                className="text-sm text-[#9aa3b2] mb-3"
+                contentEditable
+                suppressContentEditableWarning
+                onBlur={(e) => patchBlock(b.id, { subtitle: e.currentTarget.innerText })}
+                onDoubleClick={() => setSelId(b.id)}
+              >
+                {hb.subtitle || "Подзаголовок или краткое описание секции"}
+              </div>
+              {(hb.ctaText || hb.ctaLink) && (
+                <a
+                  href={hb.ctaLink || "#"}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-[#1a203b] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                  rel="noopener noreferrer nofollow"
+                  onClick={(e) => e.preventDefault()}
+                  title="Кнопка (клик в предпросмотре заблокирован)"
+                >
+                  {hb.ctaText || "Кнопка"}
+                </a>
+              )}
+            </div>
+          );
+        }
+
+        case "h1": {
+          const h = b as H1Block;
+          const align = (h as any).align || "left";
+          return wrapStyled(
             <div
-              className="text-2xl font-bold text-[#e6e9f4] mb-1"
+              className={`text-2xl font-semibold text-[#e6e9f4] text-${align}`}
               contentEditable
               suppressContentEditableWarning
-              onBlur={(e) => patchBlock(b.id, { title: e.currentTarget.innerText })}
+              onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
               onDoubleClick={() => setSelId(b.id)}
             >
-              {hb.title || "Заголовок героя"}
+              {h.text || "Заголовок H1"}
             </div>
+          );
+        }
+
+        case "p": {
+          const p = b as PBlock;
+          const align = p.align || "left";
+          return wrapStyled(
             <div
-              className="text-sm text-[#9aa3b2] mb-3"
+              className={`text-sm leading-6 text-[#cfd5e6] whitespace-pre-wrap text-${align}`}
               contentEditable
               suppressContentEditableWarning
-              onBlur={(e) => patchBlock(b.id, { subtitle: e.currentTarget.innerText })}
+              onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
               onDoubleClick={() => setSelId(b.id)}
             >
-              {hb.subtitle || "Подзаголовок или краткое описание секции"}
+              {p.text || "Текстовый абзац. Дважды кликните, чтобы отредактировать."}
             </div>
-            {(hb.ctaText || hb.ctaLink) && (
+          );
+        }
+
+        case "img": {
+          const im = b as ImgBlock;
+          const src = im.cid || "";
+          return wrapStyled(
+            <figure className="grid gap-2">
+              <img
+                src={src}
+                alt={im.alt || ""}
+                className="max-w-full rounded-lg border border-[#2a2f45] bg-[#0b0e18] object-contain"
+                onDoubleClick={() => setSelId(b.id)}
+                draggable={false}
+              />
+              <figcaption className="text-xs text-[#9aa3b2]">{im.alt || "alt-текст"}</figcaption>
+            </figure>
+          );
+        }
+
+        case "btn": {
+          const bt = b as BtnBlock;
+          const align = bt.align || "left";
+          return wrapStyled(
+            <div className={`text-${align}`}>
               <a
-                href={hb.ctaLink || "#"}
-                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-[#1a203b] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                href={bt.href || "#"}
+                className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${
+                  bt.variant === "secondary"
+                    ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
+                    : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
+                }`}
                 rel="noopener noreferrer nofollow"
                 onClick={(e) => e.preventDefault()}
                 title="Кнопка (клик в предпросмотре заблокирован)"
+                onDoubleClick={() => setSelId(b.id)}
               >
-                {hb.ctaText || "Кнопка"}
+                {bt.label || "Кнопка"}
               </a>
-            )}
-          </div>
-        );
+            </div>
+          );
+        }
+
+        case "divider":
+          return wrapStyled(<hr className="border-t border-[#2a2f45]" />, false);
+
+        case "spacer":
+          return wrapStyled(<div className="h-8" />, false);
+
+        default:
+          return wrapStyled(
+            <div className="text-xs text-[#9aa3b2]">
+              [Превью для типа «{(b as any).type}» пока нет]
+            </div>
+          );
       }
-
-      case "h1": {
-        const h = b as H1Block;
-        const align = (h as any).align || "left";
-        return wrapStyled(
-          <div
-            className={`text-2xl font-semibold text-[#e6e9f4] text-${align}`}
-            contentEditable
-            suppressContentEditableWarning
-            onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
-            onDoubleClick={() => setSelId(b.id)}
-          >
-            {h.text || "Заголовок H1"}
-          </div>
-        );
-      }
-
-      case "p": {
-        const p = b as PBlock;
-        const align = p.align || "left";
-        return wrapStyled(
-          <div
-            className={`text-sm leading-6 text-[#cfd5e6] whitespace-pre-wrap text-${align}`}
-            contentEditable
-            suppressContentEditableWarning
-            onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
-            onDoubleClick={() => setSelId(b.id)}
-          >
-            {p.text || "Текстовый абзац. Дважды кликните, чтобы отредактировать."}
-          </div>
-        );
-      }
-
-      case "img": {
-        const im = b as ImgBlock;
-        const src = im.cid || "";
-        return wrapStyled(
-          <figure className="grid gap-2">
-            <img
-              src={src}
-              alt={im.alt || ""}
-              className="max-w-full rounded-lg border border-[#2a2f45] bg-[#0b0e18] object-contain"
-              onDoubleClick={() => setSelId(b.id)}
-              draggable={false}
-            />
-            <figcaption className="text-xs text-[#9aa3b2]">{im.alt || "alt-текст"}</figcaption>
-          </figure>
-        );
-      }
-
-      case "btn": {
-        const bt = b as BtnBlock;
-        const align = bt.align || "left";
-        return wrapStyled(
-          <div className={`text-${align}`}>
-            <a
-              href={bt.href || "#"}
-              className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${bt.variant === "secondary"
-                ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
-                : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
-                }`}
-              rel="noopener noreferrer nofollow"
-              onClick={(e) => e.preventDefault()}
-              title="Кнопка (клик в предпросмотре заблокирован)"
-              onDoubleClick={() => setSelId(b.id)}
-            >
-              {bt.label || "Кнопка"}
-            </a>
-          </div>
-        );
-      }
-
-      case "divider":
-        return wrapStyled(<hr className="border-t border-[#2a2f45]" />, false);
-
-      case "spacer":
-        return wrapStyled(<div className="h-8" />, false);
-
-      default:
-        return wrapStyled(<div className="text-xs text-[#9aa3b2]">[Превью для типа «{(b as any).type}» пока нет]</div>);
-    }
-  }, [patchBlock, setSelId, styleInline]);
+    },
+    [patchBlock, setSelId, styleInline]
+  );
 
   // Ярлык блока
   const labelOf = useCallback((b: Block): string => {
     switch (b.type) {
-      case "hero": return "Hero";
-      case "h1": return "Заголовок (H1)";
-      case "heading": return `Заголовок (${(b as any).level?.toUpperCase() || "H2"})`;
-      case "p": return "Текст";
-      case "img": return "Картинка";
-      case "btn": return "Кнопка";
-      case "cols2": return "Две колонки";
-      case "spacer": return "Разделитель (высота)";
-      case "divider": return "Линия";
-      case "section": return "Секция";
-      case "grid": return "Сетка";
-      default: return String((b as any).type);
+      case "hero":
+        return "Hero";
+      case "h1":
+        return "Заголовок (H1)";
+      case "heading":
+        return `Заголовок (${(b as any).level?.toUpperCase() || "H2"})`;
+      case "p":
+        return "Текст";
+      case "img":
+        return "Картинка";
+      case "btn":
+        return "Кнопка";
+      case "cols2":
+        return "Две колонки";
+      case "spacer":
+        return "Разделитель (высота)";
+      case "divider":
+        return "Линия";
+      case "section":
+        return "Секция";
+      case "grid":
+        return "Сетка";
+      default:
+        return String((b as any).type);
     }
   }, []);
 
@@ -596,7 +684,9 @@ export default function SiteBuilder() {
     livePreviewIdRef.current = id;
 
     if (livePreviewChannelRef.current) {
-      try { livePreviewChannelRef.current.close(); } catch { }
+      try {
+        livePreviewChannelRef.current.close();
+      } catch {}
     }
     livePreviewChannelRef.current = new BroadcastChannel(`altnet_live_preview:${id}`);
 
@@ -620,7 +710,9 @@ export default function SiteBuilder() {
   // Авто-обновление live-вкладки при изменениях
   useEffect(() => {
     if (!livePreviewChannelRef.current) return;
-    if (liveDebounceRef.current) { window.clearTimeout(liveDebounceRef.current); }
+    if (liveDebounceRef.current) {
+      window.clearTimeout(liveDebounceRef.current);
+    }
     liveDebounceRef.current = window.setTimeout(async () => {
       try {
         const model = adaptFromSiteBuilderDoc(docForBuild);
@@ -632,7 +724,10 @@ export default function SiteBuilder() {
       }
     }, 400);
     return () => {
-      if (liveDebounceRef.current) { window.clearTimeout(liveDebounceRef.current); liveDebounceRef.current = null; }
+      if (liveDebounceRef.current) {
+        window.clearTimeout(liveDebounceRef.current);
+        liveDebounceRef.current = null;
+      }
     };
   }, [docForBuild]);
 
@@ -660,7 +755,17 @@ export default function SiteBuilder() {
       }
 
       const okTypes = new Set<BlockType>([
-        "hero", "h1", "heading", "p", "img", "btn", "cols2", "spacer", "divider", "section", "grid",
+        "hero",
+        "h1",
+        "heading",
+        "p",
+        "img",
+        "btn",
+        "cols2",
+        "spacer",
+        "divider",
+        "section",
+        "grid",
       ]);
 
       const title = typeof (data as any).title === "string" ? (data as any).title : "Мой сайт";
@@ -676,7 +781,8 @@ export default function SiteBuilder() {
           switch (b.type as BlockType) {
             case "hero":
               return {
-                id, type: "hero",
+                id,
+                type: "hero",
                 title: String(p.title ?? ""),
                 subtitle: String(p.subtitle ?? ""),
                 ctaText: String(p.ctaText ?? p.ctaLabel ?? ""),
@@ -687,16 +793,23 @@ export default function SiteBuilder() {
             case "p":
               return { id, type: "p", text: String(p.text ?? "") } as PBlock;
             case "img":
-              return { id, type: "img", cid: String(p.cid ?? p.src ?? ""), alt: String(p.alt ?? "") } as ImgBlock;
+              return {
+                id,
+                type: "img",
+                cid: String(p.cid ?? p.src ?? ""),
+                alt: String(p.alt ?? ""),
+              } as ImgBlock;
             case "btn":
               return {
-                id, type: "btn",
+                id,
+                type: "btn",
                 label: String(p.label ?? p.text ?? "Кнопка"),
                 href: String(p.href ?? p.url ?? "#"),
               } as BtnBlock;
             case "cols2":
               return {
-                id, type: "cols2",
+                id,
+                type: "cols2",
                 title: String(b.title ?? ""),
                 text: String(b.text ?? ""),
                 img: String(b.img ?? ""),
@@ -727,54 +840,89 @@ export default function SiteBuilder() {
 
   const resetDoc = useCallback(() => {
     setDoc(DEFAULT_DOC);
-    try { localStorage.removeItem(STORAGE_KEY); } catch { }
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
   }, []);
 
   // Автосохранение
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(doc)); } catch { }
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
+    } catch {}
   }, [doc]);
 
   // ── Навигатор (Outline) ────────────────────────────────────────────────────
-  const Navigator = useCallback(() => (
-    <div className="grid gap-2">
-      {doc.blocks.map((b, idx) => (
-        <div
-          key={b.id}
-          className={`group flex items-center justify-between gap-2 rounded-lg border ${selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
+  const Navigator = useCallback(
+    () => (
+      <div className="grid gap-2">
+        {doc.blocks.map((b, idx) => (
+          <div
+            key={b.id}
+            className={`group flex items-center justify-between gap-2 rounded-lg border ${
+              selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
             } px-2 py-1`}
-        >
-          <button
-            onClick={() => setSelId(b.id)}
-            className={`rounded-xl border ${selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
-              } bg-[#0c0f1a] p-3 cursor-pointer`}
-            title={labelOf(b)}
           >
-            <span className="opacity-60 mr-1">#{idx + 1}</span>
-            {labelOf(b)}
-          </button>
-          <div className="flex items-center gap-1">
-            <button title="Вверх" onClick={() => moveBlock(b.id, -1)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">↑</button>
-            <button title="Вниз" onClick={() => moveBlock(b.id, 1)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">↓</button>
             <button
-              title={(b as any).hidden ? "Показать" : "Скрыть"}
-              onClick={() => patchBlock(b.id, { hidden: !((b as any).hidden) })}
-              className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
-            >{(b as any).hidden ? "👁" : "👁‍🗨"}</button>
-            <button
-              title={(b as any).locked ? "Разблокировать" : "Заблокировать"}
-              onClick={() => patchBlock(b.id, { locked: !((b as any).locked) })}
-              className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
-            >{(b as any).locked ? "🔓" : "🔒"}</button>
-            <button title="Дублировать" onClick={() => duplicateBlock(b.id)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs">⧉</button>
-            <button title="Удалить" onClick={() => removeBlock(b.id)} className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs text-[#ffb3a8]">🗑</button>
+              onClick={() => setSelId(b.id)}
+              className={`rounded-xl border ${
+                selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
+              } bg-[#0c0f1a] p-3 cursor-pointer`}
+              title={labelOf(b)}
+            >
+              <span className="opacity-60 mr-1">#{idx + 1}</span>
+              {labelOf(b)}
+            </button>
+            <div className="flex items-center gap-1">
+              <button
+                title="Вверх"
+                onClick={() => moveBlock(b.id, -1)}
+                className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
+              >
+                ↑
+              </button>
+              <button
+                title="Вниз"
+                onClick={() => moveBlock(b.id, 1)}
+                className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
+              >
+                ↓
+              </button>
+              <button
+                title={(b as any).hidden ? "Показать" : "Скрыть"}
+                onClick={() => patchBlock(b.id, { hidden: !(b as any).hidden })}
+                className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
+              >
+                {(b as any).hidden ? "👁" : "👁‍🗨"}
+              </button>
+              <button
+                title={(b as any).locked ? "Разблокировать" : "Заблокировать"}
+                onClick={() => patchBlock(b.id, { locked: !(b as any).locked })}
+                className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
+              >
+                {(b as any).locked ? "🔓" : "🔒"}
+              </button>
+              <button
+                title="Дублировать"
+                onClick={() => duplicateBlock(b.id)}
+                className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
+              >
+                ⧉
+              </button>
+              <button
+                title="Удалить"
+                onClick={() => removeBlock(b.id)}
+                className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs text-[#ffb3a8]"
+              >
+                🗑
+              </button>
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
-  ), [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock]);
-
-
+        ))}
+      </div>
+    ),
+    [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock]
+  );
 
   return (
     <div className="relative w-full grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
@@ -801,11 +949,13 @@ export default function SiteBuilder() {
           <Field label="Поиск виджета">
             <input
               className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-              value={elQuery} onChange={(e) => setElQuery(e.target.value)}
-              placeholder="Найти: заголовок, кнопка, сетка…" autoComplete="off" spellCheck={false}
+              value={elQuery}
+              onChange={(e) => setElQuery(e.target.value)}
+              placeholder="Найти: заголовок, кнопка, сетка…"
+              autoComplete="off"
+              spellCheck={false}
             />
           </Field>
-          {/* Палитра (левая колонка) */}
           {/* Левая панель: если выбран блок — показываем редактор; иначе — палитру */}
           {selBlock ? (
             <>
@@ -816,9 +966,7 @@ export default function SiteBuilder() {
                 onPatch={(patch) =>
                   setDoc((d: any) => ({
                     ...d,
-                    blocks: d.blocks.map((b: any) =>
-                      b.id === selId ? { ...b, ...patch } : b
-                    ),
+                    blocks: d.blocks.map((b: any) => (b.id === selId ? { ...b, ...patch } : b)),
                   }))
                 }
               />
@@ -843,14 +991,9 @@ export default function SiteBuilder() {
               }}
             />
           )}
-
-
         </div>
 
-
-
         {/* Навигатор */}
-
         {!selBlock && (
           <div>
             <div className="text-xs text-[#9aa3b2] mb-2">Навигатор</div>
@@ -861,18 +1004,22 @@ export default function SiteBuilder() {
         {/* Чек-лист качества */}
         <div className="rounded-lg border border-[#2a2f45] p-3">
           <div className="text-xs text-[#9aa3b2] flex items-center justify-between">
-            <span>Проверки ({okCount}/{checks.length})</span>
+            <span>
+              Проверки ({okCount}/{checks.length})
+            </span>
             <button
               className="px-2 py-0.5 rounded border border-[#2a2f45]"
-              onClick={() => setShowChecklist(v => !v)}
+              onClick={() => setShowChecklist((v) => !v)}
             >
               {showChecklist ? "−" : "+"}
             </button>
           </div>
           {showChecklist && (
             <ul className="mt-2 grid gap-1 text-xs">
-              {checks.map(c => (
-                <li key={c.id} className={c.ok ? "text-[#9dd79d]" : "text-[#ffb3a8]"}>• {c.text}</li>
+              {checks.map((c) => (
+                <li key={c.id} className={c.ok ? "text-[#9dd79d]" : "text-[#ffb3a8]"}>
+                  • {c.text}
+                </li>
               ))}
             </ul>
           )}
@@ -880,19 +1027,45 @@ export default function SiteBuilder() {
 
         {/* Импорт/Экспорт JSON */}
         <div className="grid grid-cols-2 gap-2">
-          <button className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={onExportJson}>Скачать JSON</button>
-          <button className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={onImportJsonClick}>Импорт JSON</button>
-          <input ref={importJsonInputRef} className="hidden" type="file" accept="application/json" onChange={onImportJsonChange} />
-          <button className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={resetDoc}>Сбросить</button>
-          <button className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]" onClick={onOpenLivePreview}>Live-предпросмотр</button>
+          <button
+            className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]"
+            onClick={onExportJson}
+          >
+            Скачать JSON
+          </button>
+          <button
+            className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]"
+            onClick={onImportJsonClick}
+          >
+            Импорт JSON
+          </button>
+          <input
+            ref={importJsonInputRef}
+            className="hidden"
+            type="file"
+            accept="application/json"
+            onChange={onImportJsonChange}
+          />
+          <button
+            className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]"
+            onClick={resetDoc}
+          >
+            Сбросить
+          </button>
+          <button
+            className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]"
+            onClick={onOpenLivePreview}
+          >
+            Live-предпросмотр
+          </button>
         </div>
       </div>
 
       {/* Центральная колонка — Канвас + Палитра (вставка после выбранного) */}
-      <div className={(sidebarCollapsed ? "col-span-2 " : "col-[2] ") + "h-[100dvh] overflow-y-auto relative"}
+      <div
+        className={(sidebarCollapsed ? "col-span-2 " : "col-[2] ") + "h-[100dvh] overflow-y-auto relative"}
         onClick={() => setSelId(null)}
       >
-        {/* Кнопка сворачивания / раскрытия левой панели */}
         <Topbar
           bp={bp}
           onChangeBp={setBp}
@@ -950,8 +1123,7 @@ export default function SiteBuilder() {
           }
         />
 
-
-       <div className="mx-auto w-full max-w-[1200px] grid gap-4 p-2">
+        <div className="mx-auto w-full max-w-[1200px] grid gap-4 p-2">
           {/* Палитра-каркас, вставляет после выбранного — скрыта, т.к. есть левая панель */}
           <div className="mb-2 hidden">
             <Palette
@@ -981,8 +1153,13 @@ export default function SiteBuilder() {
                 blocks={doc.blocks}
                 renderBlock={(b) => (
                   <div
-                    onClick={(e) => { e.stopPropagation(); setSelId(b.id); }}
-                    className={`rounded-xl border ${selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"} bg-white p-3 cursor-pointer`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelId(b.id);
+                    }}
+                    className={`rounded-xl border ${
+                      selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"
+                    } bg-white p-3 cursor-pointer`}
                   >
                     {selId === b.id ? previewOf(b) : renderBlockView(b)}
                   </div>
@@ -1006,11 +1183,7 @@ export default function SiteBuilder() {
                     Структура
                   </div>
                   <div className="p-3">
-                    <Outline
-                      blocks={doc.blocks}
-                      selId={selId}
-                      onSelect={(id) => setSelId(id)}
-                    />
+                    <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
                     {/* конец центральной колонки */}
                   </div>
                 </div>
@@ -1024,11 +1197,7 @@ export default function SiteBuilder() {
                   Структура
                 </div>
                 <div className="flex-1 overflow-y-auto p-3">
-                  <Outline
-                    blocks={doc.blocks}
-                    selId={selId}
-                    onSelect={(id) => setSelId(id)}
-                  />
+                  <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
                 </div>
               </div>
             )}
@@ -1036,7 +1205,7 @@ export default function SiteBuilder() {
         </div>
       </div>
 
-      {/* Плавающая панель «Структура» (Navigator как в Elementor) */}
+{/* Плавающая панель «Структура» (Navigator как в Elementor) */}
       {bp === "desktop" && isOutlineOpen && (
         <div
           className="fixed z-40 group rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
@@ -1070,28 +1239,44 @@ export default function SiteBuilder() {
 
           {/* Содержимое панели */}
           <div className="h-[calc(100%-36px)] overflow-y-auto p-3 text-sm">
-            <Outline
-              blocks={doc.blocks}
-              selId={selId}
-              onSelect={(id) => setSelId(id)}
-            />
+            <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
           </div>
 
-{/* Ручка для изменения размера панели — ПРАВЫЙ нижний угол */}
-<div
-  className="absolute bottom-1 right-1 h-5 w-5 flex items-end justify-end cursor-se-resize"
-  onMouseDown={handleOutlineResizeMouseDown}
-  title="Потяни для изменения размера"
->
-  {/* Треугольник SVG — визуально как у окон */}
-  <svg width="20" height="20" className="block" style={{ pointerEvents: "none" }}>
-    <polygon points="0,20 20,20 20,0" fill="#6E59F2" fillOpacity="0.7" />
-    <polygon points="4,20 20,20 20,4" fill="#050816" />
-  </svg>
-</div>
+          {/* Ручки для изменения размера (8 штук) */}
+          <div
+            className="absolute -left-1 top-0 bottom-0 w-2 cursor-ew-resize"
+            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "w")}
+          />
+          <div
+            className="absolute -right-1 top-0 bottom-0 w-2 cursor-ew-resize"
+            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "e")}
+          />
+          <div
+            className="absolute -top-1 left-0 right-0 h-2 cursor-ns-resize"
+            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "n")}
+          />
+          <div
+            className="absolute -bottom-1 left-0 right-0 h-2 cursor-ns-resize"
+            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "s")}
+          />
+          <div
+            className="absolute -top-1 -left-1 h-3 w-3 cursor-nwse-resize z-10"
+            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "nw")}
+          />
+          <div
+            className="absolute -top-1 -right-1 h-3 w-3 cursor-nesw-resize z-10"
+            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "ne")}
+          />
+          <div
+            className="absolute -bottom-1 -left-1 h-3 w-3 cursor-nesw-resize z-10"
+            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "sw")}
+          />
+          <div
+            className="absolute -bottom-1 -right-1 h-3 w-3 cursor-nwse-resize z-10"
+            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "se")}
+          />
         </div>
       )}
-
     </div>
   );
 }
