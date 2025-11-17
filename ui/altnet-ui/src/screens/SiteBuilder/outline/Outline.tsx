@@ -46,7 +46,6 @@ function previewText(b: Block): string {
     case "heading":
     case "p":
       // у этих типов есть text
-      
       return (b.text as string) || "";
     case "btn":
       return b.label || "";
@@ -59,11 +58,11 @@ function previewText(b: Block): string {
   }
 }
 
-/** Простой навигатор блоков: список с подсветкой выбранного */
+/** Навигатор блоков в стиле «Структуры» Elementor: буллет + заголовок + подпись/«Пустой». */
 export default function Outline({ blocks, selId, onSelect }: Props) {
   return (
-    <aside className="rounded-xl border border-[#1f2751] bg-[#0b1022]">
-      <div className="px-3 py-2 text-xs uppercase tracking-wide text-[#9aa3b2]">Структура</div>
+    // Внешнюю рамку/фон рисует контейнер (панель/колонка), здесь только контент
+    <div className="text-sm">
       <ul className="divide-y divide-[#1f2751]">
         {blocks.map((b) => {
           const active = selId === b.id;
@@ -74,27 +73,20 @@ export default function Outline({ blocks, selId, onSelect }: Props) {
             <li
               key={b.id}
               className={
-                "px-3 py-2 cursor-pointer select-none hover:bg-[#141a33] " +
-                (active ? "bg-[#141a33] ring-1 ring-[#5865f2]" : "")
+                "px-3 py-2 cursor-pointer select-none transition-colors " +
+                (active
+                  ? "bg-[#141a33] ring-1 ring-[#5865f2]"
+                  : "hover:bg-[#10172f]")
               }
               onClick={() => onSelect(b.id)}
             >
               <div className="flex items-center gap-2">
-                {/* Иконка блока слева (пока простые символы, потом можно заменить на SVG) */}
-                <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[#101735] text-[11px] text-[#cfd5e6]">
-                  {b.type === "grid"
-                    ? "□"
-                    : b.type === "section"
-                    ? "▤"
-                    : b.type === "cols2"
-                    ? "Ⅱ"
-                    : "●"}
-                </span>
-
+                {/* Буллет слева, как в Elementor */}
+                <span className="text-[12px] leading-none text-[#cfd5e6]">•</span>
                 <span className="text-[13px] text-[#e6e9f4]">{labelOf(b)}</span>
               </div>
 
-              <div className="mt-1 pl-7 text-xs text-[#9aa3b2]">
+              <div className="mt-1 pl-4 text-xs text-[#9aa3b2]">
                 {isEmpty ? (
                   "Пустой"
                 ) : (
@@ -107,6 +99,6 @@ export default function Outline({ blocks, selId, onSelect }: Props) {
           );
         })}
       </ul>
-    </aside>
+    </div>
   );
 }
