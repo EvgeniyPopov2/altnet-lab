@@ -208,7 +208,7 @@ export default function SiteBuilder() {
     const y = 80; // визуально как ты ставил руками
 
     setOutlinePos({ x, y });
-  }, [isOutlineOpen, outlineSize.w]);
+  }, [isOutlineOpen]);
 
   // Временное состояние drag для панели «Структура»
   const outlineDragRef = useRef<{
