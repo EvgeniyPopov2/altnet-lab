@@ -1260,40 +1260,53 @@ export default function SiteBuilder() {
             />
           </div>
 
-          {/* Внутренняя сетка: канвас + панель «Структура» справа */}
+           {/* Внутренняя сетка: канвас + панель «Структура» справа */}
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px] items-start">
             {/* Канвас + структура под ним на узких экранах */}
             <div>
-              {/* Канвас */}
-              <Canvas
-                cols={canvasCols}
-                gapX={canvasGapX}
-                gapY={canvasGapY}
-                blocks={doc.blocks}
-                renderBlock={(b) => (
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelId(b.id);
-                    }}
-                    className={`rounded-xl border ${
-                      selId === b.id ? "border-[#6E59F2]" : "border-[#e5e7eb]"
-                    } bg-white p-3 cursor-pointer`}
-                  >
-                    {selId === b.id ? previewOf(b) : renderBlockView(b)}
-                  </div>
-                )}
-                onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
-                onInsertAt={(index, type) => {
-                  setDoc((d) => {
-                    const blocks = [...d.blocks];
-                    const clamped = Math.max(0, Math.min(index, blocks.length));
-                    const nb = createDefaultBlock(type);
-                    blocks.splice(clamped, 0, nb);
-                    return { ...d, blocks };
-                  });
-                }}
-              />
+              {/* Белый «лист» канваса поверх тёмной темы */}
+              <div className="rounded-2xl border border-dashed border-[#d4d4d8] bg-white shadow-sm px-6 py-10">
+                <Canvas
+                  cols={canvasCols}
+                  gapX={canvasGapX}
+                  gapY={canvasGapY}
+                  blocks={doc.blocks}
+                  renderBlock={(b) => {
+                    const isSectionish = b.type === "section" || b.type === "hero";
+                    const isActive = selId === b.id;
+
+                    const baseClasses =
+                      "rounded-xl border bg-white p-3 cursor-pointer transition-colors";
+                    const stateClasses = isActive
+                      ? "border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.6)]"
+                      : isSectionish
+                      ? "border-[#cbd5e1] hover:border-[#6E59F2]/70 hover:bg-[#eef2ff]"
+                      : "border-[#e5e7eb] hover:border-[#6E59F2]/50";
+
+                    return (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelId(b.id);
+                        }}
+                        className={`${baseClasses} ${stateClasses}`}
+                      >
+                        {isActive ? previewOf(b) : renderBlockView(b)}
+                      </div>
+                    );
+                  }}
+                  onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
+                  onInsertAt={(index, type) => {
+                    setDoc((d) => {
+                      const blocks = [...d.blocks];
+                      const clamped = Math.max(0, Math.min(index, blocks.length));
+                      const nb = createDefaultBlock(type);
+                      blocks.splice(clamped, 0, nb);
+                      return { ...d, blocks };
+                    });
+                  }}
+                />
+              </div>
 
               {/* Структура под канвасом на мобильных/узких экранах (tablet/mobile) */}
               {bp !== "desktop" && (
@@ -1303,11 +1316,11 @@ export default function SiteBuilder() {
                   </div>
                   <div className="p-3">
                     <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
-                    {/* конец центральной колонки */}
                   </div>
                 </div>
               )}
             </div>
+
 
             {/* Структура справа (десктоп ≥ xl, только когда bp === "desktop") */}
             {bp === "desktop" && (
