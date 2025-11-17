@@ -1156,7 +1156,7 @@ export default function SiteBuilder() {
           mode={iframeMode}
           onChangeMode={setIframeMode}
           right={
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {/* Кнопка открытия панели «Структура» — только на desktop */}
               {bp === "desktop" && (
                 <button
@@ -1173,12 +1173,38 @@ export default function SiteBuilder() {
                   }}
                   title="Структура"
                 >
-                  {/* Иконка «слои» как в Elementor */}
-                  <span className="relative block h-3 w-3">
-                    <span className="absolute inset-x-0 top-0 h-[2px] rounded-sm bg-current" />
-                    <span className="absolute inset-x-0 top-[4px] h-[2px] rounded-sm bg-current" />
-                    <span className="absolute inset-x-0 top-[8px] h-[2px] rounded-sm bg-current" />
-                  </span>
+                  {/* Иконка «слои» как в Elementor (три слоя) */}
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="16"
+                    height="16"
+                    aria-hidden="true"
+                  >
+                    {/* верхний ромб */}
+                    <path
+                      d="M12 4L4 8l8 4 8-4-8-4Z"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      strokeLinejoin="round"
+                    />
+                    {/* средний слой */}
+                    <path
+                      d="M4 12l8 4 8-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      strokeLinejoin="round"
+                    />
+                    {/* нижний слой */}
+                    <path
+                      d="M4 16l8 4 8-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      strokeLinejoin="round"
+                    />
+                  </svg>
                 </button>
               )}
 
