@@ -175,7 +175,9 @@ export default function SiteBuilder() {
   const [iframeMode, setIframeMode] = useState<"fit" | Breakpoint>("fit");
   const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
   const canvasTargetWidth =
-    iframeMode === "fit" ? null : widthByBp[iframeMode as Breakpoint];
+  iframeMode === "fit" || iframeMode === "desktop"
+    ? null
+    : widthByBp[iframeMode as Breakpoint];
 
   // Выбор блока
   const [selId, setSelId] = useState<string | null>(null);
