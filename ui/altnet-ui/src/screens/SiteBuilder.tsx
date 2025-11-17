@@ -185,9 +185,30 @@ export default function SiteBuilder() {
   // Плавающая панель «Структура» (Navigator как в Elementor)
   const [isOutlineOpen, setIsOutlineOpen] = useState(false);
 
-  // Стартовая позиция плавающей панели «Структура» — справа от палитры
-  const [outlinePos, setOutlinePos] = useState({ x: 40, y: 80 });
-  const [outlineSize, setOutlineSize] = useState({ w: 320, h: 420 });
+  // Стартовая позиция и размер плавающей панели «Структура»
+  const DEFAULT_OUTLINE_SIZE: { w: number; h: number } = { w: 320, h: 420 };
+
+  const [outlineSize, setOutlineSize] = useState<{ w: number; h: number }>(DEFAULT_OUTLINE_SIZE);
+  const [outlinePos, setOutlinePos] = useState<{ x: number; y: number }>({ x: 40, y: 80 });
+
+  const [outlineCursor, setOutlineCursor] = useState<string>("default");
+  const EDGE_HIT_SIZE = 8;
+
+  // При каждом открытии плавающей панели «Структура» ставим её справа,
+  // на уровне верхней части палитры. После этого позиция живёт только
+  // через drag/resize — эффект больше не вмешивается.
+  useEffect(() => {
+    if (!isOutlineOpen) return;
+    if (typeof window === "undefined") return;
+
+    const margin = 24;
+    const newX = window.innerWidth - outlineSize.w - margin;
+    const x = newX < 16 ? 16 : newX;
+
+    const y = 80; // визуально как ты ставил руками
+
+    setOutlinePos({ x, y });
+  }, [isOutlineOpen, outlineSize.w]);
 
   // Временное состояние drag для панели «Структура»
   const outlineDragRef = useRef<{
@@ -218,6 +239,10 @@ export default function SiteBuilder() {
       startLeft: outlinePos.x,
       startTop: outlinePos.y,
     };
+
+    // ВЕШАЕМ ГЛОБАЛЬНЫЕ СЛУШАТЕЛИ
+    window.addEventListener("mousemove", handleOutlineMouseMove);
+    window.addEventListener("mouseup", handleOutlineMouseUp);
   };
 
   const handleOutlineResizeMouseDown = (
@@ -227,6 +252,10 @@ export default function SiteBuilder() {
     // Запоминаем начальные размеры панели, положение мыши и направление
     e.preventDefault();
     e.stopPropagation();
+
+    // Для отладки — увидим, что клик по ручке долетел
+    console.log("[Outline] resize start", handle, e.clientX, e.clientY);
+
     outlineResizeRef.current = {
       handle,
       startX: e.clientX,
@@ -236,97 +265,152 @@ export default function SiteBuilder() {
       startLeft: outlinePos.x,
       startTop: outlinePos.y,
     };
+
+    // ВЕШАЕМ ГЛОБАЛЬНЫЕ СЛУШАТЕЛИ
+    window.addEventListener("mousemove", handleOutlineMouseMove);
+    window.addEventListener("mouseup", handleOutlineMouseUp);
   };
 
-  const handleOutlineMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!outlineDragRef.current && !outlineResizeRef.current) return;
-    e.preventDefault();
+  const updateOutlineCursor = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const el = e.currentTarget;
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX;
+      const y = e.clientY;
 
-    const minW = 260;
-    const minH = 200;
+      const onLeft = x - rect.left <= EDGE_HIT_SIZE;
+      const onRight = rect.right - x <= EDGE_HIT_SIZE;
+      const onTop = y - rect.top <= EDGE_HIT_SIZE;
+      const onBottom = rect.bottom - y <= EDGE_HIT_SIZE;
 
-    // Ресайз панели
-    if (outlineResizeRef.current) {
-      const { handle, startX, startY, startW, startH, startLeft, startTop } = outlineResizeRef.current;
+      let cursor: string | null = null;
 
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
-
-      let newX = startLeft;
-      let newY = startTop;
-      let newW = startW;
-      let newH = startH;
-
-      // Логика для Горизонтального ресайза (West/East)
-      if (handle.includes("e")) {
-        newW = Math.max(minW, startW + dx);
-      } else if (handle.includes("w")) {
-        const potentialW = startW - dx;
-        newW = Math.max(minW, potentialW);
-        if (newW === minW) {
-          newX = startLeft + (startW - minW);
-        } else {
-          newX = startLeft + dx;
-        }
+      if ((onTop && onLeft) || (onBottom && onRight)) {
+        cursor = "nwse-resize";
+      } else if ((onTop && onRight) || (onBottom && onLeft)) {
+        cursor = "nesw-resize";
+      } else if (onLeft || onRight) {
+        cursor = "ew-resize";
+      } else if (onTop || onBottom) {
+        cursor = "ns-resize";
+      } else {
+        cursor = null;
       }
 
-      // Логика для Вертикального ресайза (North/South)
-      if (handle.includes("s")) {
-        newH = Math.max(minH, startH + dy);
-      } else if (handle.includes("n")) {
-        const potentialH = startH - dy;
-        newH = Math.max(minH, potentialH);
-        if (newH === minH) {
-          newY = startTop + (startH - minH);
-        } else {
-          newY = startTop + dy;
-        }
-      }
+      setOutlineCursor(cursor || "default");
+    },
+    [EDGE_HIT_SIZE]
+  );
 
-      setOutlineSize({ w: newW, h: newH });
-      setOutlinePos({ x: newX, y: newY });
+  const handleOutlinePanelMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+
+    const onLeft = x - rect.left <= EDGE_HIT_SIZE;
+    const onRight = rect.right - x <= EDGE_HIT_SIZE;
+    const onTop = y - rect.top <= EDGE_HIT_SIZE;
+    const onBottom = rect.bottom - y <= EDGE_HIT_SIZE;
+
+    let handle: "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw" | null = null;
+
+    if (onTop && onLeft) handle = "nw";
+    else if (onTop && onRight) handle = "ne";
+    else if (onBottom && onLeft) handle = "sw";
+    else if (onBottom && onRight) handle = "se";
+    else if (onLeft) handle = "w";
+    else if (onRight) handle = "e";
+    else if (onTop) handle = "n";
+    else if (onBottom) handle = "s";
+
+    // Не по краю — не ресайзим (дадим шапке/контенту жить своей жизнью)
+    if (!handle) {
+      return;
     }
 
-    // Перетаскивание панели
-    if (outlineDragRef.current) {
-      const dx = e.clientX - outlineDragRef.current.startX;
-      const dy = e.clientY - outlineDragRef.current.startY;
-
-      setOutlinePos({
-        x: outlineDragRef.current.startLeft + dx,
-        y: outlineDragRef.current.startTop + dy,
-      });
-    }
+    // Стартуем ресайз через уже готовый обработчик
+    handleOutlineResizeMouseDown(e, handle);
   };
 
-  const handleOutlineMouseUp = () => {
+  const handleOutlineMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!outlineDragRef.current && !outlineResizeRef.current) return;
+      e.preventDefault();
+
+      const minW = 260;
+      const minH = 200;
+
+      // Ресайз панели
+      if (outlineResizeRef.current) {
+        const { handle, startX, startY, startW, startH, startLeft, startTop } = outlineResizeRef.current;
+
+        // DEBUG: движение мыши во время ресайза
+        console.log("[Outline] resize move", handle, e.clientX, e.clientY);
+
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+
+        let newX = startLeft;
+        let newY = startTop;
+        let newW = startW;
+        let newH = startH;
+
+        // Логика для Горизонтального ресайза (West/East)
+        if (handle.includes("e")) {
+          newW = Math.max(minW, startW + dx);
+        } else if (handle.includes("w")) {
+          const potentialW = startW - dx;
+          newW = Math.max(minW, potentialW);
+          if (newW === minW) {
+            newX = startLeft + (startW - minW);
+          } else {
+            newX = startLeft + dx;
+          }
+        }
+
+        // Логика для Вертикального ресайза (North/South)
+        if (handle.includes("s")) {
+          newH = Math.max(minH, startH + dy);
+        } else if (handle.includes("n")) {
+          const potentialH = startH - dy;
+          newH = Math.max(minH, potentialH);
+          if (newH === minH) {
+            newY = startTop + (startH - minH);
+          } else {
+            newY = startTop + dy;
+          }
+        }
+
+        setOutlineSize({ w: newW, h: newH });
+        setOutlinePos({ x: newX, y: newY });
+      }
+
+      // Перетаскивание панели
+      if (outlineDragRef.current) {
+        const dx = e.clientX - outlineDragRef.current.startX;
+        const dy = e.clientY - outlineDragRef.current.startY;
+
+        setOutlinePos({
+          x: outlineDragRef.current.startLeft + dx,
+          y: outlineDragRef.current.startTop + dy,
+        });
+      }
+    },
+    [setOutlineSize, setOutlinePos] // Добавляем зависимости
+  );
+
+  const handleOutlineMouseUp = useCallback(() => {
     // Отпустили мышку — заканчиваем drag и ресайз
     outlineDragRef.current = null;
     outlineResizeRef.current = null;
-  };
 
-  // При первом рендере на desktop смещаем панель к правому краю,
-  // чтобы не перекрывать левую колонку
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setOutlinePos((pos) => {
-      // Если пользователь уже двигал панель — не трогаем
-      if (pos.x !== 40 && pos.y !== 80) return pos;
+    // СНИМАЕМ ГЛОБАЛЬНЫЕ СЛУШАТЕЛИ
+    window.removeEventListener("mousemove", handleOutlineMouseMove);
+    window.removeEventListener("mouseup", handleOutlineMouseUp);
+  }, [handleOutlineMouseMove]); // Добавляем зависимость
 
-      const margin = 24;
-      const newX = window.innerWidth - outlineSize.w - margin;
-      const newY = pos.y < 80 ? 80 : pos.y; // минимальная высота от верха
 
-      // Не даём уйти слишком вниз
-      const maxHeight = window.innerHeight - outlineSize.h - 40;
-      const safeY = Math.min(pos.y, maxHeight);
-
-      return {
-        x: newX < 16 ? 16 : newX,
-        y: safeY < 80 ? 80 : safeY,
-      };
-    });
-  }, [outlineSize.w, outlineSize.h]);
 
   // Сворачивание левой панели (как в Elementor)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -932,7 +1016,7 @@ export default function SiteBuilder() {
         style={{ left: sidebarCollapsed ? 12 : 280 }}
         onClick={(e) => {
           e.stopPropagation();
-          setSidebarCollapsed((v) => !v);
+          setSidebarCollapsed((v: boolean) => !v);
         }}
       >
         {sidebarCollapsed ? "›" : "‹"}
@@ -1208,17 +1292,18 @@ export default function SiteBuilder() {
 {/* Плавающая панель «Структура» (Navigator как в Elementor) */}
       {bp === "desktop" && isOutlineOpen && (
         <div
-          className="fixed z-40 group rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
+          className="fixed z-40 group relative rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
           style={{
             left: outlinePos.x,
             top: outlinePos.y,
             width: outlineSize.w,
             height: outlineSize.h,
+            cursor: outlineCursor,
           }}
           onClick={(e) => e.stopPropagation()}
-          onMouseMove={handleOutlineMouseMove}
-          onMouseUp={handleOutlineMouseUp}
-          onMouseLeave={handleOutlineMouseUp}
+          onMouseMove={updateOutlineCursor}
+          onMouseLeave={() => setOutlineCursor("default")}
+          onMouseDown={handleOutlinePanelMouseDown}
         >
           {/* Хедер: название + закрыть, зона для drag */}
           <div
@@ -1237,44 +1322,11 @@ export default function SiteBuilder() {
             </button>
           </div>
 
-          {/* Содержимое панели */}
+           {/* Содержимое панели */}
           <div className="h-[calc(100%-36px)] overflow-y-auto p-3 text-sm">
             <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
           </div>
 
-          {/* Ручки для изменения размера (8 штук) */}
-          <div
-            className="absolute -left-1 top-0 bottom-0 w-2 cursor-ew-resize"
-            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "w")}
-          />
-          <div
-            className="absolute -right-1 top-0 bottom-0 w-2 cursor-ew-resize"
-            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "e")}
-          />
-          <div
-            className="absolute -top-1 left-0 right-0 h-2 cursor-ns-resize"
-            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "n")}
-          />
-          <div
-            className="absolute -bottom-1 left-0 right-0 h-2 cursor-ns-resize"
-            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "s")}
-          />
-          <div
-            className="absolute -top-1 -left-1 h-3 w-3 cursor-nwse-resize z-10"
-            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "nw")}
-          />
-          <div
-            className="absolute -top-1 -right-1 h-3 w-3 cursor-nesw-resize z-10"
-            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "ne")}
-          />
-          <div
-            className="absolute -bottom-1 -left-1 h-3 w-3 cursor-nesw-resize z-10"
-            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "sw")}
-          />
-          <div
-            className="absolute -bottom-1 -right-1 h-3 w-3 cursor-nwse-resize z-10"
-            onMouseDown={(e) => handleOutlineResizeMouseDown(e, "se")}
-          />
         </div>
       )}
     </div>

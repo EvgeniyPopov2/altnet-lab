@@ -48,12 +48,18 @@ export default function Palette({ onInsert }: Props) {
     <div className="grid gap-2">
       {groups.map(({ group, items }) => (
         <Group key={group} title={group}>
-          {items.map((m) =>
+          {items.map((m, index) =>
             m.type === "unsupported" ? (
-              <Item key={m.id} label={m.title} icon={m.icon} disabled hint="Скоро" />
+              <Item
+                key={`${m.id}-${index}`}
+                label={m.title}
+                icon={m.icon}
+                disabled
+                hint="Скоро"
+              />
             ) : (
               <Item
-                key={m.id}
+                key={`${m.id}-${index}`}
                 label={m.title}
                 icon={m.icon}
                 onClick={() => onInsert(m.type)}
