@@ -1281,12 +1281,17 @@ export default function SiteBuilder() {
                     const isActive = selId === b.id;
 
                     const baseClasses =
-                      "rounded-xl border bg-white p-3 cursor-pointer transition-colors";
+                      "rounded-xl bg-white p-3 cursor-pointer transition-colors";
+
                     const stateClasses = isActive
-                      ? "border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.6)]"
+                      ? // активный блок — фиолетовое выделение, как сейчас
+                      "border border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.6)]"
                       : isSectionish
-                      ? "border-[#cbd5e1] hover:border-[#6E59F2]/70 hover:bg-[#eef2ff]"
-                      : "border-[#e5e7eb] hover:border-[#6E59F2]/50";
+                        ? // секции/hero — почти невидимая пунктирная рамка,
+                        // проявляется при ховере как у Elementor
+                        "border border-dashed border-transparent hover:border-[#d4d4d8] hover:bg-[#f5f3ff]"
+                        : // обычные виджеты — тонкая сплошная рамка
+                        "border border-[#e5e7eb] hover:border-[#6E59F2]/50";
 
                     return (
                       <div
@@ -1300,6 +1305,7 @@ export default function SiteBuilder() {
                       </div>
                     );
                   }}
+
                   onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
                   onInsertAt={(index, type) => {
                     setDoc((d) => {
