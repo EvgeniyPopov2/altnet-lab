@@ -1266,8 +1266,11 @@ export default function SiteBuilder() {
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px] items-start">
             {/* Канвас + структура под ним на узких экранах */}
             <div>
-              {/* Белый «лист» канваса поверх тёмной темы */}
-              <div className="rounded-2xl border border-dashed border-[#d4d4d8] bg-white shadow-sm px-6 py-10">
+                           {/* Фон канваса (фон сайта), отделённый от темы приложения */}
+              <div
+                className="w-full"
+                style={{ backgroundColor: "#ffffff" }} // TODO: потом возьмём цвет из настроек сайта
+              >
                 <Canvas
                   cols={canvasCols}
                   gapX={canvasGapX}
@@ -1309,6 +1312,7 @@ export default function SiteBuilder() {
                   }}
                 />
               </div>
+
 
               {/* Структура под канвасом на мобильных/узких экранах (tablet/mobile) */}
               {bp !== "desktop" && (
