@@ -65,29 +65,44 @@ export default function Outline({ blocks, selId, onSelect }: Props) {
     <aside className="rounded-xl border border-[#1f2751] bg-[#0b1022]">
       <div className="px-3 py-2 text-xs uppercase tracking-wide text-[#9aa3b2]">Структура</div>
       <ul className="divide-y divide-[#1f2751]">
-        {blocks.map((b, i) => {
+        {blocks.map((b) => {
           const active = selId === b.id;
+          const text = previewText(b);
+          const isEmpty = !text;
+
           return (
             <li
               key={b.id}
               className={
-                "px-3 py-2 cursor-pointer select-none hover:bg-[#0f1630] " +
-                (active ? "bg-[#0f1630] ring-1 ring-[#2a3b8f]" : "")
+                "px-3 py-2 cursor-pointer select-none hover:bg-[#141a33] " +
+                (active ? "bg-[#141a33] ring-1 ring-[#5865f2]" : "")
               }
               onClick={() => onSelect(b.id)}
             >
               <div className="flex items-center gap-2">
-                <span className="text-[11px] px-1.5 py-0.5 rounded bg-[#101735] text-[#aab3c7]">{i + 1}</span>
+                {/* Иконка блока слева (пока простые символы, потом можно заменить на SVG) */}
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-[#101735] text-[11px] text-[#cfd5e6]">
+                  {b.type === "grid"
+                    ? "□"
+                    : b.type === "section"
+                    ? "▤"
+                    : b.type === "cols2"
+                    ? "Ⅱ"
+                    : "●"}
+                </span>
+
                 <span className="text-[13px] text-[#e6e9f4]">{labelOf(b)}</span>
               </div>
-              {(() => {
-                const text = previewText(b);
-                return text ? (
-                  <div className="mt-1 line-clamp-1 text-xs text-[#9aa3b2]" title={text}>
+
+              <div className="mt-1 pl-7 text-xs text-[#9aa3b2]">
+                {isEmpty ? (
+                  "Пустой"
+                ) : (
+                  <span className="line-clamp-1" title={text}>
                     {text}
-                  </div>
-                ) : null;
-              })()}
+                  </span>
+                )}
+              </div>
             </li>
           );
         })}
