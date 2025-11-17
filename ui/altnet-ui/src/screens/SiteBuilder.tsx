@@ -174,6 +174,8 @@ export default function SiteBuilder() {
   const [bp, setBp] = useState<Breakpoint>("desktop");
   const [iframeMode, setIframeMode] = useState<"fit" | Breakpoint>("fit");
   const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
+  const canvasTargetWidth =
+    iframeMode === "fit" ? null : widthByBp[iframeMode as Breakpoint];
 
   // Выбор блока
   const [selId, setSelId] = useState<string | null>(null);
@@ -1233,7 +1235,14 @@ export default function SiteBuilder() {
           }
         />
 
-        <div className="mx-auto w-full max-w-[1200px] grid gap-4 p-2">
+        <div
+          className="mx-auto w-full grid gap-4 p-2"
+          style={
+            canvasTargetWidth
+              ? { maxWidth: canvasTargetWidth, width: canvasTargetWidth }
+              : undefined
+          }
+        >
           {/* Палитра-каркас, вставляет после выбранного — скрыта, т.к. есть левая панель */}
           <div className="mb-2 hidden">
             <Palette

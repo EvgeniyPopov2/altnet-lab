@@ -30,9 +30,14 @@ function DeviceBtn(props: {
         title={props.title}
         onClick={props.onClick}
         className={[
+          // размер и форма
           "h-8 w-8 grid place-items-center rounded-md",
+          // фон и рамка — по умолчанию прозрачные, чтобы не было белого квадрата
+          "border border-transparent bg-transparent",
+          // цвет иконки
           "text-[#bfc3cf] hover:text-[#e6e9f4] transition-colors",
-          props.active ? "text-[#e6e9f4]" : ""
+          // активное состояние: подсветить иконку и рамку
+          props.active ? "text-[#e6e9f4] border-[#e6e9f4]" : ""
         ].join(" ")}
       >
         {props.children}
