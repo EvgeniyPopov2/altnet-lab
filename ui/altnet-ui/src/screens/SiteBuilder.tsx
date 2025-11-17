@@ -1292,7 +1292,7 @@ export default function SiteBuilder() {
 {/* Плавающая панель «Структура» (Navigator как в Elementor) */}
       {bp === "desktop" && isOutlineOpen && (
         <div
-          className="fixed z-40 group relative rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
+          className="fixed z-40 group rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
           style={{
             left: outlinePos.x,
             top: outlinePos.y,
