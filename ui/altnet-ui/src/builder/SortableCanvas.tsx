@@ -86,9 +86,10 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
       <div
         ref={setNodeRef}
         className={[
-          "my-6 rounded-lg border border-dashed border-[#d4d4d8] bg-white shadow-sm",
+          "my-6 rounded-lg border border-dashed border-[#d4d4d8] shadow-sm",
           isOver ? "border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.4)]" : "",
         ].join(" ")}
+        style={{ backgroundColor: "#ffffff" }}
       >
         <div className="p-2 flex items-center justify-center">
           {isSectionMaster ? (
@@ -183,7 +184,7 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
 
               {/* FLEX / GRID: выбор конкретной структуры */}
               {(stage === "flex" || stage === "grid") && (
-                <div className="relative w-full max-w-5xl rounded-lg border border-dashed border-[#2a2f45] bg-[#050816] px-6 py-8">
+                <div className="relative w-full max-w-5xl rounded-lg border border-dashed border-[#d4d4d8] bg-white px-8 py-8 shadow-sm">
                   <div className="mb-4 flex items-center justify-between">
                     <button
                       type="button"

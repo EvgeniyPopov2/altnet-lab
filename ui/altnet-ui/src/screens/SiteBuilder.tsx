@@ -1249,61 +1249,69 @@ export default function SiteBuilder() {
 
            {/* Внутренняя сетка: канвас + панель «Структура» справа */}
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px] items-start">
-            {/* Канвас + структура под ним на узких экранах */}
+                      {/* Канвас + структура под ним на узких экранах */}
             <div>
-                           {/* Фон канваса (фон сайта), отделённый от темы приложения */}
-              <div className="w-full bg-[#020617]">
-                <div className="mx-auto max-w-[1140px] px-6 py-8">
-                  <div className="w-full min-h-[calc(100vh-160px)] bg-white px-8 py-8 rounded-xl shadow-sm">
-                <Canvas
-                  cols={canvasCols}
-                  gapX={canvasGapX}
-                  gapY={canvasGapY}
-                  blocks={doc.blocks}
-                  renderBlock={(b) => {
-                    const isSectionish = b.type === "section" || b.type === "hero";
-                    const isActive = selId === b.id;
+              {/* Фон канваса (лист сайта), отделённый от темы приложения */}
+              <div
+                className={
+                  bp === "desktop"
+                    ? "w-full bg-white"
+                    : "w-full bg-transparent"
+                }
+              >
+                <div
+                  className={
+                    bp === "desktop"
+                      ? "mx-auto w-full max-w-[1140px] min-h-[100vh] px-8 py-8"
+                      : "mx-auto w-full max-w-[1140px] min-h-[calc(100vh-160px)] rounded-xl shadow-sm px-8 py-8"
+                  }
+                  style={{ backgroundColor: "#ffffff" }}
+                >
+                  <Canvas
+                    cols={canvasCols}
+                    gapX={canvasGapX}
+                    gapY={canvasGapY}
+                    blocks={doc.blocks}
+                    renderBlock={(b) => {
+                      const isSectionish = b.type === "section" || b.type === "hero";
+                      const isActive = selId === b.id;
 
-                    const baseClasses =
-                      "rounded-xl bg-white p-3 cursor-pointer transition-colors";
+                      const baseClasses =
+                        "rounded-xl bg-white p-3 cursor-pointer transition-colors";
 
-                    const stateClasses = isActive
-                      ? // активный блок — фиолетовое выделение, как сейчас
-                      "border border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.6)]"
-                      : isSectionish
-                        ? // секции/hero — почти невидимая пунктирная рамка,
-                        // проявляется при ховере как у Elementor
-                        "border border-dashed border-transparent hover:border-[#d4d4d8] hover:bg-[#f5f3ff]"
-                        : // обычные виджеты — тонкая сплошная рамка
-                        "border border-[#e5e7eb] hover:border-[#6E59F2]/50";
+                      const stateClasses = isActive
+                        ? "border border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.6)]"
+                        : isSectionish
+                          ? "border border-dashed border-transparent hover:border-[#d4d4d8] hover:bg-[#f5f3ff]"
+                          : "border border-[#e5e7eb] hover:border-[#6E59F2]/50";
 
-                    return (
-                      <div
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelId(b.id);
-                        }}
-                        className={`${baseClasses} ${stateClasses}`}
-                      >
-                        {isActive ? previewOf(b) : renderBlockView(b)}
-                      </div>
-                    );
-                  }}
-
-                  onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
-                  onInsertAt={(index, type, preset) => {
-                    setDoc((d) => {
-                      const blocks = [...d.blocks];
-                      const clamped = Math.max(0, Math.min(index, blocks.length));
-                      const nb = createDefaultBlock(type as BlockType, preset as any);
-                      blocks.splice(clamped, 0, nb);
-                      return { ...d, blocks };
-                    });
-                  }}
-                />
+                      return (
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelId(b.id);
+                          }}
+                          className={`${baseClasses} ${stateClasses}`}
+                        >
+                          {isActive ? previewOf(b) : renderBlockView(b)}
+                        </div>
+                      );
+                    }}
+                    onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
+                    onInsertAt={(index, type, preset) => {
+                      setDoc((d) => {
+                        const blocks = [...d.blocks];
+                        const clamped = Math.max(0, Math.min(index, blocks.length));
+                        const nb = createDefaultBlock(type as BlockType, preset as any);
+                        blocks.splice(clamped, 0, nb);
+                        return { ...d, blocks };
+                      });
+                    }}
+                  />
                   </div>
                 </div>
-              </div>
+               
+               
 
 
               {/* Структура под канвасом на мобильных/узких экранах (tablet/mobile) */}
