@@ -74,7 +74,7 @@ function SortableItem({
 
 function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
-  const [open, setOpen] = useState(false);
+  
 
   // Состояние мастера для слота секции
   const [stage, setStage] = useState<"root" | "layout" | "flex" | "grid">("root");
@@ -317,12 +317,11 @@ export default function SortableCanvas<T extends SortableLike>({
           }}
         >
           {/* Начальный слот: всегда мастер Flex/Grid, даже когда уже есть секции */}
-      <InsertSlot
-        id="slot-0"
-        index={0}
-        variant="section"
-        onInsert={(t) => onInsertAt?.(0, t)}
-      />
+          <InsertSlot
+            id="slot-0"
+            variant="section"
+            onInsert={(t) => onInsertAt?.(0, t)}
+          />
           {blocks.map((b, i) => (
             <React.Fragment key={b.id}>
               <SortableItem id={b.id}>{renderBlock(b)}</SortableItem>
