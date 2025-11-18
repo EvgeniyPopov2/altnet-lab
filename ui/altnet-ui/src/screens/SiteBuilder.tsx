@@ -1292,11 +1292,11 @@ export default function SiteBuilder() {
                   }}
 
                   onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
-                  onInsertAt={(index, type) => {
+                  onInsertAt={(index, type, preset) => {
                     setDoc((d) => {
                       const blocks = [...d.blocks];
                       const clamped = Math.max(0, Math.min(index, blocks.length));
-                      const nb = createDefaultBlock(type);
+                      const nb = createDefaultBlock(type as BlockType, preset as any);
                       blocks.splice(clamped, 0, nb);
                       return { ...d, blocks };
                     });

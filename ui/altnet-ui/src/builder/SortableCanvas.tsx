@@ -26,7 +26,7 @@ type Props<T extends SortableLike> = {
   renderBlock: (b: T) => React.ReactNode;
   onReorder: (next: T[]) => void;
   /** Вставка нового блока в индекс (0..N). Вызывается при клике «+» и выборе типа. */
-  onInsertAt?: (index: number, type: InsertChoice) => void;
+  onInsertAt?: (index: number, type: InsertChoice, preset?: any) => void;
 };
 
 type InsertSlotVariant = "default" | "section";
@@ -34,7 +34,7 @@ type InsertSlotVariant = "default" | "section";
 type InsertSlotProps = {
   id: string;
   variant?: InsertSlotVariant;
-  onInsert?: (type: InsertChoice) => void;
+  onInsert?: (type: InsertChoice, preset?: any) => void;
 };
 
 function DragHandle(props: React.HTMLAttributes<HTMLDivElement>) {
@@ -240,11 +240,12 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
                         key={idx}
                         type="button"
                         onClick={() => {
-                          // Пока различаем только тип блока: section для Flexbox, grid для Grid
+                          // Передаём выбранную структуру колонок как preset (пока без жёсткого типа)
                           onInsert?.(
                             stage === "flex"
                               ? ("section" as InsertChoice)
-                              : ("grid" as InsertChoice)
+                              : ("grid" as InsertChoice),
+                            cols
                           );
                           setStage("root");
                         }}
@@ -320,12 +321,12 @@ export default function SortableCanvas<T extends SortableLike>({
           <InsertSlot
             id="slot-0"
             variant="section"
-            onInsert={(t) => onInsertAt?.(0, t)}
+            onInsert={(t, preset) => onInsertAt?.(0, t, preset)}
           />
           {blocks.map((b, i) => (
             <React.Fragment key={b.id}>
               <SortableItem id={b.id}>{renderBlock(b)}</SortableItem>
-              <InsertSlot id={`slot-${i + 1}`} onInsert={(t) => onInsertAt?.(i + 1, t)} />
+              <InsertSlot id={`slot-${i + 1}`} onInsert={(t, preset) => onInsertAt?.(i + 1, t, preset)} />
             </React.Fragment>
           ))}
         </div>
