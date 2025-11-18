@@ -12,6 +12,7 @@ import type {
   VideoBlock, GalleryBlock, CarouselBlock, CountdownBlock, MenuBlock, SearchBlock, ContentNavBlock,
   MapBlock, LottieBlock, MediaCarouselBlock, SlidesBlock, VideoPlaylistBlock, HotspotBlock,
   ContainerBlock, SidebarBlock, OffcanvasBlock, ShortcodeBlock, PriceTableBlock,
+  BlockType, FlexPreset, GridPreset,
 } from "./types";
 
 // Берём точный union InsertChoice из SortableCanvas.
@@ -28,7 +29,7 @@ export function newId(prefix = "blk"): string {
 }
 
 // Создание дефолтного блока по типу InsertChoice
-export function createDefaultBlock(type: InsertChoice): Block {
+export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPreset): Block {
   switch (type) {
     case "h1": {
       const b: H1Block = { id: newId("h1"), type: "h1", text: "Заголовок", align: "left" };
@@ -84,12 +85,13 @@ export function createDefaultBlock(type: InsertChoice): Block {
         bg: "none",
         align: "left",
         title: "",
-        text: ""
+        text: "",
+        layoutPreset: preset,
       };
       return b;
     }
     case "grid": {
-      const b: GridBlock = { id: newId("grid"), type: "grid", cols: 3, items: [] };
+      const b: GridBlock = { id: newId("grid"), type: "grid", cols: 3, items: [], layoutPreset: preset };
       return b;
     }
 

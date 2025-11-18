@@ -12,7 +12,7 @@ export type BlockType =
   | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
   | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
   | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
-  | "container" | "sidebar" | "offcanvas";
+  | "container" | "sidebar" | "offcanvas" | "shortcode" | "pricetable";
 
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
@@ -161,6 +161,7 @@ export type SectionBlock = {
   className?: string;
   style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
   styleByBp?: HeroBlock["styleByBp"];
+  layoutPreset?: FlexPreset | GridPreset;
 };
 
 export type GridItem = { id: string; src: string; alt?: string; caption?: string };
@@ -176,6 +177,7 @@ export type GridBlock = {
   className?: string;
   style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
   styleByBp?: HeroBlock["styleByBp"];
+  layoutPreset?: FlexPreset | GridPreset;
 };
 
 // ── B6: лёгкие контент-блоки ─────────────────────────────────────────────────
@@ -591,6 +593,35 @@ export type Block =
   | VideoBlock | GalleryBlock | CarouselBlock | CountdownBlock | MenuBlock | SearchBlock | ContentNavBlock
   | MapBlock | LottieBlock | MediaCarouselBlock | SlidesBlock | VideoPlaylistBlock | HotspotBlock
   | ContainerBlock | SidebarBlock | OffcanvasBlock | ShortcodeBlock | PriceTableBlock;
+
+// ─────────────────────────────────────────────
+// Пресеты FLEX (12 вариантов, как в Elementor)
+// ─────────────────────────────────────────────
+
+export type FlexPreset =
+  | "1col"            // 100%
+  | "2col-equal"      // 50 / 50
+  | "2col-wide-left"  // 66 / 33
+  | "2col-wide-right" // 33 / 66
+  | "3col-equal"      // 33 / 33 / 33
+  | "3col-wide-center"
+  | "4col"
+  | "5col"
+  | "6col"
+  | "hero-left"
+  | "hero-right"
+  | "hero-center";
+
+// ─────────────────────────────────────────────
+// Пресеты GRID (6 вариантов)
+// ─────────────────────────────────────────────
+export type GridPreset =
+  | "2x2"
+  | "3x3"
+  | "4x4"
+  | "2x3"
+  | "3x2"
+  | "1x3";
 
 // ── C1.b: Респонсив-стили для блоков ───────────────────────────────────────────
 export type Device = "desktop" | "tablet" | "mobile";
