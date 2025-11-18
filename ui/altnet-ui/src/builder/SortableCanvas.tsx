@@ -103,10 +103,10 @@ function InsertSlot({
           "my-2 rounded-lg border border-dashed " +
           (isOver ? "border-indigo-500 bg-indigo-500/10" : "border-[#2a2f45] bg-[#0c0f1a]")
         }
-      >
+            >
         <div className="p-2 flex items-center justify-center">
           {isSectionMaster ? (
-            // Мастер Flex/Grid для пустого канваса — БЕЗ палитры блоков
+            // Мастер Flex/Grid для пустого канваса — без палитры блоков
             <div className="flex flex-col items-center gap-2 py-2">
               <div className="flex items-center gap-2">
                 {/* + — создать простую секцию */}
@@ -134,7 +134,7 @@ function InsertSlot({
                   📁
                 </button>
 
-                {/* ✨ — открыть экран выбора структуры колонок */}
+                {/* ✨ — открыть панель выбора структуры колонок */}
                 <button
                   type="button"
                   onClick={() => {
@@ -226,7 +226,7 @@ function InsertSlot({
               )}
             </div>
           ) : (
-            // Обычный слот — mini-палитра блоков, как была
+            // Обычный слот — mini-палитра, как раньше
             <>
               {!open ? (
                 <button
@@ -277,6 +277,7 @@ function InsertSlot({
         </div>
       </div>
     </div>
+
   );
 }
 

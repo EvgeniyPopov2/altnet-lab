@@ -38,16 +38,7 @@ const DEFAULT_DOC: Doc = {
   description: "",
   ogImage: "",
   theme: { accent: "#5865F2", container: 960 },
-  blocks: [
-    {
-      id: Math.random().toString(36).slice(2, 9),
-      type: "hero",
-      title: "Заголовок героя",
-      subtitle: "Короткий подзаголовок",
-      ctaText: "Подробнее",
-      ctaLink: "#",
-    },
-  ],
+  blocks: [],
 };
 
 function validateDoc(doc: Doc): CheckItem[] {
