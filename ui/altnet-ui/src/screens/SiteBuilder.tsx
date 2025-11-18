@@ -100,15 +100,9 @@ function validateDoc(doc: Doc): CheckItem[] {
 }
 
 function loadFromStorage(): Doc | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.blocks)) return null;
-    return parsed as Doc;
-  } catch {
-    return null;
-  }
+  // ВРЕМЕННО отключаем автозагрузку черновика из localStorage,
+  // чтобы всегда стартовать с DEFAULT_DOC и видеть мастер Flex/Grid.
+  return null;
 }
 
 function uid() {
