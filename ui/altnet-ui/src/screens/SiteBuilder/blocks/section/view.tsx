@@ -20,11 +20,33 @@ export default function SectionView({ block }: { block: SectionBlock }) {
   const align =
     block.align === "center" ? "text-center" :
     block.align === "right"  ? "text-right"  : "text-left";
-
+// Если секция создана через мастер Flex, layoutPreset содержит массив flex-значений колонок
+  const layoutPreset = (block as any).layoutPreset as number[] | undefined;
   return (
     <section className={`${theme} ${pad} ${bg}`}>
+      {/* Визуальные колонки, выбранные в мастере Flex */}
+      {layoutPreset && layoutPreset.length > 0 && (
+        <div className="mb-3 flex gap-4">
+          {layoutPreset.map((flex, idx) => (
+            <div
+              key={idx}
+              className="min-h-[80px] rounded-lg border border-dashed border-[#d4d4d8] bg-white/40 dark:bg-[#020617]/60"
+              style={{ flex }}
+            />
+          ))}
+        </div>
+      )}
+
       {block.title && <h3 className={`text-2xl font-bold ${align}`}>{block.title}</h3>}
-      {block.text && <p className={`mt-2 text-[#2b3050] ${theme.includes("text-white") ? "text-[#c9d0e9]" : ""} ${align}`}>{block.text}</p>}
+      {block.text && (
+        <p
+          className={`mt-2 text-[#2b3050] ${
+            theme.includes("text-white") ? "text-[#c9d0e9]" : ""
+          } ${align}`}
+        >
+          {block.text}
+        </p>
+      )}
     </section>
   );
 }

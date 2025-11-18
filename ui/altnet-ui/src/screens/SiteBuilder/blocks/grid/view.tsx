@@ -2,10 +2,14 @@
 import type { GridBlock } from "../../types";
 
 export default function GridView({ block }: { block: GridBlock }) {
+  // Если грид создан через мастер Grid, layoutPreset содержит массив колонок
+  const layoutPreset = (block as any).layoutPreset as number[] | undefined;
+  const colsCount = layoutPreset && layoutPreset.length > 0 ? layoutPreset.length : block.cols;
+
   const cols =
-    block.cols === 4 ? "grid-cols-4" :
-    block.cols === 3 ? "grid-cols-3" :
-    block.cols === 2 ? "grid-cols-2" : "grid-cols-1";
+    colsCount === 4 ? "grid-cols-4" :
+    colsCount === 3 ? "grid-cols-3" :
+    colsCount === 2 ? "grid-cols-2" : "grid-cols-1";
 
   return (
     <div className={`grid ${cols} gap-3`}>
