@@ -126,7 +126,8 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
 
               {/* LAYOUT: выбор между Flexbox и Grid */}
               {stage === "layout" && (
-                <div className="relative w-full max-w-5xl rounded-lg border border-dashed border-[#2a2f45] bg-[#050816] px-6 py-8">
+                <div className="relative w-full max-w-5xl rounded-xl border border-dashed border-[#d4d4d8] bg-white px-8 py-8 shadow-sm"
+                >
                   <button
                     type="button"
                     onClick={() => setStage("root")}
