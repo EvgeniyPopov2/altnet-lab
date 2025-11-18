@@ -1252,10 +1252,9 @@ export default function SiteBuilder() {
             {/* Канвас + структура под ним на узких экранах */}
             <div>
                            {/* Фон канваса (фон сайта), отделённый от темы приложения */}
-              <div
-                className="w-full"
-                style={{ backgroundColor: "#ffffff" }} // TODO: потом возьмём цвет из настроек сайта
-              >
+              <div className="w-full bg-[#020617]">
+                <div className="mx-auto max-w-[1140px] px-6 py-8">
+                  <div className="rounded-xl border border-dashed border-[#d4d4d8] bg-white">
                 <Canvas
                   cols={canvasCols}
                   gapX={canvasGapX}
@@ -1302,6 +1301,8 @@ export default function SiteBuilder() {
                     });
                   }}
                 />
+                  </div>
+                </div>
               </div>
 
 
