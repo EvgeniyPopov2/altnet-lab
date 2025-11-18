@@ -1254,7 +1254,7 @@ export default function SiteBuilder() {
                            {/* Фон канваса (фон сайта), отделённый от темы приложения */}
               <div className="w-full bg-[#020617]">
                 <div className="mx-auto max-w-[1140px] px-6 py-8">
-                  <div className="rounded-xl border border-dashed border-[#d4d4d8] bg-white">
+                  <div className="w-full min-h-[calc(100vh-160px)] bg-white px-8 py-8 rounded-xl shadow-sm">
                 <Canvas
                   cols={canvasCols}
                   gapX={canvasGapX}
