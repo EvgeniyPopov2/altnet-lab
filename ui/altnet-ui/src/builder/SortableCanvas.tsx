@@ -86,8 +86,8 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
       <div
         ref={setNodeRef}
         className={[
-          "my-2 rounded-lg border border-dashed border-[#2a2f45] bg-[#050816]",
-          isOver ? "border-[#6E59F2] bg-[#050816]/80" : "",
+          "my-6 rounded-lg border border-dashed border-[#d4d4d8] bg-white shadow-sm",
+          isOver ? "border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.4)]" : "",
         ].join(" ")}
       >
         <div className="p-2 flex items-center justify-center">
