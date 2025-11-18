@@ -29,6 +29,14 @@ type Props<T extends SortableLike> = {
   onInsertAt?: (index: number, type: InsertChoice) => void;
 };
 
+type InsertSlotVariant = "default" | "section";
+
+type InsertSlotProps = {
+  id: string;
+  variant?: InsertSlotVariant;
+  onInsert?: (type: InsertChoice) => void;
+};
+
 function DragHandle(props: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
@@ -64,22 +72,12 @@ function SortableItem({
   );
 }
 
-function InsertSlot({
-  id,
-  onInsert,
-  variant = "default",
-}: {
-  id: string; // "slot-<index>"
-  onInsert?: (type: InsertChoice) => void;
-  /** Вариант слота:
-   *  - default — обычный «+ Добавить блок»
-   *  - section — мастер Flex/Grid с тремя кружками (+, папка, «магия»)
-   */
-  variant?: "default" | "section";
-}) {
+function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
   const [open, setOpen] = useState(false);
-  const [gridOpen, setGridOpen] = useState(false);
+
+  // Состояние мастера для слота секции
+  const [stage, setStage] = useState<"root" | "layout" | "flex" | "grid">("root");
 
   const isSectionMaster = variant === "section";
 
@@ -87,146 +85,190 @@ function InsertSlot({
     <div className="col-span-full">
       <div
         ref={setNodeRef}
-        onDragOver={(e) => {
-          // Разрешаем дроп только нашего «application/x-block»
-          const types = Array.from(e.dataTransfer?.types ?? []);
-          if (types.includes("application/x-block")) e.preventDefault();
-        }}
-        onDrop={(e) => {
-          const t = e.dataTransfer?.getData("application/x-block") as InsertChoice | undefined;
-          if (t) {
-            e.preventDefault();
-            onInsert?.(t);
-          }
-        }}
-        className={
-          "my-2 rounded-lg border border-dashed " +
-          (isOver ? "border-indigo-500 bg-indigo-500/10" : "border-[#2a2f45] bg-[#0c0f1a]")
-        }
-            >
+        className={[
+          "my-2 rounded-lg border border-dashed border-[#2a2f45] bg-[#050816]",
+          isOver ? "border-[#6E59F2] bg-[#050816]/80" : "",
+        ].join(" ")}
+      >
         <div className="p-2 flex items-center justify-center">
           {isSectionMaster ? (
-            // Мастер Flex/Grid для пустого канваса — без палитры блоков
-            <div className="flex flex-col items-center gap-2 py-2">
-              <div className="flex items-center gap-2">
-                {/* + — создать простую секцию */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGridOpen(false);
-                    onInsert?.("section");
-                  }}
-                  className="h-8 w-8 rounded-full border border-[#2a2f45] bg-[#050816] text-sm text-[#e6e9f4] hover:bg-[#151a2e]"
-                  title="Добавить секцию"
-                >
-                  +
-                </button>
+            // ─────────────────────────────────────
+            // Мастер Flex/Grid для пустого канваса
+            // ─────────────────────────────────────
+            <div className="flex w-full flex-col items-center gap-4 py-6">
+              {/* ROOT: основной плейсхолдер с плюсиком и папкой */}
+              {stage === "root" && (
+                <>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setStage("layout")}
+                      className="h-10 w-10 rounded-full bg-[#111827] border border-[#2a2f45] flex items-center justify-center text-lg text-[#e6e9f4] hover:bg-[#151a2e] transition"
+                      title="Добавить секцию"
+                    >
+                      +
+                    </button>
 
-                {/* 📁 — заглушка под библиотеку (пока без логики) */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    // TODO: подключить библиотеку шаблонов, когда будет готова
-                  }}
-                  className="h-8 w-8 rounded-full border border-[#2a2f45] bg-[#050816] text-xs text-[#e6e9f4] hover:bg-[#151a2e]"
-                  title="Библиотека (скоро)"
-                >
-                  📁
-                </button>
+                    <button
+                      type="button"
+                      className="h-10 w-10 rounded-full bg-[#111827] border border-[#2a2f45] flex items-center justify-center text-base text-[#e6e9f4] hover:bg-[#151a2e] transition"
+                      title="Библиотека (скоро)"
+                    >
+                      📁
+                    </button>
+                  </div>
 
-                {/* ✨ — открыть панель выбора структуры колонок */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setGridOpen((v) => !v);
-                  }}
-                  className="h-8 w-8 rounded-full border border-[#6E59F2] bg-[#1b163a] text-xs text-[#e6e9f4] hover:bg-[#2a2058]"
-                  title="Выбрать структуру колонок"
-                >
-                  ✨
-                </button>
-              </div>
+                  <div className="text-xs text-[#9aa3b2] text-center">
+                    Добавьте секцию, библиотеку (скоро) или выберите структуру колонок
+                  </div>
+                </>
+              )}
 
-              <div className="mt-1 text-[11px] text-[#9aa3b2] text-center">
-                Добавьте секцию, библиотеку (скоро) или выберите структуру колонок
-              </div>
-
-              {gridOpen && (
-                <div className="mt-3 grid w-full gap-2 text-xs">
-                  {/* 1 колонка — широкая секция */}
+              {/* LAYOUT: выбор между Flexbox и Grid */}
+              {stage === "layout" && (
+                <div className="relative w-full max-w-5xl rounded-lg border border-dashed border-[#2a2f45] bg-[#050816] px-6 py-8">
                   <button
                     type="button"
-                    onClick={() => {
-                      setGridOpen(false);
-                      onInsert?.("section");
-                    }}
-                    className="flex items-center gap-2 rounded-lg border border-[#2a2f45] bg-[#050816] px-3 py-2 hover:border-[#6E59F2]"
+                    onClick={() => setStage("root")}
+                    className="absolute right-4 top-4 text-base text-[#9aa3b2] hover:text-[#e6e9f4]"
+                    aria-label="Закрыть"
                   >
-                    <span className="inline-flex h-6 w-full rounded-md bg-[#111827]" />
-                    <span className="whitespace-nowrap text-[#e6e9f4]">
-                      1 колонка (широкая секция)
-                    </span>
+                    ✕
                   </button>
 
-                  {/* 2 колонки 50 / 50 */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGridOpen(false);
-                      onInsert?.("cols2");
-                    }}
-                    className="flex items-center gap-2 rounded-lg border border-[#2a2f45] bg-[#050816] px-3 py-2 hover:border-[#6E59F2]"
-                  >
-                    <span className="flex h-6 w-full gap-1">
-                      <span className="flex-1 rounded-md bg-[#111827]" />
-                      <span className="flex-1 rounded-md bg-[#111827]" />
-                    </span>
-                    <span className="whitespace-nowrap text-[#e6e9f4]">
-                      2 колонки 50 / 50
-                    </span>
-                  </button>
+                  <div className="mb-6 text-center text-sm text-[#e6e9f4]">
+                    Какой макет вы хотите использовать?
+                  </div>
 
-                  {/* 2 колонки 40 / 60 */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGridOpen(false);
-                      onInsert?.("cols2");
-                    }}
-                    className="flex items-center gap-2 rounded-lg border border-[#2a2f45] bg-[#050816] px-3 py-2 hover:border-[#6E59F2]"
-                  >
-                    <span className="flex h-6 w-full gap-1">
-                      <span className="flex-[2] rounded-md bg-[#111827]" />
-                      <span className="flex-[3] rounded-md bg-[#111827]" />
-                    </span>
-                    <span className="whitespace-nowrap text-[#e6e9f4]">
-                      2 колонки 40 / 60
-                    </span>
-                  </button>
+                  <div className="flex flex-wrap justify-center gap-8">
+                    {/* Flexbox карточка */}
+                    <button
+                      type="button"
+                      onClick={() => setStage("flex")}
+                      className="group flex w-48 flex-col items-center gap-3 rounded-lg border border-[#4b5563] bg-[#0b1020] px-4 py-4 hover:border-[#6E59F2] hover:shadow-lg transition"
+                    >
+                      <div className="flex h-28 w-full items-center justify-center rounded-md bg-[#f3f4f6]">
+                        <div className="flex h-20 w-24 gap-1">
+                          <div className="flex-1 bg-[#e5e7eb]" />
+                          <div className="flex-1 bg-[#d1d5db]" />
+                          <div className="flex-1 bg-[#e5e7eb]" />
+                        </div>
+                      </div>
+                      <span className="text-sm font-medium text-[#111827] group-hover:text-[#1f2937]">
+                        Flexbox
+                      </span>
+                    </button>
 
-                  {/* 3 колонки (Grid) */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setGridOpen(false);
-                      onInsert?.("grid");
-                    }}
-                    className="flex items-center gap-2 rounded-lg border border-[#2a2f45] bg-[#050816] px-3 py-2 hover:border-[#6E59F2]"
+                    {/* Grid карточка */}
+                    <button
+                      type="button"
+                      onClick={() => setStage("grid")}
+                      className="group flex w-48 flex-col items-center gap-3 rounded-lg border border-[#4b5563] bg-[#0b1020] px-4 py-4 hover:border-[#6E59F2] hover:shadow-lg transition"
+                    >
+                      <div className="flex h-28 w-full items-center justify-center rounded-md bg-[#f3f4f6]">
+                        <div className="grid h-20 w-20 grid-cols-2 grid-rows-2 gap-[2px]">
+                          {Array.from({ length: 4 }).map((_, i) => (
+                            <div key={i} className="bg-[#e5e7eb]" />
+                          ))}
+                        </div>
+                      </div>
+                      <span className="text-sm font-medium text-[#111827] group-hover:text-[#1f2937]">
+                        Grid
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* FLEX / GRID: выбор конкретной структуры */}
+              {(stage === "flex" || stage === "grid") && (
+                <div className="relative w-full max-w-5xl rounded-lg border border-dashed border-[#2a2f45] bg-[#050816] px-6 py-8">
+                  <div className="mb-4 flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setStage("layout")}
+                      className="text-sm text-[#9aa3b2] hover:text-[#e6e9f4]"
+                    >
+                      ←
+                    </button>
+
+                    <div className="text-sm text-[#e6e9f4]">Выберите структуру</div>
+
+                    <button
+                      type="button"
+                      onClick={() => setStage("root")}
+                      className="text-base text-[#9aa3b2] hover:text-[#e6e9f4]"
+                      aria-label="Закрыть"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div
+                    className={
+                      stage === "flex"
+                        ? "grid grid-cols-4 gap-4"
+                        : "grid grid-cols-3 gap-4"
+                    }
                   >
-                    <span className="grid h-6 w-full grid-cols-3 gap-1">
-                      <span className="rounded-md bg-[#111827]" />
-                      <span className="rounded-md bg-[#111827]" />
-                      <span className="rounded-md bg-[#111827]" />
-                    </span>
-                    <span className="whitespace-nowrap text-[#e6e9f4]">
-                      3 колонки (Grid)
-                    </span>
-                  </button>
+                    {(
+                      stage === "flex"
+                        ? [
+                            [1],
+                            [1, 1],
+                            [2, 1],
+                            [1, 2],
+                            [1, 1, 1],
+                            [2, 1, 1],
+                            [1, 2, 1],
+                            [1, 1, 2],
+                            [3, 1],
+                            [1, 3],
+                            [2, 2],
+                            [1, 1, 1, 1],
+                          ]
+                        : [
+                            [1, 1],
+                            [1, 1, 1],
+                            [2, 1, 1],
+                            [1, 2],
+                            [1, 1, 2],
+                            [1, 1, 1, 1],
+                          ]
+                    ).map((cols, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          // Пока различаем только тип блока: section для Flexbox, grid для Grid
+                          onInsert?.(
+                            stage === "flex"
+                              ? ("section" as InsertChoice)
+                              : ("grid" as InsertChoice)
+                          );
+                          setStage("root");
+                        }}
+                        className="flex flex-col items-center gap-2 rounded-lg border border-transparent bg-transparent p-1 hover:border-[#6E59F2] hover:bg-[#0b1020] transition"
+                      >
+                        <div className="h-16 w-full max-w-[120px] rounded-md border border-dashed border-[#2a2f45] bg-[#020617] flex overflow-hidden">
+                          {cols.map((flexValue, i) => (
+                            <div
+                              key={i}
+                              className="border-r border-[#111827] last:border-r-0 bg-[#111827]"
+                              style={{ flex: flexValue }}
+                            />
+                          ))}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
           ) : (
-            // Обычный слот — mini-палитра, как раньше
+            // ─────────────────────────────────────
+            // Обычный слот — мини-палитра блоков
+            // ─────────────────────────────────────
             <>
               {!open ? (
                 <button
@@ -248,7 +290,7 @@ function InsertSlot({
                       ["divider", "Разделитель"],
                       ["spacer", "Интервал"],
                     ] as Array<[InsertChoice, string]>
-                  ).map(([t, label]) => (
+                  ).map(([t, label]: [InsertChoice, string]) => (
                     <button
                       key={t}
                       type="button"
@@ -262,6 +304,7 @@ function InsertSlot({
                       {label}
                     </button>
                   ))}
+
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
@@ -277,7 +320,6 @@ function InsertSlot({
         </div>
       </div>
     </div>
-
   );
 }
 
