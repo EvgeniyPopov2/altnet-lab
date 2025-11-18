@@ -266,56 +266,12 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
               )}
             </div>
           ) : (
+           // ─────────────────────────────────────
+            // Обычный слот — только зона дропа без мини-палитры
             // ─────────────────────────────────────
-            // Обычный слот — мини-палитра блоков
-            // ─────────────────────────────────────
-            <>
-              {!open ? (
-                <button
-                  type="button"
-                  onClick={() => setOpen(true)}
-                  className="px-3 py-1.5 text-sm rounded-md bg-[#12162a] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#151a2e]"
-                >
-                  + Добавить блок
-                </button>
-              ) : (
-                <div className="flex flex-wrap items-center gap-2 p-1">
-                  {(
-                    [
-                      ["hero", "Hero"],
-                      ["h1", "Заголовок"],
-                      ["p", "Текст"],
-                      ["btn", "Кнопка"],
-                      ["img", "Изображение"],
-                      ["divider", "Разделитель"],
-                      ["spacer", "Интервал"],
-                    ] as Array<[InsertChoice, string]>
-                  ).map(([t, label]: [InsertChoice, string]) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => {
-                        onInsert?.(t);
-                        setOpen(false);
-                      }}
-                      className="px-2.5 py-1.5 text-xs rounded-md bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4] hover:bg-[#1a203b]"
-                      title={label}
-                    >
-                      {label}
-                    </button>
-                  ))}
-
-                  <button
-                    type="button"
-                    onClick={() => setOpen(false)}
-                    className="ml-1 px-2 py-1.5 text-xs rounded-md bg-transparent text-[#9aa3b2] hover:text-[#e6e9f4]"
-                    title="Отмена"
-                  >
-                    Отмена
-                  </button>
-                </div>
-              )}
-            </>
+            <div className="py-3 text-xs text-center text-[#9aa3b2]">
+              Перетащите виджет из левой панели сюда
+            </div>
           )}
         </div>
       </div>
@@ -360,15 +316,13 @@ export default function SortableCanvas<T extends SortableLike>({
             alignItems: "start",
           }}
         >
-          {/* Начальный слот:
-              - когда блоков нет → мастер Flex/Grid (variant="section")
-              - когда уже есть блоки → обычный слот вставки */}
-          <InsertSlot
-            id="slot-0"
-            variant={blocks.length === 0 ? "section" : "default"}
-            onInsert={(t) => onInsertAt?.(0, t)}
-          />
-
+          {/* Начальный слот: всегда мастер Flex/Grid, даже когда уже есть секции */}
+      <InsertSlot
+        id="slot-0"
+        index={0}
+        variant="section"
+        onInsert={(t) => onInsertAt?.(0, t)}
+      />
           {blocks.map((b, i) => (
             <React.Fragment key={b.id}>
               <SortableItem id={b.id}>{renderBlock(b)}</SortableItem>
