@@ -1291,17 +1291,17 @@ export default function SiteBuilder() {
                           {isSectionish && (
                             <div
                               className="
-                                pointer-events-auto
-                                absolute -top-5 left-1/2 -translate-x-1/2
-                                flex items-center gap-1
-                                rounded-full border border-[#e5e7eb] bg-white px-2 py-0.5
-                                shadow-sm text-[11px] text-[#4b5563]
-                              "
+      pointer-events-auto
+      absolute -top-7 left-1/2 -translate-x-1/2
+      flex items-center gap-1.5
+      rounded-full border border-[#f9a8ff] bg-[#fdf2ff]
+      px-3 py-1 shadow-sm text-[11px] font-medium text-[#86198f]
+    "
                             >
                               {/* Пока только визуальный плюс — логику добавим позже */}
                               <button
                                 type="button"
-                                className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-[#f3e8ff] transition"
+                                className="h-6 w-6 rounded-full flex items-center justify-center text-[#6b21a8] hover:bg-[#fce7ff] hover:text-[#4a044e] transition"
                                 title="Добавить секцию ниже (скоро)"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1314,7 +1314,7 @@ export default function SiteBuilder() {
                               {/* Иконка перетаскивания, чисто визуально */}
                               <button
                                 type="button"
-                                className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-[#f3e8ff] transition cursor-move"
+                                className="h-6 w-6 rounded-full flex items-center justify-center text-[#6b21a8] hover:bg-[#fce7ff] hover:text-[#4a044e] transition cursor-move"
                                 title="Перетащить секцию (скоро)"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1327,7 +1327,7 @@ export default function SiteBuilder() {
                               {/* Рабочий крестик — удаляет секцию/hero */}
                               <button
                                 type="button"
-                                className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-[#fee2e2] transition"
+                                className="h-6 w-6 rounded-full flex items-center justify-center text-[#6b21a8] hover:bg-[#fee2e2] hover:text-[#7f1d1d] transition"
                                 title="Удалить секцию"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1341,6 +1341,7 @@ export default function SiteBuilder() {
                               </button>
                             </div>
                           )}
+
 
                           {/* Сам блок секции/виджета */}
                           <div
