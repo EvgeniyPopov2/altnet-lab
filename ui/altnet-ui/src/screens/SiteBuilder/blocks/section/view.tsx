@@ -24,7 +24,7 @@ export default function SectionView({ block }: { block: SectionBlock }) {
   const layoutPreset = (block as any).layoutPreset as number[] | undefined;
   return (
     <section className={`${theme} ${pad} ${bg}`}>
-      {/* Визуальные колонки, выбранные в мастере Flex */}
+      
       {/* Визуальные колонки, выбранные в мастере Flex */}
       {layoutPreset && layoutPreset.length > 0 && (
         <div className="mb-4 flex gap-4">

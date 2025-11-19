@@ -127,19 +127,21 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
 
               {/* LAYOUT: выбор между Flexbox и Grid */}
               {stage === "layout" && (
-                <div className="relative w-full max-w-5xl rounded-xl border border-dashed border-[#d4d4d8] bg-white px-8 py-8 shadow-sm"
-                >
+                <div className="relative w-full max-w-5xl rounded-xl border border-dashed border-[#d4d4d8] bg-white px-8 py-8 shadow-sm">
                   <button
                     type="button"
                     onClick={() => setStage("root")}
-                    className="absolute right-4 top-4 text-base text-[#9aa3b2] hover:text-[#e6e9f4]"
+                    className="absolute right-4 top-4 text-base text-[#6b7280] hover:text-[#111827]"
                     aria-label="Закрыть"
                   >
                     ✕
                   </button>
 
-                  <div className="mb-6 text-center text-sm text-[#e6e9f4]">
+                  <div className="mb-2 text-center text-sm font-medium text-[#111827]">
                     Какой макет вы хотите использовать?
+                  </div>
+                  <div className="mb-6 text-center text-[11px] text-[#6b7280]">
+                    Flexbox — одна строка колонок, CSS Grid — полноценная сетка из строк и колонок
                   </div>
 
                   <div className="flex flex-wrap justify-center gap-8">
@@ -185,21 +187,32 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
               {/* FLEX / GRID: выбор конкретной структуры */}
               {(stage === "flex" || stage === "grid") && (
                 <div className="relative w-full max-w-5xl rounded-lg border border-dashed border-[#d4d4d8] bg-white px-8 py-8 shadow-sm">
-                  <div className="mb-4 flex items-center justify-between">
+                 <div className="mb-4 flex items-center justify-between">
                     <button
                       type="button"
                       onClick={() => setStage("layout")}
-                      className="text-sm text-[#9aa3b2] hover:text-[#e6e9f4]"
+                      className="text-sm text-[#6b7280] hover:text-[#111827]"
                     >
                       ←
                     </button>
 
-                    <div className="text-sm text-[#e6e9f4]">Выберите структуру</div>
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="text-sm font-medium text-[#111827]">
+                        {stage === "flex"
+                          ? "Flexbox — выберите структуру колонок"
+                          : "CSS Grid — выберите структуру сетки"}
+                      </div>
+                      <div className="text-[11px] text-[#6b7280]">
+                        {stage === "flex"
+                          ? "Колонки в одну строку, поведение задаётся flex-контейнером"
+                          : "Двумерная сетка: строки и колонки, больше контроля по вертикали"}
+                      </div>
+                    </div>
 
                     <button
                       type="button"
                       onClick={() => setStage("root")}
-                      className="text-base text-[#9aa3b2] hover:text-[#e6e9f4]"
+                      className="text-base text-[#6b7280] hover:text-[#111827]"
                       aria-label="Закрыть"
                     >
                       ✕
