@@ -160,9 +160,9 @@ export default function SiteBuilder() {
   const [iframeMode, setIframeMode] = useState<"fit" | Breakpoint>("fit");
   const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
   const canvasTargetWidth =
-  iframeMode === "fit" || iframeMode === "desktop"
-    ? null
-    : widthByBp[iframeMode as Breakpoint];
+    iframeMode === "fit" || iframeMode === "desktop"
+      ? null
+      : widthByBp[iframeMode as Breakpoint];
 
   // Выбор блока
   const [selId, setSelId] = useState<string | null>(null);
@@ -616,11 +616,10 @@ export default function SiteBuilder() {
             <div className={`text-${align}`}>
               <a
                 href={bt.href || "#"}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${
-                  bt.variant === "secondary"
+                className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${bt.variant === "secondary"
                     ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
                     : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
-                }`}
+                  }`}
                 rel="noopener noreferrer nofollow"
                 onClick={(e) => e.preventDefault()}
                 title="Кнопка (клик в предпросмотре заблокирован)"
@@ -759,7 +758,7 @@ export default function SiteBuilder() {
     if (livePreviewChannelRef.current) {
       try {
         livePreviewChannelRef.current.close();
-      } catch {}
+      } catch { }
     }
     livePreviewChannelRef.current = new BroadcastChannel(`altnet_live_preview:${id}`);
 
@@ -915,14 +914,14 @@ export default function SiteBuilder() {
     setDoc(DEFAULT_DOC);
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    } catch { }
   }, []);
 
   // Автосохранение
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
-    } catch {}
+    } catch { }
   }, [doc]);
 
   // ── Навигатор (Outline) ────────────────────────────────────────────────────
@@ -932,15 +931,13 @@ export default function SiteBuilder() {
         {doc.blocks.map((b, idx) => (
           <div
             key={b.id}
-            className={`group flex items-center justify-between gap-2 rounded-lg border ${
-              selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
-            } px-2 py-1`}
+            className={`group flex items-center justify-between gap-2 rounded-lg border ${selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
+              } px-2 py-1`}
           >
             <button
               onClick={() => setSelId(b.id)}
-              className={`rounded-xl border ${
-                selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
-              } bg-[#0c0f1a] p-3 cursor-pointer`}
+              className={`rounded-xl border ${selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
+                } bg-[#0c0f1a] p-3 cursor-pointer`}
               title={labelOf(b)}
             >
               <span className="opacity-60 mr-1">#{idx + 1}</span>
@@ -1247,9 +1244,9 @@ export default function SiteBuilder() {
             />
           </div>
 
-           {/* Внутренняя сетка: канвас + панель «Структура» справа */}
+          {/* Внутренняя сетка: канвас + панель «Структура» справа */}
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px] items-start">
-                      {/* Канвас + структура под ним на узких экранах */}
+            {/* Канвас + структура под ним на узких экранах */}
             <div>
               {/* Фон канваса (лист сайта), отделённый от темы приложения */}
               <div
@@ -1267,41 +1264,51 @@ export default function SiteBuilder() {
                   }
                   style={{ backgroundColor: "#ffffff" }}
                 >
-                                    <Canvas
+                  <Canvas
                     cols={canvasCols}
                     gapX={canvasGapX}
                     gapY={canvasGapY}
                     blocks={doc.blocks}
                     renderBlock={(b) => {
-                      const isSectionish = b.type === "section" || b.type === "hero";
+                      const isSectionish =
+                        b.type === "section" || b.type === "hero";
                       const isActive = selId === b.id;
 
-                      const baseClasses =
-                        "rounded-xl bg-white p-3 cursor-pointer transition-colors";
+                      // Базовые классы обёртки секции/виджета
+                      const baseClasses = isSectionish
+                        ? // Секция: большая область с мягкими углами
+                        "cursor-pointer transition-colors rounded-[18px] bg-white"
+                        : // Обычный виджет внутри секции
+                        "cursor-pointer transition-colors rounded-xl bg-white p-3";
 
-                      const stateClasses = isActive
-                        ? "border border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.6)]"
-                        : isSectionish
-                          ? "border border-dashed border-transparent hover:border-[#d4d4d8] hover:bg-[#f5f3ff]"
-                          : "border border-[#e5e7eb] hover:border-[#6E59F2]/50";
+                      // Состояния рамки
+                      const stateClasses = (() => {
+                        if (isSectionish) {
+                          // Активная секция — плотная фиолетовая рамка и лёгкий розовый фон,
+                          // максимально похоже на Elementor
+                          if (isActive) {
+                            return "border border-[#e879f9] bg-[#fdf2ff] shadow-[0_0_0_1px_rgba(232,121,249,0.55)]";
+                          }
+                          // Неактивная секция — тонкая рамка, проявляется при ховере
+                          return "border border-[#f9a8ff]/60 hover:border-[#e879f9] hover:bg-[#fdf2ff]/40";
+                        }
+
+                        // Обычные виджеты внутри секции
+                        if (isActive) {
+                          return "border border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.6)]";
+                        }
+                        return "border border-[#e5e7eb] hover:border-[#6E59F2]/50";
+                      })();
 
                       return (
                         <div className="relative">
-                          {/* Верхняя плашка секции, как в Elementor (только для секций/hero) */}
+                          {/* Верхний таб секции à la Elementor */}
                           {isSectionish && (
-                            <div
-                              className="
-      pointer-events-auto
-      absolute -top-7 left-1/2 -translate-x-1/2
-      flex items-center gap-1.5
-      rounded-full border border-[#f9a8ff] bg-[#fdf2ff]
-      px-3 py-1 shadow-sm text-[11px] font-medium text-[#86198f]
-    "
-                            >
-                              {/* Пока только визуальный плюс — логику добавим позже */}
+                            <div className="pointer-events-auto absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full border border-[#f9a8ff] bg-[#fdf2ff] px-3 py-0.5 shadow-sm text-[11px] text-[#6b21a8]">
+                              {/* + добавить секцию ниже (пока без логики) */}
                               <button
                                 type="button"
-                                className="h-6 w-6 rounded-full flex items-center justify-center text-[#6b21a8] hover:bg-[#fce7ff] hover:text-[#4a044e] transition"
+                                className="h-6 w-6 rounded-full border border-[#f9a8ff] bg-white flex items-center justify-center text-base leading-none hover:bg-[#fdf2ff] hover:text-[#4c1d95] transition"
                                 title="Добавить секцию ниже (скоро)"
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -1311,29 +1318,30 @@ export default function SiteBuilder() {
                                 +
                               </button>
 
-                              {/* Иконка перетаскивания, чисто визуально */}
+                              {/* «ручка» перетаскивания, чисто визуальная иконка */}
                               <button
                                 type="button"
-                                className="h-6 w-6 rounded-full flex items-center justify-center text-[#6b21a8] hover:bg-[#fce7ff] hover:text-[#4a044e] transition cursor-move"
+                                className="h-6 w-6 rounded-full flex items-center justify-center text-xs leading-none hover:bg-[#fdf2ff] transition cursor-move"
                                 title="Перетащить секцию (скоро)"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  // Перетаскивание уже работает через dnd-kit, это просто иконка
                                 }}
                               >
-                                ⠿
+                                ⋮⋮
                               </button>
 
-                              {/* Рабочий крестик — удаляет секцию/hero */}
+                              {/* крестик — удаление секции/hero */}
                               <button
                                 type="button"
-                                className="h-6 w-6 rounded-full flex items-center justify-center text-[#6b21a8] hover:bg-[#fee2e2] hover:text-[#7f1d1d] transition"
+                                className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-[#fee2e2] transition"
                                 title="Удалить секцию"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setDoc((d) => ({
                                     ...d,
-                                    blocks: d.blocks.filter((blk: any) => blk.id !== b.id),
+                                    blocks: d.blocks.filter(
+                                      (blk: any) => blk.id !== b.id,
+                                    ),
                                   }));
                                 }}
                               >
@@ -1342,8 +1350,7 @@ export default function SiteBuilder() {
                             </div>
                           )}
 
-
-                          {/* Сам блок секции/виджета */}
+                          {/* Сам блок секции / виджета */}
                           <div
                             onClick={(e) => {
                               e.stopPropagation();
@@ -1355,17 +1362,20 @@ export default function SiteBuilder() {
                           </div>
                         </div>
                       );
-                    }} 
+                    }}
                     onReorder={(next) =>
                       setDoc((d) => ({ ...d, blocks: next as any }))
                     }
                     onInsertAt={(index, type, preset) => {
                       setDoc((d) => {
                         const blocks = [...d.blocks];
-                        const clamped = Math.max(0, Math.min(index, blocks.length));
+                        const clamped = Math.max(
+                          0,
+                          Math.min(index, blocks.length),
+                        );
                         const nb = createDefaultBlock(
                           type as BlockType,
-                          preset as any
+                          preset as any,
                         );
                         blocks.splice(clamped, 0, nb);
                         return { ...d, blocks };
@@ -1373,81 +1383,80 @@ export default function SiteBuilder() {
                     }}
                   />
 
+
+
+
+                  {/* Структура под канвасом на мобильных/узких экранах (tablet/mobile) */}
+                  {bp !== "desktop" && (
+                    <div className="mt-4 rounded-2xl border border-[#1f2751] bg-[#050816]/90">
+                      <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
+                        Структура
+                      </div>
+                      <div className="p-3">
+                        <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+
+                {/* Структура справа (десктоп ≥ xl, только когда bp === "desktop") */}
+                {bp === "desktop" && (
+                  <div className="hidden xl:flex flex-col rounded-2xl border border-[#1f2751] bg-[#050816]/90 max-h-[calc(100dvh-160px)]">
+                    <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
+                      Структура
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-3">
+                      <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
+                    </div>
                   </div>
-                </div>
-               
-               
-
-
-              {/* Структура под канвасом на мобильных/узких экранах (tablet/mobile) */}
-              {bp !== "desktop" && (
-                <div className="mt-4 rounded-2xl border border-[#1f2751] bg-[#050816]/90">
-                  <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
-                    Структура
-                  </div>
-                  <div className="p-3">
-                    <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
-                  </div>
-                </div>
-              )}
-            </div>
-
-
-            {/* Структура справа (десктоп ≥ xl, только когда bp === "desktop") */}
-            {bp === "desktop" && (
-              <div className="hidden xl:flex flex-col rounded-2xl border border-[#1f2751] bg-[#050816]/90 max-h-[calc(100dvh-160px)]">
-                <div className="px-3 py-2 border-b border-[#1f2751] text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
-                  Структура
-                </div>
-                <div className="flex-1 overflow-y-auto p-3">
-                  <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
-                </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-{/* Плавающая панель «Структура» (Navigator как в Elementor) */}
-      {bp === "desktop" && isOutlineOpen && (
-        <div
-          className="fixed z-40 group rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
-          style={{
-            left: outlinePos.x,
-            top: outlinePos.y,
-            width: outlineSize.w,
-            height: outlineSize.h,
-            cursor: outlineCursor,
-          }}
-          onClick={(e) => e.stopPropagation()}
-          onMouseMove={updateOutlineCursor}
-          onMouseLeave={() => setOutlineCursor("default")}
-          onMouseDown={handleOutlinePanelMouseDown}
-        >
-          {/* Хедер: название + закрыть, зона для drag */}
-          <div
-            className="flex items-center justify-between px-3 py-2 border-b border-[#1f2751] cursor-move select-none"
-            onMouseDown={handleOutlineHeaderMouseDown}
-          >
-            <div className="text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
-              Структура
             </div>
-            <button
-              type="button"
-              className="h-6 w-6 inline-flex items-center justify-center rounded-md hover:bg-[#15192c] text-[#9aa3b2]"
-              onClick={() => setIsOutlineOpen(false)}
-            >
-              ✕
-            </button>
-          </div>
 
-           {/* Содержимое панели */}
-          <div className="h-[calc(100%-36px)] overflow-y-auto p-3 text-sm">
-            <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
           </div>
-
         </div>
-      )}
+        {/* Плавающая панель «Структура» (Navigator как в Elementor) */}
+        {bp === "desktop" && isOutlineOpen && (
+          <div
+            className="fixed z-40 group rounded-2xl border border-[#1f2751] bg-[#050816]/95 shadow-2xl backdrop-blur-sm"
+            style={{
+              left: outlinePos.x,
+              top: outlinePos.y,
+              width: outlineSize.w,
+              height: outlineSize.h,
+              cursor: outlineCursor,
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onMouseMove={updateOutlineCursor}
+            onMouseLeave={() => setOutlineCursor("default")}
+            onMouseDown={handleOutlinePanelMouseDown}
+          >
+            {/* Хедер: название + закрыть, зона для drag */}
+            <div
+              className="flex items-center justify-between px-3 py-2 border-b border-[#1f2751] cursor-move select-none"
+              onMouseDown={handleOutlineHeaderMouseDown}
+            >
+              <div className="text-xs font-medium uppercase tracking-wide text-[#9aa3b2]">
+                Структура
+              </div>
+              <button
+                type="button"
+                className="h-6 w-6 inline-flex items-center justify-center rounded-md hover:bg-[#15192c] text-[#9aa3b2]"
+                onClick={() => setIsOutlineOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Содержимое панели */}
+            <div className="h-[calc(100%-36px)] overflow-y-auto p-3 text-sm">
+              <Outline blocks={doc.blocks} selId={selId} onSelect={(id) => setSelId(id)} />
+            </div>
+
+          </div>
+        )}
+      </div>
     </div>
   );
 }
