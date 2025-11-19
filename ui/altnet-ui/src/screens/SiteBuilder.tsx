@@ -1267,7 +1267,7 @@ export default function SiteBuilder() {
                   }
                   style={{ backgroundColor: "#ffffff" }}
                 >
-                  <Canvas
+                                    <Canvas
                     cols={canvasCols}
                     gapX={canvasGapX}
                     gapY={canvasGapY}
@@ -1286,28 +1286,92 @@ export default function SiteBuilder() {
                           : "border border-[#e5e7eb] hover:border-[#6E59F2]/50";
 
                       return (
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelId(b.id);
-                          }}
-                          className={`${baseClasses} ${stateClasses}`}
-                        >
-                          {isActive ? previewOf(b) : renderBlockView(b)}
+                        <div className="relative">
+                          {/* Верхняя плашка секции, как в Elementor (только для секций/hero) */}
+                          {isSectionish && (
+                            <div
+                              className="
+                                pointer-events-auto
+                                absolute -top-5 left-1/2 -translate-x-1/2
+                                flex items-center gap-1
+                                rounded-full border border-[#e5e7eb] bg-white px-2 py-0.5
+                                shadow-sm text-[11px] text-[#4b5563]
+                              "
+                            >
+                              {/* Пока только визуальный плюс — логику добавим позже */}
+                              <button
+                                type="button"
+                                className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-[#f3e8ff] transition"
+                                title="Добавить секцию ниже (скоро)"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // TODO: позже привяжем к onInsertAt
+                                }}
+                              >
+                                +
+                              </button>
+
+                              {/* Иконка перетаскивания, чисто визуально */}
+                              <button
+                                type="button"
+                                className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-[#f3e8ff] transition cursor-move"
+                                title="Перетащить секцию (скоро)"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  // Перетаскивание уже работает через dnd-kit, это просто иконка
+                                }}
+                              >
+                                ⠿
+                              </button>
+
+                              {/* Рабочий крестик — удаляет секцию/hero */}
+                              <button
+                                type="button"
+                                className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-[#fee2e2] transition"
+                                title="Удалить секцию"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDoc((d) => ({
+                                    ...d,
+                                    blocks: d.blocks.filter((blk: any) => blk.id !== b.id),
+                                  }));
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Сам блок секции/виджета */}
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelId(b.id);
+                            }}
+                            className={`${baseClasses} ${stateClasses}`}
+                          >
+                            {isActive ? previewOf(b) : renderBlockView(b)}
+                          </div>
                         </div>
                       );
-                    }}
-                    onReorder={(next) => setDoc((d) => ({ ...d, blocks: next as any }))}
+                    }} 
+                    onReorder={(next) =>
+                      setDoc((d) => ({ ...d, blocks: next as any }))
+                    }
                     onInsertAt={(index, type, preset) => {
                       setDoc((d) => {
                         const blocks = [...d.blocks];
                         const clamped = Math.max(0, Math.min(index, blocks.length));
-                        const nb = createDefaultBlock(type as BlockType, preset as any);
+                        const nb = createDefaultBlock(
+                          type as BlockType,
+                          preset as any
+                        );
                         blocks.splice(clamped, 0, nb);
                         return { ...d, blocks };
                       });
                     }}
                   />
+
                   </div>
                 </div>
                
