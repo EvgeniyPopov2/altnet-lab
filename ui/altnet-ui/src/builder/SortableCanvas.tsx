@@ -127,62 +127,73 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
 
               {/* LAYOUT: выбор между Flexbox и Grid */}
               {stage === "layout" && (
-                <div className="relative w-full max-w-5xl rounded-xl border border-dashed border-[#d4d4d8] bg-white px-8 py-8 shadow-sm">
+                <div className="relative w-full max-w-5xl rounded-xl border border-dashed border-[#d4d4d8] bg-white px-10 py-10 shadow-sm">
+                  {/* Крестик справа сверху — выход обратно в root */}
                   <button
                     type="button"
                     onClick={() => setStage("root")}
-                    className="absolute right-4 top-4 text-base text-[#6b7280] hover:text-[#111827]"
+                    className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#e5e7eb] bg-white text-sm text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827] transition"
                     aria-label="Закрыть"
                   >
                     ✕
                   </button>
 
-                  <div className="mb-2 text-center text-sm font-medium text-[#111827]">
+                  {/* Заголовок */}
+                  <div className="mb-2 text-center text-base font-semibold text-[#111827]">
                     Какой макет вы хотите использовать?
                   </div>
-                  <div className="mb-6 text-center text-[11px] text-[#6b7280]">
-                    Flexbox — одна строка колонок, CSS Grid — полноценная сетка из строк и колонок
+
+                  {/* Подпояснение под заголовком */}
+                  <div className="mb-8 text-center text-xs text-[#6b7280]">
+                    <span className="font-semibold text-[#6E59F2]">Flexbox</span> — одна строка колонок;&nbsp;
+                    <span className="font-semibold text-[#6E59F2]">CSS Grid</span> — полноценная сетка из строк и колонок.
                   </div>
 
-                  <div className="flex flex-wrap justify-center gap-8">
+                  {/* Две большие карточки Flexbox / Grid */}
+                  <div className="flex flex-wrap justify-center gap-6">
                     {/* Flexbox карточка */}
                     <button
                       type="button"
                       onClick={() => setStage("flex")}
-                      className="group flex w-48 flex-col items-center gap-3 rounded-lg border border-[#4b5563] bg-[#0b1020] px-4 py-4 hover:border-[#6E59F2] hover:shadow-lg transition"
+                      className="group flex w-64 flex-col items-center gap-3 rounded-2xl border-2 border-[#E5D9FF] bg-[#fdf2ff] px-6 py-5 text-[#111827] hover:border-[#6E59F2] hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6E59F2] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                     >
-                      <div className="flex h-28 w-full items-center justify-center rounded-md bg-[#f3f4f6]">
-                        <div className="flex h-20 w-24 gap-1">
+                      {/* Псевдо-иконка Flex (3 колонки) */}
+                      <div className="flex h-20 w-full items-center justify-center rounded-lg bg-white">
+                        <div className="flex h-10 w-28 gap-1">
                           <div className="flex-1 bg-[#e5e7eb]" />
                           <div className="flex-1 bg-[#d1d5db]" />
                           <div className="flex-1 bg-[#e5e7eb]" />
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-[#111827] group-hover:text-[#1f2937]">
-                        Flexbox
-                      </span>
+                      <div className="text-sm font-semibold">Flexbox</div>
+                      <div className="text-[11px] leading-snug text-center text-[#6b7280]">
+                        Колонки в одну строку, поведение задаёт flex-контейнер.
+                      </div>
                     </button>
 
                     {/* Grid карточка */}
                     <button
                       type="button"
                       onClick={() => setStage("grid")}
-                      className="group flex w-48 flex-col items-center gap-3 rounded-lg border border-[#4b5563] bg-[#0b1020] px-4 py-4 hover:border-[#6E59F2] hover:shadow-lg transition"
+                      className="group flex w-64 flex-col items-center gap-3 rounded-2xl border-2 border-[#E5D9FF] bg-[#fdf2ff] px-6 py-5 text-[#111827] hover:border-[#6E59F2] hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6E59F2] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                     >
-                      <div className="flex h-28 w-full items-center justify-center rounded-md bg-[#f3f4f6]">
-                        <div className="grid h-20 w-20 grid-cols-2 grid-rows-2 gap-[2px]">
+                      {/* Псевдо-иконка Grid 2×2 */}
+                      <div className="flex h-20 w-full items-center justify-center rounded-lg bg-white">
+                        <div className="grid h-10 w-20 grid-cols-2 grid-rows-2 gap-[3px]">
                           {Array.from({ length: 4 }).map((_, i) => (
                             <div key={i} className="bg-[#e5e7eb]" />
                           ))}
                         </div>
                       </div>
-                      <span className="text-sm font-medium text-[#111827] group-hover:text-[#1f2937]">
-                        Grid
-                      </span>
+                      <div className="text-sm font-semibold">CSS Grid</div>
+                      <div className="text-[11px] leading-snug text-center text-[#6b7280]">
+                        Полноценная сетка: строки и колонки, гибкая компоновка.
+                      </div>
                     </button>
                   </div>
                 </div>
               )}
+
 
               {/* FLEX / GRID: выбор конкретной структуры */}
               {(stage === "flex" || stage === "grid") && (
