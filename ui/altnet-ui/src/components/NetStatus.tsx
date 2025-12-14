@@ -1,7 +1,8 @@
+import type { PrivacyProfile } from "../core/policy/types";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 
-export type NetProfile = "anon" | "fast";
+
 
 type Metrics = {
   rtt: number;     // ms
@@ -16,7 +17,7 @@ function rand(min: number, max: number) {
   return Math.round(min + Math.random() * (max - min));
 }
 
-function genMetrics(profile: NetProfile): Metrics {
+function genMetrics(profile: PrivacyProfile): Metrics {
   if (profile === "anon") {
     return {
       rtt: rand(300, 800),
@@ -42,8 +43,8 @@ export default function NetStatus({
   profile,
   onChangeProfile,
 }: {
-  profile: NetProfile;
-  onChangeProfile?: (p: NetProfile) => void;
+  profile: PrivacyProfile;
+  onChangeProfile?: (p: PrivacyProfile) => void;
 }) {
   const [m, setM] = useState<Metrics>(() => genMetrics(profile));
 
@@ -90,7 +91,7 @@ export default function NetStatus({
     <span className="px-2 py-1 rounded-full text-xs bg-white/10 text-white/80">{children}</span>
   );
 
-  const Segm = ({ p, label }: { p: NetProfile; label: string }) => (
+  const Segm = ({ p, label }: { p: PrivacyProfile; label: string }) => (
     <button
       onClick={() => onChangeProfile?.(p)}
       className={`px-3 py-1.5 rounded-lg text-sm transition

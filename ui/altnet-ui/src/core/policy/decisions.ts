@@ -8,7 +8,7 @@ export type PolicyDecision =
   | {
       ok: true;
       esm: EffectiveSessionMode;
-      rtc: ReturnType<typeof computeRtcPolicy>;
+      rtc?: ReturnType<typeof computeRtcPolicy>;
     }
   | {
       ok: false;
@@ -47,6 +47,67 @@ export type CallCheckInput = {
    */
   allowVideoInAnon?: boolean;
 };
+
+export type MessageCheckInput = {
+  localProfile: PrivacyProfile;
+  contact: ContactCapabilities;
+
+  /**
+   * E2E статус. Пока мок: в реале будет "есть ли установленная E2E-сессия".
+   * В доктрине — без E2E отправка должна быть заблокирована (fail-closed).
+   */
+  e2eReady: boolean;
+
+  /**
+   * Для anon-family: “готов ли Tor/I2P путь”.
+   * Пока мок: позже это будет приходить из TAL.
+   */
+  anonPathReady: boolean;
+};
+
+/**
+ * Проверка отправки сообщения (текст/вложения на уровне политики).
+ * MVP: только инварианты безопасности + общий путь.
+ */
+export function checkSendMessage(input: MessageCheckInput): PolicyDecision {
+  if (!input.e2eReady) {
+    return {
+      ok: false,
+      code: "E2E_REQUIRED",
+      title: "Отправка заблокирована",
+      message: "Сквозное шифрование не готово. По правилам безопасности AltNet отправка без E2E запрещена (fail-closed).",
+      details: ["Проверьте список устройств/ключей или повторите попытку позже."],
+    };
+  }
+
+  const esm = computeEsm(input.localProfile, input.contact);
+  if (!esm.commonPath) {
+    return {
+      ok: false,
+      code: "NO_COMMON_PATH",
+      title: "Нет безопасного пути",
+      message: "Не удалось найти общий защищённый путь до собеседника. Отправка заблокирована (fail-closed).",
+      details: [
+        "Если вы в Anon — у собеседника должен быть анонимный адрес (Tor/I2P).",
+        "Если вы в Fast — для этого контакта включится совместимость (Tor compat), если она доступна.",
+      ],
+      esm,
+    };
+  }
+
+  if (esm.family === "anon" && !input.anonPathReady) {
+    return {
+      ok: false,
+      code: "ANON_PATH_NOT_READY",
+      title: "Анонимный путь не готов",
+      message: "Анонимный профиль включён, но анонимный транспорт ещё не готов. Отправка временно недоступна.",
+      details: ["Подождите подключения Tor/I2P или переключитесь на быстрый профиль (если это допустимо)."],
+      esm,
+    };
+  }
+
+  return { ok: true, esm };
+}
 
 export function checkStartCall(input: CallCheckInput): PolicyDecision {
   if (!input.e2eReady) {

@@ -10,10 +10,18 @@ import type { ContactCapabilities, EffectiveSessionMode, PrivacyProfile } from "
  */
 export function computeEsm(localProfile: PrivacyProfile, contact: ContactCapabilities): EffectiveSessionMode {
   if (localProfile === "anon") {
+    if (!contact.supportsAnon) {
+      return {
+        family: "anon",
+        compat: false,
+        commonPath: false,
+        reason: "Вы в анонимном профиле, но у собеседника нет анонимного адреса (Tor/I2P). Безопасного пути нет (fail-closed).",
+      };
+    }
     return {
       family: "anon",
       compat: false,
-      commonPath: contact.supportsAnon || contact.supportsFast, // общий путь в принципе есть, но используем anon-family
+      commonPath: true,
       reason: "Вы в анонимном профиле: соединение будет установлено через анонимный оверлей.",
     };
   }
