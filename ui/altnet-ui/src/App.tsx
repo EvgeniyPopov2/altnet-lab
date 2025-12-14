@@ -8,12 +8,12 @@ import ExploreDiscover from "./screens/ExploreDiscover";
 import Messages, { type DmContact } from "./screens/Messages";
 import Servers, { type ServerItem } from "./screens/Servers";
 
-import QuickSwitcher, { QSItem } from "./components/QuickSwitcher";
+import QuickSwitcher, { type QSItem } from "./components/QuickSwitcher";
 import NetStatus from "./components/NetStatus";
 import { usePrivacyProfile } from "./core/settings/profile";
 import { SecurityCoach } from "./core/security/coach";
 import { usePanicMode } from "./core/security/usePanicMode";
-import SecurityCoachHost from "./components/security/SecurityCoachHost";
+import { SecurityCoachHost } from "./components/security/SecurityCoachHost";
 
 type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "profile";
 type RailView = "global" | "messages" | "servers";
@@ -76,11 +76,11 @@ export default function App() {
   // Данные (моки)
   const dmList: DmContact[] = useMemo(
     () => [
-      { id: "henk", title: "Henk", subtitle: "в сети • 5 мин назад", caps: { supportsAnon: true, supportsFast: true } },
-      { id: "valerych", title: "Валерыч", subtitle: "anon-only • не в сети", caps: { supportsAnon: true, supportsFast: false } },
-      { id: "crystal", title: "Crystallick", subtitle: "fast-only • новое: 3", caps: { supportsAnon: false, supportsFast: true } },
-      { id: "dencoldgrey", title: "dencoldgrey", subtitle: "Пишет…", caps: { supportsAnon: true, supportsFast: true } },
-      { id: "curdone", title: "Curd_one", subtitle: "AFK", caps: { supportsAnon: true, supportsFast: true } },
+      { id: "henk", title: "Henk", subtitle: "в сети • 5 мин назад", caps: { contactId: "henk", supportsAnon: true, supportsFast: true } },
+      { id: "valerych", title: "Валерыч", subtitle: "anon-only • не в сети", caps: { contactId: "valerych", supportsAnon: true, supportsFast: false } },
+      { id: "crystal", title: "Crystallick", subtitle: "fast-only • новое: 3", caps: { contactId: "crystal", supportsAnon: false, supportsFast: true } },
+      { id: "dencoldgrey", title: "dencoldgrey", subtitle: "Пишет…", caps: { contactId: "dencoldgrey", supportsAnon: true, supportsFast: true } },
+      { id: "curdone", title: "Curd_one", subtitle: "AFK", caps: { contactId: "curdone", supportsAnon: true, supportsFast: true } },
     ],
     []
   );
@@ -157,47 +157,25 @@ export default function App() {
     setRail("global");
   };
 
-  // Security Coach: показываем краткую подсказку при смене профиля
-  useEffect(() => {
-    SecurityCoach.intro(profile);
-  }, [profile]);
-
   // Quick Switcher — цели
-  const qsItems: QSItem[] = useMemo(() => {
-    const base: QSItem[] = [
+  const qsItems: QSItem[] = useMemo(
+    () => [
       { id: "s:feed", kind: "section", label: "Лента", action: openFeed },
       { id: "s:messages", kind: "section", label: "Сообщения", action: openMessages },
       { id: "s:servers", kind: "section", label: "Серверы", action: openServers },
       { id: "s:explore", kind: "section", label: "Путешествия", action: openExplore },
       { id: "s:browser", kind: "section", label: "Браузер .alt", action: openBrowser },
       { id: "s:reputation", kind: "section", label: "Репутация", action: openReputation },
-      { id: "s:profile", kind: "section", label: "Профиль", action: openProfile },
-    ];
 
-    const dms: QSItem[] = dmList.map((d) => ({
-      id: `dm:${d.id}`,
-      kind: "dm",
-      label: d.title,
-      hint: "Личные сообщения",
-      action: () => {
-        setSelectedDmId(d.id);
-        openMessages();
-      },
-    }));
+      { id: "dm:henk", kind: "dm", label: "Henk", hint: "Личные сообщения", action: openMessages },
+      { id: "dm:valerych", kind: "dm", label: "Валерыч", hint: "Личные сообщения", action: openMessages },
 
-    const servers: QSItem[] = serverList.map((s) => ({
-      id: `sv:${s.id}`,
-      kind: "server",
-      label: s.title,
-      hint: s.subtitle ?? "Сервер",
-      action: () => {
-        setSelectedServerId(s.id);
-        openServers();
-      },
-    }));
-
-    return [...base, ...dms, ...servers];
-  }, [dmList, serverList]); // eslint-disable-line react-hooks/exhaustive-deps
+      { id: "sv:wt", kind: "server", label: "War Thunder", hint: "текст/голос • 1.2k онлайн", action: openServers },
+      { id: "sv:altdev", kind: "server", label: "AltNet Dev", hint: "вики/чат • 53 онлайн", action: openServers },
+      { id: "sv:mid", kind: "server", label: "Midjourney", hint: "image-gen • 12k онлайн", action: openServers },
+    ],
+    []
+  );
 
   // Хоткей Ctrl/Cmd + K
   useEffect(() => {
@@ -205,23 +183,23 @@ export default function App() {
       const ctrlOrMeta = e.ctrlKey || e.metaKey;
       if (ctrlOrMeta && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setQsOpen((v) => !v);
+        setQsOpen(!qsOpen);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [qsOpen]);
 
   // Плавная ширина бара
   const railWidthPx = rail === "global" ? 80 : 288;
 
-  // Плашка профиля в шапке
   const ProfileSwitch = () => (
     <div className="hidden md:flex items-center gap-1 bg-white/10 rounded-xl p-1">
       <button
         onClick={() => setProfile("anon")}
         className={`px-2.5 py-1 rounded-lg text-sm ${profile === "anon" ? "bg-white/20 text-white" : "text-white/70 hover:bg-white/15"}`}
         title="Анонимный (Tor/I2P)"
+        type="button"
       >
         🕶️ Анонимный
       </button>
@@ -229,23 +207,28 @@ export default function App() {
         onClick={() => setProfile("fast")}
         className={`px-2.5 py-1 rounded-lg text-sm ${profile === "fast" ? "bg-white/20 text-white" : "text-white/70 hover:bg-white/15"}`}
         title="Приватный быстрый (Yggdrasil/WireGuard)"
+        type="button"
       >
         ⚡ Быстрый
       </button>
     </div>
   );
 
-  const PanicPill = () =>
-    panic ? (
-      <button
-        type="button"
-        onClick={() => setPanic(false)}
-        className="hidden md:inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm border border-red-500/30 bg-red-500/15 hover:bg-red-500/20 text-red-200"
-        title="Паника включена: сетевые действия блокируются. Нажмите, чтобы выключить."
-      >
-        🛑 Паника
-      </button>
-    ) : null;
+  const PanicPill = () => (
+    <button
+      type="button"
+      onClick={() => setPanic(!panic)}
+      className={[
+      "px-3 py-1.5 rounded-full text-sm border",
+      panic
+        ? "bg-red-600/90 border-red-500 text-white hover:bg-red-600"
+        : "bg-white/10 border-white/10 text-white/80 hover:bg-white/20",
+      ].join(" ")}
+      title={panic ? "Паника включена (fail-closed)" : "Включить панику (fail-closed)"}
+    >
+      {panic ? "🛑 Паника" : "🛡️ Паника"}
+    </button>
+  );
 
   return (
     <div className="min-h-screen flex">
@@ -263,27 +246,16 @@ export default function App() {
             <RailBtn icon="🧩" label="Серверы" active={section === "servers"} onClick={openServers} />
             <RailBtn icon="🧭" label="Путешествия" active={section === "explore"} onClick={openExplore} />
             <RailBtn icon="🌐" label="Браузер .alt" active={section === "browser"} onClick={openBrowser} />
-            <RailBtn icon="🛡️" label="Репутация" active={section === "reputation"} onClick={openReputation} />
+            <RailBtn icon="⭐" label="Репутация" active={section === "reputation"} onClick={openReputation} />
+            <RailBtn icon="👤" label="Профиль" active={section === "profile"} onClick={openProfile} />
           </div>
         )}
 
         {rail === "messages" && (
-          <div className="h-full flex flex-col px-3">
-            <div className="flex items-center gap-2 mb-2">
-              <button
-                className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20"
-                title="Назад к разделам"
-                onClick={() => setRail("global")}
-              >
-                ←
-              </button>
-              <div className="text-white/80 font-semibold">Личные сообщения</div>
-            </div>
+          <div className="flex flex-col h-full px-3">
+            <div className="text-xs text-white/60 px-2 mb-2">Личные сообщения</div>
             <div className="rounded-xl bg-white/5 border border-white/10 p-2 mb-2">
-              <input
-                placeholder="Найти или начать беседу"
-                className="w-full bg-transparent outline-none text-sm text-white/90 placeholder-white/40"
-              />
+              <input placeholder="Поиск" className="w-full bg-transparent outline-none text-sm text-white/90 placeholder-white/40" />
             </div>
             <div className="flex-1 overflow-y-auto space-y-1 pr-1">
               {dmList.map((d) => (
@@ -303,20 +275,8 @@ export default function App() {
         )}
 
         {rail === "servers" && (
-          <div className="h-full flex flex-col px-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <button
-                  className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20"
-                  title="Назад к разделам"
-                  onClick={() => setRail("global")}
-                >
-                  ←
-                </button>
-                <div className="text-white/80 font-semibold">Серверы</div>
-              </div>
-              <button className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-xs">➕ Создать</button>
-            </div>
+          <div className="flex flex-col h-full px-3">
+            <div className="text-xs text-white/60 px-2 mb-2">Серверы</div>
             <div className="rounded-xl bg-white/5 border border-white/10 p-2 mb-2">
               <input placeholder="Поиск серверов" className="w-full bg-transparent outline-none text-sm text-white/90 placeholder-white/40" />
             </div>
@@ -341,16 +301,17 @@ export default function App() {
         <div className="mt-auto px-4">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center font-bold">E</div>
           <div className="mt-2 grid grid-cols-3 gap-1">
-            <button className="h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs" title="Статус">
+            <button className="h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs" title="Статус" type="button">
               ●
             </button>
-            <button className="h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs" title="Настройки" onClick={openProfile}>
+            <button className="h-8 rounded-lg bg-white/10 hover:bg-white/20 text-xs" title="Настройки" onClick={openProfile} type="button">
               ⚙️
             </button>
             <button
               className={`h-8 rounded-lg text-xs ${section === "profile" ? "bg-indigo-600" : "bg-white/10 hover:bg-white/20"}`}
               title="Профиль"
               onClick={openProfile}
+              type="button"
             >
               👤
             </button>
@@ -377,11 +338,16 @@ export default function App() {
               className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20"
               onClick={() => setQsOpen(true)}
               title="Быстрый переход (Ctrl+K)"
+              type="button"
             >
               ⌘K / Ctrl+K
             </button>
-            <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">📥 Почта</button>
-            <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20">❓ Поддержка</button>
+            <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20" type="button">
+              📥 Почта
+            </button>
+            <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20" type="button">
+              ❓ Поддержка
+            </button>
           </div>
         </header>
 
@@ -424,12 +390,14 @@ export default function App() {
                     <button
                       onClick={() => setProfile("anon")}
                       className={`px-3 py-1.5 rounded-lg ${profile === "anon" ? "bg-indigo-600 text-white" : "bg-white/10 hover:bg-white/20"}`}
+                      type="button"
                     >
                       🕶️ Анонимный
                     </button>
                     <button
                       onClick={() => setProfile("fast")}
                       className={`px-3 py-1.5 rounded-lg ${profile === "fast" ? "bg-indigo-600 text-white" : "bg-white/10 hover:bg-white/20"}`}
+                      type="button"
                     >
                       ⚡ Быстрый
                     </button>

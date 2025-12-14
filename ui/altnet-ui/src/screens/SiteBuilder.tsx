@@ -147,7 +147,7 @@ type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyl
 // ─────────────────────────────────────────────────────────────────────────────
 // Основной экран
 // ─────────────────────────────────────────────────────────────────────────────
-export default function SiteBuilder() {
+export default function SiteBuilder({ onClose }: { onClose?: () => void }) {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
 
   // Канвас: кол-во колонок и зазоры
@@ -1143,6 +1143,20 @@ export default function SiteBuilder() {
           onChangeMode={setIframeMode}
           right={
             <div className="flex items-center gap-3">
+              {onClose && (
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#cfd5e6] hover:border-[#6E59F2]"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onClose();
+                  }}
+                  title="Закрыть конструктор"
+                >
+                  Закрыть
+                </button>
+              )}
+
               {/* Кнопка открытия панели «Структура» — только на desktop */}
               {bp === "desktop" && (
                 <button

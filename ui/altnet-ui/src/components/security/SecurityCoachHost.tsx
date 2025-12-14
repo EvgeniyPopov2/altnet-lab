@@ -75,8 +75,7 @@ export function SecurityCoachHost() {
 
   const hasAny = events.length > 0;
   const containerClass = useMemo(
-    () =>
-      "fixed bottom-4 right-4 z-[9999] w-[380px] max-w-[calc(100vw-2rem)] space-y-2",
+    () => "fixed bottom-4 right-4 z-[9999] w-[380px] max-w-[calc(100vw-2rem)] space-y-2",
     []
   );
 
@@ -128,10 +127,7 @@ export function SecurityCoachHost() {
                 <button
                   key={a.id ?? idx}
                   type="button"
-                  className={[
-                    "rounded-lg px-3 py-1.5 text-xs transition",
-                    btnClass(a.kind),
-                  ].join(" ")}
+                  className={["rounded-lg px-3 py-1.5 text-xs transition", btnClass(a.kind)].join(" ")}
                   onClick={() => {
                     try {
                       a.onClick?.();
