@@ -253,7 +253,10 @@ export default function App() {
 
         {rail === "messages" && (
           <div className="flex flex-col h-full px-3">
-            <div className="text-xs text-white/60 px-2 mb-2">Личные сообщения</div>
+            <div className="mb-2 flex items-center gap-2">
+       
+        <div className="text-xs text-white/60">Личные сообщения</div>
+      </div>
             <div className="rounded-xl bg-white/5 border border-white/10 p-2 mb-2">
               <input placeholder="Поиск" className="w-full bg-transparent outline-none text-sm text-white/90 placeholder-white/40" />
             </div>
@@ -322,15 +325,29 @@ export default function App() {
       {/* ПРАВО — КОНТЕНТ */}
       <div className="flex-1 flex flex-col">
         <header className="px-4 py-3 border-b border-white/10 bg-white/5 flex items-center justify-between">
-          <motion.div
-            className="text-lg font-semibold text-white/90"
-            key={`hdr-${section}`}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.15 }}
-          >
-            {headerTitle}
-          </motion.div>
+          <div className="flex items-center gap-2">
+            {rail !== "global" && (
+              <button
+                type="button"
+                className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80"
+                title="Назад к разделам"
+                onClick={() => setRail("global")}
+              >
+                ←
+              </button>
+            )}
+
+            <motion.div
+              className="text-lg font-semibold text-white/90"
+              key={`hdr-${section}`}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.15 }}
+            >
+              {headerTitle}
+            </motion.div>
+          </div>
+
           <div className="flex items-center gap-2">
             <PanicPill />
             <ProfileSwitch />
