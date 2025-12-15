@@ -164,7 +164,7 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
   }
 
   return (
-    <div className="space-y-4">
+    <div className="h-full min-h-0 flex flex-col gap-4">
       {/* Заголовок диалога */}
       <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -201,41 +201,47 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
       </div>
 
       {/* Лента сообщений (мок) */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-4">
         <div className="space-y-3 text-sm">
-          <div className="text-white/80">
-            <span className="text-white/60">{dm.title} · 12:04</span>
-            <div>Привет. Тут будет CRDT-журнал (мок) + вложения CID.</div>
-          </div>
-          <div className="text-white/80">
-            <span className="text-white/60">Вы · 12:06</span>
-            <div>Ок. Сейчас делаем политику + UX подсказки (Security Coach).</div>
-          </div>
+          {[
+            {
+              id: "m1",
+              from: "them" as const,
+              who: dm.title,
+              time: "12:04",
+              text: "Привет. Тут будет CRDT-журнал (мок) + вложения CID.",
+            },
+            {
+              id: "m2",
+              from: "me" as const,
+              who: "Вы",
+              time: "12:06",
+              text: "Ок. Сейчас делаем политику + UX подсказки (Security Coach).",
+            },
+          ].map((m) => (
+            <div
+              key={m.id}
+              className={["flex", m.from === "me" ? "justify-end" : "justify-start"].join(" ")}
+            >
+              <div
+                className={[
+                  "max-w-[78%] rounded-2xl px-4 py-2 border",
+                  m.from === "me"
+                    ? "bg-indigo-600/20 border-indigo-400/20 text-white/90"
+                    : "bg-white/5 border-white/10 text-white/90",
+                ].join(" ")}
+              >
+                <div className="text-[11px] text-white/50 mb-1">
+                  {m.who} · {m.time}
+                </div>
+                <div className="leading-relaxed">{m.text}</div>
+              </div>
+            </div>
+          ))}
+
           <div className="text-xs text-white/50 pt-2">
             Примечание: без E2E контекста отправка обязана быть заблокирована (fail-closed).
           </div>
-        </div>
-      </div>
-
-      {/* Ввод */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-        <div className="flex items-end gap-2">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={2}
-            placeholder="Написать сообщение…"
-            className="flex-1 resize-none rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none placeholder-white/40"
-          />
-          <button
-            type="button"
-            onClick={onSend}
-            className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
-            disabled={draft.trim().length === 0}
-            title="Отправить"
-          >
-            Отправить
-          </button>
         </div>
       </div>
 
@@ -264,6 +270,28 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
           Эти переключатели имитируют сигналы TAL/crypto. В проде их не будет.
         </div>
       </details>
+
+      {/* Ввод */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+        <div className="flex items-end gap-2">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={2}
+            placeholder="Написать сообщение…"
+            className="flex-1 resize-none rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none placeholder-white/40"
+          />
+          <button
+            type="button"
+            onClick={onSend}
+            className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
+            disabled={draft.trim().length === 0}
+            title="Отправить"
+          >
+            Отправить
+          </button>
+        </div>
+      </div>
 
       {/* Оверлей звонка (мок) */}
       {overlay && (

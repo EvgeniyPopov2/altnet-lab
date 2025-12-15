@@ -231,7 +231,7 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen flex">
+    <div className="h-screen flex overflow-hidden">
       {/* ЛЕВЫЙ БАР */}
       <motion.aside
         className="transition-all duration-200 bg-white/5 border-r border-white/10 flex flex-col gap-3 py-3"
@@ -368,10 +368,11 @@ export default function App() {
           </div>
         </header>
 
-        <div className="p-4">
+        <div className="flex-1 p-4 overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.main
               key={section + (builderOpen ? "-builder" : "")}
+              className="h-full"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
