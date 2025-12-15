@@ -372,7 +372,7 @@ export default function App() {
           <AnimatePresence mode="wait">
             <motion.main
               key={section + (builderOpen ? "-builder" : "")}
-              className="h-full"
+              className="h-full min-h-0"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}

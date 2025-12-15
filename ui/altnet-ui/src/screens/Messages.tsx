@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContactCapabilities, PrivacyProfile } from "../core/policy/types";
 import { computeEsm } from "../core/policy/esm";
 import { checkSendMessage, checkStartCall } from "../core/policy/decisions";
@@ -18,6 +18,40 @@ type CallOverlay = {
   esmText: string;
   rtcText: string;
 };
+
+type ChatMsg = {
+  id: string;
+  from: "me" | "them";
+  who: string;
+  time: string;
+  text: string;
+};
+
+function seedMessages(dm: DmContact): ChatMsg[] {
+  return [
+    {
+      id: "m1",
+      from: "them",
+      who: dm.title,
+      time: "12:04",
+      text: "Привет. Тут будет CRDT-журнал (мок) + вложения CID.",
+    },
+    {
+      id: "m2",
+      from: "me",
+      who: "Вы",
+      time: "12:06",
+      text: "Ок. Сейчас делаем политику + UX подсказки (Security Coach).",
+    },
+  ];
+}
+
+function nowHHMM(): string {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
 
 function badgeClass(kind: "ok" | "warn" | "deny") {
   switch (kind) {
@@ -66,6 +100,21 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
 
   const [draft, setDraft] = useState("");
   const [overlay, setOverlay] = useState<CallOverlay | null>(null);
+
+  // MVP мок-история + автоскролл
+  const [messages, setMessages] = useState<ChatMsg[]>(() => seedMessages(dm));
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // При смене чата — сбрасываем мок-историю, чтобы не смешивать контексты
+    setMessages(seedMessages(dm));
+    setDraft("");
+    setOverlay(null);
+  }, [dm.id]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length]);
 
   const e2eBadge = e2eReady ? (
     <Badge kind="ok" title="Сквозное шифрование установлено">
@@ -127,7 +176,20 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
       return;
     }
 
-    // MVP мок: просто очищаем поле
+    const text = draft.trim();
+    if (text.length === 0) return;
+
+    // MVP мок: добавляем сообщение в локальную ленту
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `m_${Date.now()}`,
+        from: "me",
+        who: "Вы",
+        time: nowHHMM(),
+        text,
+      },
+    ]);
     setDraft("");
   }
 
@@ -203,26 +265,8 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
       {/* Лента сообщений (мок) */}
       <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-4">
         <div className="space-y-3 text-sm">
-          {[
-            {
-              id: "m1",
-              from: "them" as const,
-              who: dm.title,
-              time: "12:04",
-              text: "Привет. Тут будет CRDT-журнал (мок) + вложения CID.",
-            },
-            {
-              id: "m2",
-              from: "me" as const,
-              who: "Вы",
-              time: "12:06",
-              text: "Ок. Сейчас делаем политику + UX подсказки (Security Coach).",
-            },
-          ].map((m) => (
-            <div
-              key={m.id}
-              className={["flex", m.from === "me" ? "justify-end" : "justify-start"].join(" ")}
-            >
+          {messages.map((m) => (
+            <div key={m.id} className={["flex", m.from === "me" ? "justify-end" : "justify-start"].join(" ")}>
               <div
                 className={[
                   "max-w-[78%] rounded-2xl px-4 py-2 border",
@@ -234,7 +278,7 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
                 <div className="text-[11px] text-white/50 mb-1">
                   {m.who} · {m.time}
                 </div>
-                <div className="leading-relaxed">{m.text}</div>
+                <div className="leading-relaxed whitespace-pre-wrap">{m.text}</div>
               </div>
             </div>
           ))}
@@ -242,6 +286,30 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
           <div className="text-xs text-white/50 pt-2">
             Примечание: без E2E контекста отправка обязана быть заблокирована (fail-closed).
           </div>
+
+          <div ref={endRef} />
+        </div>
+      </div>
+
+      {/* Ввод */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+        <div className="flex items-end gap-2">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={2}
+            placeholder="Написать сообщение…"
+            className="flex-1 resize-none rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none placeholder-white/40"
+          />
+          <button
+            type="button"
+            onClick={onSend}
+            className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
+            disabled={draft.trim().length === 0}
+            title="Отправить"
+          >
+            Отправить
+          </button>
         </div>
       </div>
 
@@ -266,32 +334,8 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
             <span>Разрешить видео в Anon</span>
           </label>
         </div>
-        <div className="mt-3 text-xs text-white/60">
-          Эти переключатели имитируют сигналы TAL/crypto. В проде их не будет.
-        </div>
+        <div className="mt-3 text-xs text-white/60">Эти переключатели имитируют сигналы TAL/crypto. В проде их не будет.</div>
       </details>
-
-      {/* Ввод */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-        <div className="flex items-end gap-2">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            rows={2}
-            placeholder="Написать сообщение…"
-            className="flex-1 resize-none rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none placeholder-white/40"
-          />
-          <button
-            type="button"
-            onClick={onSend}
-            className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
-            disabled={draft.trim().length === 0}
-            title="Отправить"
-          >
-            Отправить
-          </button>
-        </div>
-      </div>
 
       {/* Оверлей звонка (мок) */}
       {overlay && (
