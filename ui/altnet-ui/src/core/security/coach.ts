@@ -71,7 +71,7 @@ export const SecurityCoach = {
 
   suspectedCompromise() {
     const dedupeKey = "security/compromise";
-    pushOnce(dedupeKey, () => ({
+    pushSecurityEvent({
       severity: "critical",
       code: "SUSPECTED_COMPROMISE",
       title: "Подозрение на компрометацию",
@@ -99,12 +99,7 @@ export const SecurityCoach = {
             });
           },
         },
-        {
-          label: "Не показывать снова",
-          kind: "ghost",
-          onClick: () => dismiss(dedupeKey),
-        },
       ],
-    }));
+    });
   },
 };

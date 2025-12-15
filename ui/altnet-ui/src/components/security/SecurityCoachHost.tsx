@@ -260,7 +260,7 @@ export function SecurityCoachHost() {
                     </div>
                   )}
 
-                  {ev.dedupeKey && (
+                  {ev.dedupeKey && ev.severity !== "critical" && (
                     <div className="mt-2 text-[11px] text-slate-400">
                       <button
                         type="button"
