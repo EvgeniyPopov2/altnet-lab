@@ -1,4 +1,3 @@
-import React from "react";
 import type { ShortcodeBlock } from "../../types";
 
 function parse(sc: string) {

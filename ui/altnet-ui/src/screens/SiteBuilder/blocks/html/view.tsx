@@ -1,5 +1,3 @@
-import React from "react";
-
 type HtmlBlockLike = { html?: string; content?: string; title?: string };
 
 function sanitize(html: string) {
