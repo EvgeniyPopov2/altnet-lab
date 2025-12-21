@@ -14,6 +14,7 @@ import { usePrivacyProfile } from "./core/settings/profile";
 import { SecurityCoach } from "./core/security/coach";
 import { usePanicMode } from "./core/security/usePanicMode";
 import { SecurityCoachHost } from "./components/security/SecurityCoachHost";
+import CallWindow, { type CallWindowModel } from "./components/rtc/CallWindow";
 
 type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "profile";
 type RailView = "global" | "messages" | "servers";
@@ -77,6 +78,49 @@ export default function App() {
 
   // === Паника (локальный fail-closed режим) ===
   const [panic, setPanic] = usePanicMode();
+
+  // === Глобальное окно звонка (UI) ===
+  const [call, setCall] = useState<CallWindowModel | null>(null);
+
+  const openCall = (next: CallWindowModel) => {
+    if (panic) {
+      SecurityCoach.deniedByPolicy({
+        ok: false,
+        code: "PANIC_MODE",
+        title: "Действие заблокировано",
+        message: "Паника включена: звонки заблокированы (fail-closed).",
+        details: ["Выключите «Панику», чтобы продолжить."],
+      });
+      return;
+    }
+
+    if (call) {
+      SecurityCoach.deniedByPolicy({
+        ok: false,
+        code: "CALL_ALREADY_ACTIVE",
+        title: "Уже есть активный звонок",
+        message: "Сейчас поддерживаем один звонок за раз. Завершите текущий звонок, чтобы начать новый.",
+        details: ["Если звонок «завис» — нажмите «Завершить» в окне звонка."],
+      });
+      return;
+    }
+
+    setCall(next);
+  };
+
+  useEffect(() => {
+    if (panic && call) {
+      setCall(null);
+      SecurityCoach.deniedByPolicy({
+        ok: false,
+        code: "CALL_ENDED_BY_PANIC",
+        title: "Звонок завершён",
+        message: "Паника включена: текущий звонок завершён и сетевые действия заблокированы.",
+        details: ["Выключите «Панику», когда будете готовы продолжить."],
+      });
+    }
+  }, [panic, call]);
+
 
   // Данные (моки)
   const dmList: DmContact[] = useMemo(
@@ -393,7 +437,7 @@ export default function App() {
                 </div>
               )}
 
-              {section === "messages" && selectedDm && <Messages profile={profile} dm={selectedDm} />}
+              {section === "messages" && selectedDm && <Messages profile={profile} dm={selectedDm} onStartCall={openCall} />}
 
               {section === "servers" && selectedServer && <Servers profile={profile} server={selectedServer} />}
 
@@ -462,6 +506,8 @@ export default function App() {
 
       {/* Security Coach popover */}
       <SecurityCoachHost />
+      {/* Call Window */}
+      <CallWindow call={call} onEnd={() => setCall(null)} />
     </div>
   );
 }

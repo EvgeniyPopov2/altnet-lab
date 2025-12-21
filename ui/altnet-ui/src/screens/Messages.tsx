@@ -4,19 +4,13 @@ import { computeEsm } from "../core/policy/esm";
 import { checkSendMessage, checkStartCall } from "../core/policy/decisions";
 import { SecurityCoach } from "../core/security/coach";
 import { usePanicMode } from "../core/security/usePanicMode";
+import type { CallWindowModel } from "../components/rtc/CallWindow";
 
 export type DmContact = {
   id: string;
   title: string;
   subtitle?: string;
   caps: ContactCapabilities;
-};
-
-type CallOverlay = {
-  kind: "voice" | "video";
-  title: string;
-  esmText: string;
-  rtcText: string;
 };
 
 type ChatMsg = {
@@ -87,7 +81,15 @@ function Badge({
   );
 }
 
-export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm: DmContact }) {
+export default function Messages({
+  profile,
+  dm,
+  onStartCall,
+}: {
+  profile: PrivacyProfile;
+  dm: DmContact;
+  onStartCall: (call: CallWindowModel) => void;
+}) {
   const [panic, setPanic] = usePanicMode();
 
   // Моки “готовности” (в реале придут из TAL/crypto)
@@ -99,6 +101,14 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
   const esm = useMemo(() => computeEsm(profile, dm.caps), [profile, dm.caps]);
 
   const [draft, setDraft] = useState("");
+
+  type CallOverlay = {
+    kind: "voice" | "video";
+    title: string;
+    esmText: string;
+    rtcText: string;
+  };
+
   const [overlay, setOverlay] = useState<CallOverlay | null>(null);
 
   // MVP мок-история + автоскролл
@@ -217,7 +227,7 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
     const esmText = `${decision.esm.family.toUpperCase()}${decision.esm.compat ? " (compat)" : ""}`;
     const rtcText = decision.rtc?.note ?? "RTC: —";
 
-    setOverlay({
+    onStartCall({
       kind,
       title: dm.title,
       esmText,
@@ -349,6 +359,7 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
                 <div className="mt-1 text-sm text-white/70">Сессия: {overlay.esmText}</div>
                 <div className="text-sm text-white/70">{overlay.rtcText}</div>
               </div>
+
               <button
                 type="button"
                 className="rounded-lg px-3 py-1.5 bg-white/10 hover:bg-white/20 text-sm"
@@ -376,6 +387,7 @@ export default function Messages({ profile, dm }: { profile: PrivacyProfile; dm:
           </div>
         </div>
       )}
+
     </div>
   );
 }
