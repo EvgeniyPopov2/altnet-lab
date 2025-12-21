@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls, useMotionValue } from "framer-motion";
+import type { EffectiveSessionMode, RtcPolicy } from "../../core/policy/types";
 
 export type CallParticipant = {
   id: string;
@@ -14,8 +15,17 @@ export type CallParticipant = {
 export type CallWindowModel = {
   kind: "voice" | "video";
   title: string;
-  esmText: string;
-  rtcText: string;
+
+  /**
+   * Политика сессии (что именно было разрешено policy-движком на момент старта).
+   * Это НЕ “живая” политика: если пользователь потом переключит профиль —
+   * в MVP мы не пересчитываем её и не “дропаем” звонок автоматически.
+   * (Сделаем на следующих шагах.)
+   */
+  policy: {
+    esm: EffectiveSessionMode;
+    rtc: RtcPolicy;
+  };
 
   /**
    * Для группового звонка/голосового канала — мок списка участников.
@@ -176,6 +186,17 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
     return durationMmSs(tick - startedAt);
   }, [call, phase, tick, startedAt]);
 
+  const esmText = useMemo(() => {
+    if (!call) return "";
+    const esm = call.policy.esm;
+    return `${esm.family.toUpperCase()}${esm.compat ? " (compat)" : ""}`;
+  }, [call]);
+
+  const rtcText = useMemo(() => {
+    if (!call) return "";
+    return call.policy.rtc.note;
+  }, [call]);
+
   function persistPos() {
     if (typeof window === "undefined") return;
     try {
@@ -252,10 +273,10 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
                     🔒 E2E
                   </span>
                   <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-white/80">
-                    {call.esmText}
+                    {esmText}
                   </span>
                   <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-white/70">
-                    {call.rtcText}
+                    {rtcText}
                   </span>
                 </div>
 
@@ -373,8 +394,13 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
                 <details className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <summary className="cursor-pointer text-sm text-white/80">Детали соединения</summary>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-white/60">
-                    <li>Сессия: {call.esmText}</li>
-                    <li>{call.rtcText}</li>
+                    <li>Сессия: {esmText}</li>
+                    <li>{rtcText}</li>
+                    <li>
+                      ICE: {call.policy.rtc.iceTransportPolicy === "relay" ? "relay-only" : "all"}
+                      {call.policy.rtc.requireTurnAllowList ? " (TURN allow-list required)" : ""}
+                    </li>
+                    <li>STUN: {call.policy.rtc.allowStun ? "allowed" : "blocked"}</li>
                     <li>MVP: реальные WebRTC/WebTransport пайплайны подключим позже.</li>
                   </ul>
                 </details>

@@ -2,9 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContactCapabilities, PrivacyProfile } from "../core/policy/types";
 import { computeEsm } from "../core/policy/esm";
 import { checkSendMessage, checkStartCall } from "../core/policy/decisions";
+import { computeRtcPolicy } from "../core/policy/rtc";
 import { SecurityCoach } from "../core/security/coach";
 import { usePanicMode } from "../core/security/usePanicMode";
+import { GuardedActionButton } from "../components/policy/GuardedActionButton";
 import type { CallWindowModel } from "../components/rtc/CallWindow";
+
 
 export type ServerItem = {
   id: string;
@@ -271,6 +274,113 @@ export default function Servers({
     </button>
   ) : null;
 
+  // Превью-проверка звонков в голосовом канале
+  // (нужно для disabled-state кнопок + popover "почему заблокировано")
+  const voiceCallPreview = useMemo(() => {
+    const ch = selectedChannel;
+    if (!ch || ch.kind !== "voice") {
+      return {
+        ok: false as const,
+        code: "NO_CHANNEL",
+        title: "Канал не выбран",
+        message: "Выберите голосовой канал, чтобы начать звонок.",
+      };
+    }
+    if (!canAccess(myRole, ch)) {
+      return {
+        ok: false as const,
+        code: "NO_PERMISSION",
+        title: "Нет доступа к каналу",
+        message: `Нужна роль: ${roleLabel(ch.minRole ?? "guest")} (текущая: ${roleLabel(myRole)}).`,
+        details: [
+          "Попросите администратора повысить роль (мок).",
+          "Либо выберите другой канал.",
+        ],
+      };
+    }
+    if (panic) {
+      return {
+        ok: false as const,
+        code: "PANIC_MODE",
+        title: "Действие заблокировано",
+        message: "Паника включена: звонок заблокирован (fail-closed).",
+        details: ["Выключите «Панику», чтобы продолжить."],
+      };
+    }
+    return checkStartCall({
+      kind: "voice",
+      localProfile: profile,
+      contact: caps,
+      e2eReady,
+      anonPathReady,
+      hasTurnAllowList,
+      allowVideoInAnon,
+    });
+  }, [
+    selectedChannel,
+    myRole,
+    panic,
+    profile,
+    caps,
+    e2eReady,
+    anonPathReady,
+    hasTurnAllowList,
+    allowVideoInAnon,
+  ]);
+
+  const videoCallPreview = useMemo(() => {
+    const ch = selectedChannel;
+    if (!ch || ch.kind !== "voice") {
+      return {
+        ok: false as const,
+        code: "NO_CHANNEL",
+        title: "Канал не выбран",
+        message: "Выберите голосовой канал, чтобы начать звонок.",
+      };
+    }
+    if (!canAccess(myRole, ch)) {
+      return {
+        ok: false as const,
+        code: "NO_PERMISSION",
+        title: "Нет доступа к каналу",
+        message: `Нужна роль: ${roleLabel(ch.minRole ?? "guest")} (текущая: ${roleLabel(myRole)}).`,
+
+        details: [
+          "Попросите администратора повысить роль (мок).",
+          "Либо выберите другой канал.",
+        ],
+      };
+    }
+    if (panic) {
+      return {
+        ok: false as const,
+        code: "PANIC_MODE",
+        title: "Действие заблокировано",
+        message: "Паника включена: звонок заблокирован (fail-closed).",
+        details: ["Выключите «Панику», чтобы продолжить."],
+      };
+    }
+    return checkStartCall({
+      kind: "video",
+      localProfile: profile,
+      contact: caps,
+      e2eReady,
+      anonPathReady,
+      hasTurnAllowList,
+      allowVideoInAnon,
+    });
+  }, [
+    selectedChannel,
+    myRole,
+    panic,
+    profile,
+    caps,
+    e2eReady,
+    anonPathReady,
+    hasTurnAllowList,
+    allowVideoInAnon,
+  ]);
+
   function denyByUi(reason: string) {
     SecurityCoach.deniedByPolicy({
       ok: false,
@@ -375,14 +485,13 @@ export default function Servers({
       return;
     }
 
-    const esmText = `${decision.esm.family.toUpperCase()}${decision.esm.compat ? " (compat)" : ""}`;
-    const rtcText = decision.rtc?.note ?? "RTC: —";
-
     onStartCall({
       kind,
       title: `${server.title} · ${selectedChannel.title}`,
-      esmText,
-      rtcText,
+      policy: {
+        esm: decision.esm,
+        rtc: decision.rtc ?? computeRtcPolicy(decision.esm),
+      },
       participants: [
         { id: "me", name: "Вы", label: roleLabel(myRole), muted: false },
         { id: `sv:${server.id}:alice`, name: "Алиса", label: "участник", muted: false },
@@ -475,22 +584,20 @@ export default function Servers({
 
                 {selectedChannel.kind === "voice" && (
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onCall("voice")}
-                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
+                    <GuardedActionButton
+                      icon="📞"
                       title="Голосовой звонок (групповой)"
-                    >
-                      📞
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onCall("video")}
-                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
+                      decision={voiceCallPreview}
+                      onAllowed={() => onCall("voice")}
+                      onDenied={(d) => SecurityCoach.deniedByPolicy(d)}
+                    />
+                    <GuardedActionButton
+                      icon="🎥"
                       title="Видео (групповой)"
-                    >
-                      🎥
-                    </button>
+                      decision={videoCallPreview}
+                      onAllowed={() => onCall("video")}
+                      onDenied={(d) => SecurityCoach.deniedByPolicy(d)}
+                    />
                   </div>
                 )}
               </div>

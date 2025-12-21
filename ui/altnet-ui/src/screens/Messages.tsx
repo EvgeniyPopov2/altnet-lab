@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContactCapabilities, PrivacyProfile } from "../core/policy/types";
 import { computeEsm } from "../core/policy/esm";
 import { checkSendMessage, checkStartCall } from "../core/policy/decisions";
+import { computeRtcPolicy } from "../core/policy/rtc";
 import { SecurityCoach } from "../core/security/coach";
 import { usePanicMode } from "../core/security/usePanicMode";
 import type { CallWindowModel } from "../components/rtc/CallWindow";
+import { GuardedActionButton } from "../components/policy/GuardedActionButton";
 
 export type DmContact = {
   id: string;
@@ -99,6 +101,57 @@ export default function Messages({
   const [allowVideoInAnon, setAllowVideoInAnon] = useState(false);
 
   const esm = useMemo(() => computeEsm(profile, dm.caps), [profile, dm.caps]);
+
+  // Превью-проверка звонков (для UI состояния кнопок + popover "почему заблокировано")
+  const voiceCallPreview = useMemo(() => {
+    if (panic) {
+      return {
+        ok: false as const,
+        code: "PANIC_MODE",
+        title: "Паника включена",
+        message: "Сетевые действия временно заблокированы (fail-closed).",
+        details: [
+          "Отключите \"Панику\", если вы уверены, что устройство не скомпрометировано.",
+          "Если есть риск компрометации — сначала выполните отзыв/ротацию ключей в Security Center.",
+        ],
+      };
+    }
+
+    return checkStartCall({
+      kind: "voice",
+      localProfile: profile,
+      contact: dm.caps,
+      e2eReady,
+      anonPathReady,
+      hasTurnAllowList,
+      allowVideoInAnon,
+    });
+  }, [panic, profile, dm.caps, e2eReady, anonPathReady, hasTurnAllowList, allowVideoInAnon]);
+
+  const videoCallPreview = useMemo(() => {
+    if (panic) {
+      return {
+        ok: false as const,
+        code: "PANIC_MODE",
+        title: "Паника включена",
+        message: "Сетевые действия временно заблокированы (fail-closed).",
+        details: [
+          "Отключите \"Панику\", если вы уверены, что устройство не скомпрометировано.",
+          "Если есть риск компрометации — сначала выполните отзыв/ротацию ключей в Security Center.",
+        ],
+      };
+    }
+
+    return checkStartCall({
+      kind: "video",
+      localProfile: profile,
+      contact: dm.caps,
+      e2eReady,
+      anonPathReady,
+      hasTurnAllowList,
+      allowVideoInAnon,
+    });
+  }, [panic, profile, dm.caps, e2eReady, anonPathReady, hasTurnAllowList, allowVideoInAnon]);
 
   const [draft, setDraft] = useState("");
 
@@ -214,14 +267,13 @@ export default function Messages({
       return;
     }
 
-    const esmText = `${decision.esm.family.toUpperCase()}${decision.esm.compat ? " (compat)" : ""}`;
-    const rtcText = decision.rtc?.note ?? "RTC: —";
-
     onStartCall({
       kind,
       title: dm.title,
-      esmText,
-      rtcText,
+      policy: {
+        esm: decision.esm,
+        rtc: decision.rtc ?? computeRtcPolicy(decision.esm),
+      },
       participants: [
         { id: "me", name: "Вы", label: "вы" },
         { id: dm.id, name: dm.title, label: "контакт" },
@@ -246,22 +298,20 @@ export default function Messages({
 
             <div className="h-6 w-px bg-white/10 mx-1" />
 
-            <button
-              type="button"
-              onClick={() => onCall("voice")}
-              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
+            <GuardedActionButton
+              icon="📞"
               title="Голосовой звонок"
-            >
-              📞
-            </button>
-            <button
-              type="button"
-              onClick={() => onCall("video")}
-              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
+              decision={voiceCallPreview}
+              onAllowed={() => onCall("voice")}
+              onDenied={(d) => SecurityCoach.deniedByPolicy(d)}
+            />
+            <GuardedActionButton
+              icon="🎥"
               title="Видео-звонок"
-            >
-              🎥
-            </button>
+              decision={videoCallPreview}
+              onAllowed={() => onCall("video")}
+              onDenied={(d) => SecurityCoach.deniedByPolicy(d)}
+            />
           </div>
         </div>
       </div>
