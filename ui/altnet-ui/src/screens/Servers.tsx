@@ -11,29 +11,31 @@ export type ServerItem = {
   subtitle?: string;
 };
 
-type ChannelKind = "text" | "voice" | "stage";
+type ChannelKind = "text" | "wiki" | "files" | "voice";
+
+type Role = "guest" | "member" | "mod" | "admin" | "owner";
 
 type Channel = {
   id: string;
   kind: ChannelKind;
   title: string;
-  hint?: string;
-};
-
-type CallOverlay = {
-  kind: "voice" | "video";
-  serverTitle: string;
-  channelTitle: string;
-  esmText: string;
-  rtcText: string;
+  desc?: string;
+  minRole?: Role;
 };
 
 type ChatMsg = {
   id: string;
-  from: "me" | "them";
+  from: "me" | "them" | "sys";
   who: string;
   time: string;
   text: string;
+};
+
+type CallOverlay = {
+  kind: "voice" | "video";
+  title: string;
+  esmText: string;
+  rtcText: string;
 };
 
 function nowHHMM(): string {
@@ -41,81 +43,6 @@ function nowHHMM(): string {
   const hh = String(now.getHours()).padStart(2, "0");
   const mm = String(now.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
-}
-
-function seedChannelMessages(server: ServerItem, ch: Channel): ChatMsg[] {
-  if (ch.kind !== "text") return [];
-
-  const sys = (text: string): ChatMsg => ({
-    id: `sys_${server.id}_${ch.id}_${text}`,
-    from: "them",
-    who: "Система",
-    time: "—",
-    text,
-  });
-
-  return [
-    sys(`Добро пожаловать в ${server.title} → #${ch.title}.`),
-    {
-      id: `m_${server.id}_${ch.id}_1`,
-      from: "them",
-      who: "Модератор",
-      time: "11:57",
-      text: "Тут будет CRDT-журнал каналов + роли/права (моки).",
-    },
-    {
-      id: `m_${server.id}_${ch.id}_2`,
-      from: "me",
-      who: "Вы",
-      time: "11:59",
-      text: "Ок. Сейчас делаем каналы + политику для групповых звонков (fail-closed).",
-    },
-  ];
-}
-
-function channelGroups(server: ServerItem): {
-  text: Channel[];
-  voice: Channel[];
-  stage: Channel[];
-} {
-  // MVP мок: набор каналов зависит от сервера, но пока статический.
-  // Позже придёт из CRDT-метаданных сервера.
-  const text: Channel[] = [
-    { id: "t_general", kind: "text", title: "общий", hint: "объявления и чат" },
-    { id: "t_dev", kind: "text", title: "разработка", hint: "вопросы/идеи" },
-    { id: "t_wiki", kind: "text", title: "вики", hint: "страницы/правки" },
-  ];
-
-  const voice: Channel[] = [
-    { id: "v_lobby", kind: "voice", title: "Лобби", hint: "голос" },
-    { id: "v_raid", kind: "voice", title: "Рейд", hint: "голос" },
-  ];
-
-  const stage: Channel[] = [{ id: "s_stage", kind: "stage", title: "Сцена", hint: "видео/стрим" }];
-
-  // Можно слегка варьировать подсказки по server.id
-  if (server.id === "mid") {
-    stage[0] = { ...stage[0], title: "Showcase", hint: "видео/демо" };
-  }
-
-  return { text, voice, stage };
-}
-
-function serverCaps(server: ServerItem): ContactCapabilities {
-  // MVP мок: у разных серверов разная “доступность путей”.
-  // В будущем это будет: (onion addr?, i2p?, ygg?, wg?)
-  switch (server.id) {
-    case "wt":
-      return { contactId: `server:${server.id}`, supportsAnon: false, supportsFast: true };
-    case "cheb":
-      return { contactId: `server:${server.id}`, supportsAnon: true, supportsFast: true };
-    case "altdev":
-      return { contactId: `server:${server.id}`, supportsAnon: true, supportsFast: true };
-    case "mid":
-      return { contactId: `server:${server.id}`, supportsAnon: false, supportsFast: true };
-    default:
-      return { contactId: `server:${server.id}`, supportsAnon: true, supportsFast: true };
-  }
 }
 
 function badgeClass(kind: "ok" | "warn" | "deny") {
@@ -142,11 +69,111 @@ function Badge({
   return (
     <span
       title={title}
-      className={["inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs", badgeClass(kind)].join(" ")}
+      className={[
+        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs",
+        badgeClass(kind),
+      ].join(" ")}
     >
       {children}
     </span>
   );
+}
+
+const ROLE_LEVEL: Record<Role, number> = {
+  guest: 0,
+  member: 1,
+  mod: 2,
+  admin: 3,
+  owner: 4,
+};
+
+function roleLabel(r: Role): string {
+  switch (r) {
+    case "guest":
+      return "Гость";
+    case "member":
+      return "Участник";
+    case "mod":
+      return "Модератор";
+    case "admin":
+      return "Админ";
+    case "owner":
+      return "Владелец";
+    default:
+      return r;
+  }
+}
+
+function kindIcon(k: ChannelKind): string {
+  switch (k) {
+    case "text":
+      return "#";
+    case "wiki":
+      return "📚";
+    case "files":
+      return "🗂️";
+    case "voice":
+      return "🔊";
+    default:
+      return "•";
+  }
+}
+
+function seedChannels(server: ServerItem): Channel[] {
+  // MVP: фиксированные каналы, роли — моки
+  if (server.id === "mid") {
+    return [
+      { id: "ann", kind: "text", title: "announcements", desc: "Новости и правила", minRole: "guest" },
+      { id: "gen", kind: "text", title: "general", desc: "Общий чат", minRole: "member" },
+      { id: "voice", kind: "voice", title: "voice", desc: "Голосовой (мок)", minRole: "member" },
+    ];
+  }
+
+  return [
+    { id: "ann", kind: "text", title: "announcements", desc: "Правила, новости", minRole: "guest" },
+    { id: "gen", kind: "text", title: "general", desc: "Общий чат", minRole: "member" },
+    { id: "ops", kind: "text", title: "ops", desc: "Только модераторы", minRole: "mod" },
+    { id: "wiki", kind: "wiki", title: "wiki", desc: "CRDT-вики (позже)", minRole: "member" },
+    { id: "files", kind: "files", title: "files", desc: "CID-полка (позже)", minRole: "member" },
+    { id: "voice", kind: "voice", title: "voice", desc: "Голосовой (мок)", minRole: "member" },
+  ];
+}
+
+function seedMessages(server: ServerItem, channels: Channel[]): Record<string, ChatMsg[]> {
+  const base: Record<string, ChatMsg[]> = {};
+  for (const ch of channels) {
+    if (ch.kind !== "text") continue;
+
+    base[ch.id] = [
+      {
+        id: `s_${server.id}_${ch.id}_1`,
+        from: "sys",
+        who: "Система",
+        time: "12:00",
+        text: `Добро пожаловать в ${server.title} → #${ch.title}. (MVP: моки)`,
+      },
+      {
+        id: `s_${server.id}_${ch.id}_2`,
+        from: "them",
+        who: "Alice",
+        time: "12:03",
+        text: "Тут будут каналы/права/CRDT журналы. Сейчас — UI + политика (fail-closed).",
+      },
+      {
+        id: `s_${server.id}_${ch.id}_3`,
+        from: "me",
+        who: "Вы",
+        time: "12:06",
+        text: "Ок. Дальше делаем серверные каналы и голос (моки).",
+      },
+    ];
+  }
+  return base;
+}
+
+function canAccess(role: Role, ch: Channel): boolean {
+  const min = ch.minRole ?? "guest";
+  return ROLE_LEVEL[role] >= ROLE_LEVEL[min];
 }
 
 export default function Servers({ profile, server }: { profile: PrivacyProfile; server: ServerItem }) {
@@ -158,45 +185,51 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
   const [hasTurnAllowList, setHasTurnAllowList] = useState(true);
   const [allowVideoInAnon, setAllowVideoInAnon] = useState(false);
 
-  const caps = useMemo(() => serverCaps(server), [server.id]);
+  // Роль пользователя в этом сервере (мок)
+  const [myRole, setMyRole] = useState<Role>("member");
+  const [showLocked, setShowLocked] = useState(true);
+
+  // Капабилити сервера (пока мок: в будущем это будет из профиля/ТАЛ/объявления сервера)
+  const caps: ContactCapabilities = useMemo(() => {
+    switch (server.id) {
+      case "cheb":
+        return { contactId: `sv:${server.id}`, supportsAnon: true, supportsFast: false };
+      case "mid":
+        return { contactId: `sv:${server.id}`, supportsAnon: false, supportsFast: true };
+      default:
+        return { contactId: `sv:${server.id}`, supportsAnon: true, supportsFast: true };
+    }
+  }, [server.id]);
+
   const esm = useMemo(() => computeEsm(profile, caps), [profile, caps]);
 
-  const groups = useMemo(() => channelGroups(server), [server.id]);
-  const allChannels = useMemo(() => [...groups.text, ...groups.voice, ...groups.stage], [groups]);
+  const channels = useMemo(() => seedChannels(server), [server.id]);
+  const [channelId, setChannelId] = useState<string>(() => channels[0]?.id ?? "gen");
 
-  const [selectedChannelId, setSelectedChannelId] = useState<string>(() => groups.text[0]?.id ?? "");
-  const selectedChannel = useMemo(
-    () => allChannels.find((c) => c.id === selectedChannelId) ?? allChannels[0],
-    [allChannels, selectedChannelId]
-  );
+  const selectedChannel = useMemo(() => {
+    return channels.find((c) => c.id === channelId) ?? channels[0];
+  }, [channels, channelId]);
 
-  // Сообщения по текст-каналам
-  const [messagesByChannel, setMessagesByChannel] = useState<Record<string, ChatMsg[]>>(() => {
-    const init: Record<string, ChatMsg[]> = {};
-    for (const ch of groups.text) init[ch.id] = seedChannelMessages(server, ch);
-    return init;
-  });
   const [draft, setDraft] = useState("");
-  const endRef = useRef<HTMLDivElement | null>(null);
-
   const [overlay, setOverlay] = useState<CallOverlay | null>(null);
 
-  // При смене сервера — сбрасываем каналы/историю (пока мок)
+  const [messagesByCh, setMessagesByCh] = useState<Record<string, ChatMsg[]>>(() => seedMessages(server, channels));
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  // При смене сервера — сбросить состояние
   useEffect(() => {
-    const init: Record<string, ChatMsg[]> = {};
-    const newGroups = channelGroups(server);
-    for (const ch of newGroups.text) init[ch.id] = seedChannelMessages(server, ch);
-    setMessagesByChannel(init);
-    setSelectedChannelId(newGroups.text[0]?.id ?? newGroups.voice[0]?.id ?? "");
+    const chs = seedChannels(server);
+    setChannelId(chs[0]?.id ?? "gen");
+    setMessagesByCh(seedMessages(server, chs));
     setDraft("");
     setOverlay(null);
   }, [server.id]);
 
-  const selectedMsgs = selectedChannel?.kind === "text" ? messagesByChannel[selectedChannel.id] ?? [] : [];
-
+  // Автоскролл для текста
   useEffect(() => {
+    if (!selectedChannel || selectedChannel.kind !== "text") return;
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [selectedChannelId, selectedMsgs.length]);
+  }, [selectedChannel?.id, messagesByCh[selectedChannel?.id ?? ""]?.length]);
 
   const e2eBadge = e2eReady ? (
     <Badge kind="ok" title="Сквозное шифрование установлено">
@@ -216,6 +249,12 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
   ) : (
     <Badge kind="deny" title={esm.reason}>
       ⛔ Нет пути
+    </Badge>
+  );
+
+  const roleBadge = (
+    <Badge kind="ok" title="Роль влияет на видимость каналов (мок)">
+      👤 {roleLabel(myRole)}
     </Badge>
   );
 
@@ -240,8 +279,32 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
     });
   }
 
+  function denyNoAccess(ch: Channel) {
+    const min = ch.minRole ?? "guest";
+    SecurityCoach.deniedByPolicy({
+      ok: false,
+      code: "NO_PERMISSION",
+      title: "Нет доступа к каналу",
+      message: `Канал «${ch.title}» доступен только для роли: ${roleLabel(min)} (и выше).`,
+      details: ["В MVP роли — моки. Позже тут будут реальные права сервера."],
+    });
+  }
+
+  function onSelectChannel(ch: Channel) {
+    if (!canAccess(myRole, ch)) {
+      denyNoAccess(ch);
+      return;
+    }
+    setChannelId(ch.id);
+  }
+
   function onSend() {
     if (!selectedChannel || selectedChannel.kind !== "text") return;
+
+    if (!canAccess(myRole, selectedChannel)) {
+      denyNoAccess(selectedChannel);
+      return;
+    }
 
     if (panic) {
       denyByUi("Паника включена: отправка заблокирована (fail-closed).");
@@ -263,18 +326,32 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
     const text = draft.trim();
     if (text.length === 0) return;
 
-    setMessagesByChannel((prev) => ({
-      ...prev,
-      [selectedChannel.id]: [
-        ...(prev[selectedChannel.id] ?? []),
-        { id: `m_${Date.now()}`, from: "me", who: "Вы", time: nowHHMM(), text },
-      ],
-    }));
+    setMessagesByCh((prev) => {
+      const cur = prev[selectedChannel.id] ?? [];
+      return {
+        ...prev,
+        [selectedChannel.id]: [
+          ...cur,
+          {
+            id: `m_${Date.now()}`,
+            from: "me",
+            who: "Вы",
+            time: nowHHMM(),
+            text,
+          },
+        ],
+      };
+    });
     setDraft("");
   }
 
-  function onJoin(kind: "voice" | "video") {
-    if (!selectedChannel) return;
+  function onCall(kind: "voice" | "video") {
+    if (!selectedChannel || selectedChannel.kind !== "voice") return;
+
+    if (!canAccess(myRole, selectedChannel)) {
+      denyNoAccess(selectedChannel);
+      return;
+    }
 
     if (panic) {
       denyByUi("Паника включена: звонки заблокированы (fail-closed).");
@@ -301,213 +378,262 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
 
     setOverlay({
       kind,
-      serverTitle: server.title,
-      channelTitle: selectedChannel.title,
+      title: `${server.title} · ${selectedChannel.title}`,
       esmText,
       rtcText,
     });
   }
 
-  const ChannelBtn = ({ ch }: { ch: Channel }) => {
-    const active = ch.id === selectedChannelId;
-    const icon = ch.kind === "text" ? "#" : ch.kind === "voice" ? "🔊" : "🎥";
+  const visibleChannels = useMemo(() => {
+    return showLocked ? channels : channels.filter((c) => canAccess(myRole, c));
+  }, [channels, showLocked, myRole]);
 
-    return (
-      <button
-        type="button"
-        onClick={() => setSelectedChannelId(ch.id)}
-        className={["w-full text-left rounded-xl px-3 py-2 transition", active ? "bg-white/15" : "bg-white/5 hover:bg-white/10"].join(" ")}
-        title={ch.hint}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-sm text-white/90 truncate">
-              <span className="text-white/60 mr-1">{icon}</span>
-              {ch.title}
-            </div>
-            {ch.hint && <div className="text-xs text-white/50 truncate">{ch.hint}</div>}
-          </div>
-          {active && <div className="text-xs text-white/50">●</div>}
-        </div>
-      </button>
-    );
-  };
+  const textMsgs = selectedChannel?.kind === "text" ? messagesByCh[selectedChannel.id] ?? [] : [];
 
   return (
-    <div className="h-full min-h-0 flex gap-4">
-      {/* Каналы */}
-      <aside className="w-[280px] shrink-0 rounded-2xl border border-white/10 bg-white/5 p-3 overflow-y-auto">
-        <div className="text-xs text-white/60 px-2">{server.title}</div>
-        <div className="mt-3 space-y-2">
-          <div className="text-[11px] uppercase tracking-wide text-white/40 px-2">Текст</div>
-          <div className="space-y-1">
-            {groups.text.map((ch) => (
-              <ChannelBtn key={ch.id} ch={ch} />
-            ))}
+    <div className="h-full min-h-0 flex flex-col gap-4">
+      {/* Заголовок сервера */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="text-white/90 font-semibold">{server.title}</div>
+            {server.subtitle && <div className="text-xs text-white/60">{server.subtitle}</div>}
           </div>
 
-          <div className="text-[11px] uppercase tracking-wide text-white/40 px-2 pt-2">Голос</div>
-          <div className="space-y-1">
-            {groups.voice.map((ch) => (
-              <ChannelBtn key={ch.id} ch={ch} />
-            ))}
-          </div>
-
-          <div className="text-[11px] uppercase tracking-wide text-white/40 px-2 pt-2">Сцена</div>
-          <div className="space-y-1">
-            {groups.stage.map((ch) => (
-              <ChannelBtn key={ch.id} ch={ch} />
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            {panicBadge}
+            {e2eBadge}
+            {sessionBadge}
+            {roleBadge}
           </div>
         </div>
-      </aside>
-
-      {/* Контент канала */}
-      <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-4">
-        {/* Заголовок сервера/сессии */}
-        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-white/90 font-semibold truncate">{server.title}</div>
-              {server.subtitle && <div className="text-xs text-white/60 truncate">{server.subtitle}</div>}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {panicBadge}
-              {e2eBadge}
-              {sessionBadge}
-            </div>
-          </div>
-        </div>
-
-        {/* Заголовок канала */}
-        {selectedChannel && (
-          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0">
-                <div className="text-white/90 font-semibold truncate">
-                  {selectedChannel.kind === "text" ? "#" : selectedChannel.kind === "voice" ? "🔊" : "🎥"} {selectedChannel.title}
-                </div>
-                {selectedChannel.hint && <div className="text-xs text-white/60 truncate">{selectedChannel.hint}</div>}
-              </div>
-
-              {selectedChannel.kind !== "text" && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onJoin("voice")}
-                    className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
-                    title="Подключиться к голосу"
-                  >
-                    📞 Войти
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onJoin("video")}
-                    className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
-                    title="Подключиться к видео/сцене"
-                  >
-                    🎥 Видео
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Текстовый канал: лента + ввод */}
-        {selectedChannel?.kind === "text" && (
-          <>
-            <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="space-y-3 text-sm">
-                {selectedMsgs.map((m) => (
-                  <div key={m.id} className={["flex", m.from === "me" ? "justify-end" : "justify-start"].join(" ")}>
-                    <div
-                      className={[
-                        "max-w-[78%] rounded-2xl px-4 py-2 border",
-                        m.from === "me" ? "bg-indigo-600/20 border-indigo-400/20 text-white/90" : "bg-white/5 border-white/10 text-white/90",
-                      ].join(" ")}
-                    >
-                      <div className="text-[11px] text-white/50 mb-1">
-                        {m.who} · {m.time}
-                      </div>
-                      <div className="leading-relaxed whitespace-pre-wrap">{m.text}</div>
-                    </div>
-                  </div>
-                ))}
-
-                <div className="text-xs text-white/50 pt-2">Примечание: без E2E отправка обязана быть заблокирована (fail-closed).</div>
-
-                <div ref={endRef} />
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-              <div className="flex items-end gap-2">
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  rows={2}
-                  placeholder={`Написать в #${selectedChannel.title}…`}
-                  className="flex-1 resize-none rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none placeholder-white/40"
-                />
-                <button
-                  type="button"
-                  onClick={onSend}
-                  className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
-                  disabled={draft.trim().length === 0}
-                  title="Отправить"
-                >
-                  Отправить
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Голос/сцена канал: заглушка */}
-        {selectedChannel && selectedChannel.kind !== "text" && (
-          <div className="flex-1 min-h-0 rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
-            <div className="text-sm text-white/70">Тут будет список участников и кнопки управления (mute/deafen/screen).</div>
-            <div className="mt-3 text-xs text-white/60">
-              Политика звонков применена так же, как в DM: без E2E/без безопасного пути/без TURN в Anon — запрещаем (fail‑closed).
-            </div>
-          </div>
-        )}
-
-        {/* Моки-переключатели */}
-        <details className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <summary className="cursor-pointer text-sm text-white/80">Моки (для разработки)</summary>
-          <div className="mt-3 grid sm:grid-cols-2 gap-3 text-sm">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={e2eReady} onChange={(e) => setE2eReady(e.target.checked)} />
-              <span>E2E готово</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={anonPathReady} onChange={(e) => setAnonPathReady(e.target.checked)} />
-              <span>Anon путь готов (Tor/I2P)</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={hasTurnAllowList} onChange={(e) => setHasTurnAllowList(e.target.checked)} />
-              <span>Есть allow-list TURN</span>
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" checked={allowVideoInAnon} onChange={(e) => setAllowVideoInAnon(e.target.checked)} />
-              <span>Разрешить видео в Anon</span>
-            </label>
-          </div>
-          <div className="mt-3 text-xs text-white/60">Эти переключатели имитируют сигналы TAL/crypto. В проде их не будет.</div>
-        </details>
       </div>
+
+      {/* Две колонки: каналы / контент */}
+      <div className="flex-1 min-h-0 flex gap-4 overflow-hidden">
+        <aside className="w-[260px] shrink-0 rounded-2xl border border-white/10 bg-white/5 flex flex-col min-h-0">
+          <div className="px-4 py-3 border-b border-white/10">
+            <div className="text-sm font-semibold text-white/90">Каналы</div>
+            <div className="text-xs text-white/60 mt-0.5">Видимость зависит от роли (мок)</div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
+            {visibleChannels.map((ch) => {
+              const allowed = canAccess(myRole, ch);
+              const active = selectedChannel?.id === ch.id;
+              return (
+                <button
+                  key={ch.id}
+                  type="button"
+                  onClick={() => onSelectChannel(ch)}
+                  className={[
+                    "w-full text-left rounded-xl px-3 py-2 border transition",
+                    active ? "bg-indigo-600/20 border-indigo-400/20" : "bg-transparent border-transparent hover:bg-white/5 hover:border-white/10",
+                    allowed ? "text-white/90" : "text-white/40 opacity-70",
+                  ].join(" ")}
+                  title={allowed ? ch.desc : `Нет доступа (нужна роль: ${roleLabel(ch.minRole ?? "guest")})`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold truncate">
+                        <span className="text-white/60 mr-2">{kindIcon(ch.kind)}</span>
+                        {ch.title}
+                      </div>
+                      {ch.desc && <div className="text-xs text-white/50 truncate mt-0.5">{ch.desc}</div>}
+                    </div>
+                    {!allowed && <div className="text-xs">🔒</div>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="px-4 py-3 border-t border-white/10">
+            <div className="text-xs text-white/60">Вы: {roleLabel(myRole)}</div>
+          </div>
+        </aside>
+
+        <section className="flex-1 min-h-0 flex flex-col gap-4 overflow-hidden">
+          {/* Заголовок канала */}
+          {selectedChannel && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-white/90 font-semibold truncate">
+                    {kindIcon(selectedChannel.kind)} {selectedChannel.kind === "text" ? "#" : ""}{selectedChannel.title}
+                  </div>
+                  {selectedChannel.desc && <div className="text-xs text-white/60 truncate">{selectedChannel.desc}</div>}
+                </div>
+
+                {selectedChannel.kind === "voice" && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onCall("voice")}
+                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
+                      title="Голосовой звонок (групповой)"
+                    >
+                      📞
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onCall("video")}
+                      className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
+                      title="Видео (групповой)"
+                    >
+                      🎥
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Контент */}
+          {selectedChannel?.kind === "text" && (
+            <>
+              <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="space-y-3 text-sm">
+                  {textMsgs.map((m) => {
+                    const align = m.from === "me" ? "justify-end" : "justify-start";
+                    const bubbleClass =
+                      m.from === "me"
+                        ? "bg-indigo-600/20 border-indigo-400/20 text-white/90"
+                        : m.from === "sys"
+                          ? "bg-white/10 border-white/10 text-white/80"
+                          : "bg-white/5 border-white/10 text-white/90";
+
+                    return (
+                      <div key={m.id} className={["flex", align].join(" ")}>
+                        <div className={["max-w-[78%] rounded-2xl px-4 py-2 border", bubbleClass].join(" ")}>
+                          <div className="text-[11px] text-white/50 mb-1">
+                            {m.who} · {m.time}
+                          </div>
+                          <div className="leading-relaxed whitespace-pre-wrap">{m.text}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="text-xs text-white/50 pt-2">
+                    Примечание: без E2E контекста отправка обязана быть заблокирована (fail-closed).
+                  </div>
+                  <div ref={endRef} />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+                <div className="flex items-end gap-2">
+                  <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    rows={2}
+                    placeholder="Написать сообщение…"
+                    className="flex-1 resize-none rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none placeholder-white/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={onSend}
+                    className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
+                    disabled={draft.trim().length === 0}
+                    title="Отправить"
+                  >
+                    Отправить
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {selectedChannel?.kind === "voice" && (
+            <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
+              <div className="text-sm">
+                Это голосовой канал. В MVP мы показываем UI-заглушку и проверяем политику (fail-closed).
+              </div>
+              <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/70">
+                <div className="font-semibold text-white/80">Текущая сессия</div>
+                <div className="mt-1">{esm.reason}</div>
+                <div className="mt-2 text-xs text-white/60">
+                  Кнопки 📞/🎥 сверху откроют оверлей звонка (мок) или покажут подсказку безопасности.
+                </div>
+              </div>
+            </div>
+          )}
+
+          {selectedChannel?.kind === "wiki" && (
+            <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
+              <div className="text-sm font-semibold text-white/90">Вики (CRDT) — позже</div>
+              <div className="mt-2 text-sm text-white/70">
+                Здесь будет совместное редактирование (CRDT), права на страницы и история изменений.
+              </div>
+            </div>
+          )}
+
+          {selectedChannel?.kind === "files" && (
+            <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
+              <div className="text-sm font-semibold text-white/90">Файлы (CID) — позже</div>
+              <div className="mt-2 text-sm text-white/70">
+                Здесь будет файловая полка: CID, пины, квоты, загрузки.
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Моки-переключатели для проверки политики */}
+      <details className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <summary className="cursor-pointer text-sm text-white/80">Моки (для разработки)</summary>
+        <div className="mt-3 grid sm:grid-cols-2 gap-3 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={e2eReady} onChange={(e) => setE2eReady(e.target.checked)} />
+            <span>E2E готово</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={anonPathReady} onChange={(e) => setAnonPathReady(e.target.checked)} />
+            <span>Anon путь готов (Tor/I2P)</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={hasTurnAllowList} onChange={(e) => setHasTurnAllowList(e.target.checked)} />
+            <span>Есть allow-list TURN</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={allowVideoInAnon} onChange={(e) => setAllowVideoInAnon(e.target.checked)} />
+            <span>Разрешить видео в Anon</span>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <span className="text-white/70">Моя роль:</span>
+            <select
+              value={myRole}
+              onChange={(e) => setMyRole(e.target.value as Role)}
+              className="rounded-lg bg-white/5 border border-white/10 px-2 py-1 text-sm"
+            >
+              <option value="guest">Гость</option>
+              <option value="member">Участник</option>
+              <option value="mod">Модератор</option>
+              <option value="admin">Админ</option>
+              <option value="owner">Владелец</option>
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={showLocked} onChange={(e) => setShowLocked(e.target.checked)} />
+            <span>Показывать закрытые каналы</span>
+          </label>
+        </div>
+        <div className="mt-3 text-xs text-white/60">
+          Эти переключатели имитируют сигналы TAL/crypto и права. В проде их не будет.
+        </div>
+      </details>
 
       {/* Оверлей звонка (мок) */}
       {overlay && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-[640px] max-w-[calc(100vw-2rem)] rounded-2xl border border-white/10 bg-neutral-900 p-5 shadow-xl">
+          <div className="w-[560px] max-w-[calc(100vw-2rem)] rounded-2xl border border-white/10 bg-neutral-900 p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-white/90 font-semibold text-lg">
-                  {overlay.kind === "voice" ? "Голос" : "Видео"} · {overlay.serverTitle} / {overlay.channelTitle}
+                  {overlay.kind === "voice" ? "Голосовой" : "Видео"} звонок · {overlay.title}
                 </div>
                 <div className="mt-1 text-sm text-white/70">Сессия: {overlay.esmText}</div>
                 <div className="text-sm text-white/70">{overlay.rtcText}</div>
@@ -522,25 +648,17 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
               </button>
             </div>
 
-            <div className="mt-4 grid sm:grid-cols-3 gap-2">
-              <button type="button" className="rounded-xl px-4 py-2 bg-white/10 hover:bg-white/20 text-white/90">
-                🎙️ Mute
-              </button>
-              <button type="button" className="rounded-xl px-4 py-2 bg-white/10 hover:bg-white/20 text-white/90">
-                🔇 Deafen
-              </button>
-              <button type="button" className="rounded-xl px-4 py-2 bg-white/10 hover:bg-white/20 text-white/90">
-                🖥️ Screen
-              </button>
-            </div>
-
             <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/80">
-              Здесь будет групповой звонок: WebRTC/SFU (заглушка), индикаторы качества и список участников.
+              Здесь будет экран группового звонка: SFU/mesh (моки), индикаторы качества и кнопки.
             </div>
 
             <div className="mt-4 flex items-center justify-between">
-              <button type="button" className="rounded-xl px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-semibold" onClick={() => setOverlay(null)}>
-                Выйти
+              <button
+                type="button"
+                className="rounded-xl px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-semibold"
+                onClick={() => setOverlay(null)}
+              >
+                Завершить
               </button>
               <div className="text-xs text-white/50">MVP: UI-заглушка</div>
             </div>
