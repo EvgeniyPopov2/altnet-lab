@@ -66,6 +66,7 @@ export default function App() {
   const [section, setSection] = useState<Section>("feed");
   const [rail, setRail] = useState<RailView>("global");
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [browserNav, setBrowserNav] = useState<{ url: string; token: number } | null>(null);
   const [qsOpen, setQsOpen] = useState(false);
 
   // === Профиль сети (глобальный, хранится в localStorage) ===
@@ -428,7 +429,17 @@ export default function App() {
               transition={{ duration: 0.18 }}
             >
               {section === "browser" &&
-                (builderOpen ? <SiteBuilder onClose={() => setBuilderOpen(false)} /> : <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} />)}
+                (builderOpen ? (
+                  <SiteBuilder
+                    onClose={() => setBuilderOpen(false)}
+                    onPublished={(url) => {
+                      setBuilderOpen(false);
+                      setBrowserNav({ url, token: Date.now() });
+                    }}
+                  />
+                ) : (
+                  <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} navRequest={browserNav} />
+                ))}
 
               {section === "feed" && (
                 <div className="space-y-4">

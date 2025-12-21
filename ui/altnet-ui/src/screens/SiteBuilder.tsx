@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
+import { upsertPublishedSite } from "../core/sites/published";
+import { pushSecurityEvent } from "../core/security/bus";
 import Canvas from "./SiteBuilder/canvas/Canvas";
 import Outline from "./SiteBuilder/outline/Outline";
 import Palette from "./SiteBuilder/palette/Palette";
@@ -147,7 +149,13 @@ type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyl
 // ─────────────────────────────────────────────────────────────────────────────
 // Основной экран
 // ─────────────────────────────────────────────────────────────────────────────
-export default function SiteBuilder({ onClose }: { onClose?: () => void }) {
+export default function SiteBuilder({
+  onClose,
+  onPublished,
+}: {
+  onClose?: () => void;
+  onPublished?: (url: string) => void;
+}) {
   const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
 
   // Канвас: кол-во колонок и зазоры
@@ -698,6 +706,56 @@ export default function SiteBuilder({ onClose }: { onClose?: () => void }) {
     downloadBlob(blob, prettyFileName(doc.title || "site", "html"));
   }, [docForBuild, doc.title]);
 
+  const onPublishAlt = useCallback(async () => {
+    try {
+      const model = adaptFromSiteBuilderDoc(docForBuild);
+      const blob = await exportSingleHtml(model, { bundleAssets: true });
+      const html = await blob.text();
+
+      const meta = upsertPublishedSite({
+        title: doc.title || "site",
+        html,
+      });
+      const url = `alt://site/${meta.slug}`;
+
+      pushSecurityEvent({
+        severity: "info",
+        code: "SITE_PUBLISHED",
+        title: "Сайт опубликован локально",
+        message: `Адрес: ${url}`,
+        actions: [
+          {
+            label: "Открыть в .alt",
+            kind: "primary",
+            onClick: () => onPublished?.(url),
+          },
+          {
+            label: "Скопировать адрес",
+            kind: "secondary",
+            onClick: () => {
+              try {
+                navigator.clipboard.writeText(url);
+              } catch {
+                // fail-silent
+              }
+            },
+          },
+        ],
+      });
+
+      // UX: после публикации сразу открыть в .alt-браузере (если контекст передан)
+      onPublished?.(url);
+    } catch {
+      pushSecurityEvent({
+        severity: "warning",
+        code: "SITE_PUBLISH_FAILED",
+        title: "Не удалось опубликовать",
+        message: "Проверьте, что хранилище браузера доступно (localStorage), и повторите попытку.",
+      });
+    }
+  }, [docForBuild, doc.title, onPublished]);
+
+
   const buildLiveShellHtml = (id: string) => `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"/>
 <meta name="color-scheme" content="dark light"/>
@@ -1207,6 +1265,15 @@ export default function SiteBuilder({ onClose }: { onClose?: () => void }) {
                   </svg>
                 </button>
               )}
+
+              <button
+                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#22c55e]"
+                onClick={onPublishAlt}
+                title="Сохранить на этом устройстве и открыть в .alt-браузере"
+              >
+                Публиковать
+              </button>
+
 
               <button
                 className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
