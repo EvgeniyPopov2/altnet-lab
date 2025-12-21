@@ -70,6 +70,11 @@ export default function App() {
   // === Профиль сети (глобальный, хранится в localStorage) ===
   const [profile, setProfile] = usePrivacyProfile();
 
+  // Security Coach: короткая подсказка при смене профиля (можно отключить в тосте)
+  useEffect(() => {
+    SecurityCoach.intro(profile);
+  }, [profile]);
+
   // === Паника (локальный fail-closed режим) ===
   const [panic, setPanic] = usePanicMode();
 
