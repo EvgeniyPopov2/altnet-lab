@@ -4,6 +4,7 @@ import { computeEsm } from "../core/policy/esm";
 import { checkSendMessage, checkStartCall } from "../core/policy/decisions";
 import { SecurityCoach } from "../core/security/coach";
 import { usePanicMode } from "../core/security/usePanicMode";
+import type { CallWindowModel } from "../components/rtc/CallWindow";
 
 export type ServerItem = {
   id: string;
@@ -31,12 +32,7 @@ type ChatMsg = {
   text: string;
 };
 
-type CallOverlay = {
-  kind: "voice" | "video";
-  title: string;
-  esmText: string;
-  rtcText: string;
-};
+
 
 function nowHHMM(): string {
   const now = new Date();
@@ -176,7 +172,15 @@ function canAccess(role: Role, ch: Channel): boolean {
   return ROLE_LEVEL[role] >= ROLE_LEVEL[min];
 }
 
-export default function Servers({ profile, server }: { profile: PrivacyProfile; server: ServerItem }) {
+export default function Servers({
+  profile,
+  server,
+  onStartCall,
+}: {
+  profile: PrivacyProfile;
+  server: ServerItem;
+  onStartCall: (call: CallWindowModel) => void;
+}) {
   const [panic, setPanic] = usePanicMode();
 
   // Моки “готовности” (в реале придут из TAL/crypto)
@@ -211,7 +215,6 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
   }, [channels, channelId]);
 
   const [draft, setDraft] = useState("");
-  const [overlay, setOverlay] = useState<CallOverlay | null>(null);
 
   const [messagesByCh, setMessagesByCh] = useState<Record<string, ChatMsg[]>>(() => seedMessages(server, channels));
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -222,7 +225,6 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
     setChannelId(chs[0]?.id ?? "gen");
     setMessagesByCh(seedMessages(server, chs));
     setDraft("");
-    setOverlay(null);
   }, [server.id]);
 
   // Автоскролл для текста
@@ -376,7 +378,7 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
     const esmText = `${decision.esm.family.toUpperCase()}${decision.esm.compat ? " (compat)" : ""}`;
     const rtcText = decision.rtc?.note ?? "RTC: —";
 
-    setOverlay({
+    onStartCall({
       kind,
       title: `${server.title} · ${selectedChannel.title}`,
       esmText,
@@ -625,46 +627,6 @@ export default function Servers({ profile, server }: { profile: PrivacyProfile; 
           Эти переключатели имитируют сигналы TAL/crypto и права. В проде их не будет.
         </div>
       </details>
-
-      {/* Оверлей звонка (мок) */}
-      {overlay && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-[560px] max-w-[calc(100vw-2rem)] rounded-2xl border border-white/10 bg-neutral-900 p-5 shadow-xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-white/90 font-semibold text-lg">
-                  {overlay.kind === "voice" ? "Голосовой" : "Видео"} звонок · {overlay.title}
-                </div>
-                <div className="mt-1 text-sm text-white/70">Сессия: {overlay.esmText}</div>
-                <div className="text-sm text-white/70">{overlay.rtcText}</div>
-              </div>
-              <button
-                type="button"
-                className="rounded-lg px-3 py-1.5 bg-white/10 hover:bg-white/20 text-sm"
-                onClick={() => setOverlay(null)}
-                title="Закрыть"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/80">
-              Здесь будет экран группового звонка: SFU/mesh (моки), индикаторы качества и кнопки.
-            </div>
-
-            <div className="mt-4 flex items-center justify-between">
-              <button
-                type="button"
-                className="rounded-xl px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-semibold"
-                onClick={() => setOverlay(null)}
-              >
-                Завершить
-              </button>
-              <div className="text-xs text-white/50">MVP: UI-заглушка</div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -439,7 +439,8 @@ export default function App() {
 
               {section === "messages" && selectedDm && <Messages profile={profile} dm={selectedDm} onStartCall={openCall} />}
 
-              {section === "servers" && selectedServer && <Servers profile={profile} server={selectedServer} />}
+              {section === "servers" && selectedServer && <Servers profile={profile} server={selectedServer} onStartCall={openCall} />}
+
 
               {section === "explore" && <ExploreDiscover />}
 
