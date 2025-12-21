@@ -222,6 +222,10 @@ export default function Messages({
       title: dm.title,
       esmText,
       rtcText,
+      participants: [
+        { id: "me", name: "Вы", label: "вы" },
+        { id: dm.id, name: dm.title, label: "контакт" },
+      ],
     });
   }
 

@@ -1,11 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls, useMotionValue } from "framer-motion";
 
+export type CallParticipant = {
+  id: string;
+  name: string;
+  /**
+   * Короткий лейбл для UI (например: роль/заметка). Не используется в политике.
+   */
+  label?: string;
+  muted?: boolean;
+};
+
 export type CallWindowModel = {
   kind: "voice" | "video";
   title: string;
   esmText: string;
   rtcText: string;
+
+  /**
+   * Для группового звонка/голосового канала — мок списка участников.
+   * Для DM — обычно 2 элемента: "Вы" и собеседник.
+   */
+  participants?: CallParticipant[];
 };
 
 type Phase = "connecting" | "connected";
@@ -33,6 +49,18 @@ function durationMmSs(ms: number) {
   const ss = pad2(s % 60);
   return `${mm}:${ss}`;
 }
+
+function initials(name: string) {
+  const parts = name
+    .trim()
+    .split(/\s+/g)
+    .filter(Boolean);
+
+  const a = parts[0]?.[0] ?? "?";
+  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
+  return (a + b).toUpperCase();
+}
+
 
 export default function CallWindow({ call, onEnd }: { call: CallWindowModel | null; onEnd: () => void }) {
   const constraintsRef = useRef<HTMLDivElement | null>(null);
@@ -246,6 +274,38 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
                     📉 Loss {quality.lossPct.toFixed(1)}%
                   </span>
                 </div>
+
+
+                {/* Участники (мок) */}
+                {Array.isArray(call.participants) && call.participants.length > 0 && (
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-white/60">Участники ({call.participants.length})</div>
+                      <div className="text-[11px] text-white/40">MVP</div>
+                    </div>
+
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {call.participants.map((p) => (
+                        <div
+                          key={p.id}
+                          className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5"
+                        >
+                          <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[11px] text-white/80">
+                            {initials(p.name)}
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="text-sm leading-tight text-white/90 truncate">{p.name}</div>
+                            {p.label && <div className="text-[11px] text-white/50 truncate">{p.label}</div>}
+                          </div>
+
+                          <div className="ml-auto text-xs">{p.muted ? "🔇" : "🎙️"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
 
                 {/* Кнопки управления */}
                 <div className="grid grid-cols-4 gap-2">

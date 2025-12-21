@@ -383,6 +383,12 @@ export default function Servers({
       title: `${server.title} · ${selectedChannel.title}`,
       esmText,
       rtcText,
+      participants: [
+        { id: "me", name: "Вы", label: roleLabel(myRole), muted: false },
+        { id: `sv:${server.id}:alice`, name: "Алиса", label: "участник", muted: false },
+        { id: `sv:${server.id}:boris`, name: "Борис", label: "участник", muted: true },
+        { id: `sv:${server.id}:mod`, name: "Модератор", label: "модератор", muted: false },
+      ],
     });
   }
 
