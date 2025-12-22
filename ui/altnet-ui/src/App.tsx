@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
 import "./index.css";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -7,16 +8,18 @@ import SiteBuilder from "./screens/SiteBuilder";
 import ExploreDiscover from "./screens/ExploreDiscover";
 import Messages, { type DmContact } from "./screens/Messages";
 import Servers, { type ServerItem } from "./screens/Servers";
-
+import SecurityCenter from "./screens/SecurityCenter";
 import QuickSwitcher, { type QSItem } from "./components/QuickSwitcher";
 import NetStatus from "./components/NetStatus";
 import { usePrivacyProfile } from "./core/settings/profile";
 import { SecurityCoach } from "./core/security/coach";
+import { pushSecurityEvent } from "./core/security/bus";
+import { dismiss, isDismissed } from "./core/security/storage";
 import { usePanicMode } from "./core/security/usePanicMode";
 import { SecurityCoachHost } from "./components/security/SecurityCoachHost";
 import CallWindow, { type CallWindowModel } from "./components/rtc/CallWindow";
 
-type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "profile";
+type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "security" | "profile";
 type RailView = "global" | "messages" | "servers";
 
 const RailBtn = ({
@@ -169,6 +172,8 @@ export default function App() {
         return builderOpen ? "Конструктор сайта" : "Браузер .alt";
       case "reputation":
         return "Репутация";
+      case "security":
+        return "Центр безопасности";
       case "profile":
         return "Профиль";
       default:
@@ -207,6 +212,43 @@ export default function App() {
     setRail("global");
   };
 
+  const openSecurityCenter = () => {
+    setSection("security");
+    setRail("global");
+  };
+
+  // Если пользователь включил "Панику" — мягко направляем в Security Center
+  // (один раз на включение, с возможностью отключить подсказку).
+  const prevPanicRef = useRef<boolean>(panic);
+  useEffect(() => {
+    const prev = prevPanicRef.current;
+    prevPanicRef.current = panic;
+
+    if (!prev && panic) {
+      const dedupeKey = "panic/security-center";
+      if (isDismissed(dedupeKey)) return;
+
+      pushSecurityEvent({
+        severity: "warning",
+        code: "PANIC_SECURITY_CENTER",
+        title: "Паника включена",
+        message:
+          "Сеть отключена (fail-closed). Рекомендуем открыть Security Center: проверить устройства, отозвать неизвестные и выполнить ротацию.",
+        details: [
+          "Это подсказка UI (мок). В проде она будет запускаться по сигналам TAL/crypto и состоянию доверия устройств.",
+          "Ротация ключей/сессий не спасает, если скомпрометирован корень доверия — в этом случае требуется отзыв устройства.",
+        ],
+        dedupeKey,
+        ttlMs: 15000,
+        actions: [
+          { label: "Открыть Security Center", kind: "primary", onClick: () => openSecurityCenter() },
+          { label: "Не показывать снова", kind: "ghost", onClick: () => dismiss(dedupeKey) },
+        ],
+      });
+    }
+  }, [panic]);
+
+
   // Quick Switcher — цели
   const qsItems: QSItem[] = useMemo(
     () => [
@@ -216,7 +258,8 @@ export default function App() {
       { id: "s:explore", kind: "section", label: "Путешествия", action: openExplore },
       { id: "s:browser", kind: "section", label: "Браузер .alt", action: openBrowser },
       { id: "s:reputation", kind: "section", label: "Репутация", action: openReputation },
-
+      { id: "s:security", kind: "section", label: "Центр безопасности", action: openSecurityCenter },
+      { id: "s:profile", kind: "section", label: "Профиль", action: openProfile },
       { id: "dm:henk", kind: "dm", label: "Henk", hint: "Личные сообщения", action: openMessages },
       { id: "dm:valerych", kind: "dm", label: "Валерыч", hint: "Личные сообщения", action: openMessages },
 
@@ -297,6 +340,7 @@ export default function App() {
             <RailBtn icon="🧭" label="Путешествия" active={section === "explore"} onClick={openExplore} />
             <RailBtn icon="🌐" label="Браузер .alt" active={section === "browser"} onClick={openBrowser} />
             <RailBtn icon="⭐" label="Репутация" active={section === "reputation"} onClick={openReputation} />
+            <RailBtn icon="🛡️" label="Безопасность" active={section === "security"} onClick={openSecurityCenter} />
             <RailBtn icon="👤" label="Профиль" active={section === "profile"} onClick={openProfile} />
           </div>
         )}
@@ -458,7 +502,7 @@ export default function App() {
               {section === "reputation" && (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">Публичные метки, жалобы, арбитраж (моки).</div>
               )}
-
+              {section === "security" && <SecurityCenter />}
               {section === "profile" && (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80 space-y-4">
                   <div>
@@ -494,6 +538,13 @@ export default function App() {
                         className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold"
                       >
                         🛑 Я думаю, устройство скомпрометировано
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openSecurityCenter}
+                        className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-sm"
+                      >
+                        🛡️ Открыть Security Center
                       </button>
                       {panic && (
                         <button
