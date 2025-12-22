@@ -37,7 +37,7 @@ export type CallWindowModel = {
   participants?: CallParticipant[];
 };
 
-type Phase = "connecting" | "connected";
+type Phase = "lobby" | "connecting" | "connected";
 
 type Quality = {
   rttMs: number;
@@ -87,6 +87,20 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(LS_MIN_KEY) === "1";
   });
+    // Групповой звонок/голосовой канал: >2 участников.
+  // Для DM обычно 2 ("Вы" + собеседник).
+  const isGroupCall = useMemo(() => {
+    const n = call?.participants?.length ?? 0;
+    return n > 2;
+  }, [call]);
+
+  const self = useMemo(() => {
+    return call?.participants?.find((p) => p.id === "me") ?? null;
+  }, [call]);
+
+  // Мок "кто говорит" (для группового звонка)
+  const [activeSpeakerId, setActiveSpeakerId] = useState<string | null>(null);
+  const [recentSpeakerIds, setRecentSpeakerIds] = useState<string[]>([]);
 
   const [phase, setPhase] = useState<Phase>("connecting");
   const [startedAt, setStartedAt] = useState<number>(Date.now());
@@ -129,12 +143,20 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
     }
   }, [minimized]);
 
-  // reset UI when new call appears
+    // reset UI when new call appears
   useEffect(() => {
     if (!call) return;
-    setPhase("connecting");
-    setStartedAt(Date.now());
-    setTick(Date.now());
+    const now = Date.now();
+    const group = (call.participants?.length ?? 0) > 2;
+
+    // Для группового звонка показываем "лобби" (перед подключением).
+    // Для DM оставляем прежний UX: сразу подключаемся.
+    setPhase(group ? "lobby" : "connecting");
+    if (!group) setStartedAt(now);
+    setTick(now);
+
+    setActiveSpeakerId(null);
+    setRecentSpeakerIds([]);
 
     setMicMuted(false);
     setCamOn(call.kind === "video");
@@ -143,12 +165,45 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
     setQuality({ rttMs: 120, jitterMs: 8, lossPct: 0.6 });
   }, [call]);
 
+
   // simulate connect
   useEffect(() => {
-    if (!call) return;
+    if (!call || phase !== "connecting") return;
     const t = window.setTimeout(() => setPhase("connected"), 900);
     return () => window.clearTimeout(t);
-  }, [call]);
+  }, [call, phase]);
+
+    // мок активного говорящего (только для группового звонка)
+  useEffect(() => {
+    if (!call || phase !== "connected" || !isGroupCall) return;
+
+    const i = window.setInterval(() => {
+      const participants = call.participants ?? [];
+
+      const eligible = participants.filter((p) => {
+        // "mute" в модели участника — это его локальный статус в моках.
+        if (p.muted) return false;
+        // если у нас выключен микрофон — не считаем себя кандидатом
+        if (p.id === "me" && micMuted) return false;
+        return true;
+      });
+
+      if (eligible.length === 0) {
+        setActiveSpeakerId(null);
+        return;
+      }
+
+      const pick = eligible[Math.floor(Math.random() * eligible.length)]!;
+      setActiveSpeakerId(pick.id);
+      setRecentSpeakerIds((prev) => {
+        const next = [pick.id, ...prev.filter((id) => id !== pick.id)];
+        return next.slice(0, 3);
+      });
+    }, 1300);
+
+    return () => window.clearTimeout(i as unknown as number);
+  }, [call, phase, isGroupCall, micMuted]);
+
 
   // timer tick
   useEffect(() => {
@@ -187,6 +242,7 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
 
   const durationText = useMemo(() => {
     if (!call) return "";
+    if (phase === "lobby") return "Лобби";
     if (phase !== "connected") return "Соединение…";
     return durationMmSs(tick - startedAt);
   }, [call, phase, tick, startedAt]);
@@ -209,10 +265,37 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
     } catch {
       // ignore
     }
-  }
+    }
+    function startConnect() {
+        const now = Date.now();
+        setStartedAt(now);
+        setTick(now);
+        setPhase("connecting");
+    }
 
-  return (
-    <AnimatePresence>
+    function joinLobby() {
+        // В DM мы в лобби не попадаем. Этот хендлер нужен только для группового звонка.
+        startConnect();
+    }
+
+    function joinLobbyMuted() {
+        setMicMuted(true);
+        startConnect();
+    }
+
+    const activeSpeaker = useMemo(() => {
+        if (!call || !activeSpeakerId) return null;
+        return call.participants?.find((p) => p.id === activeSpeakerId) ?? null;
+    }, [call, activeSpeakerId]);
+
+    const recentSpeakers = useMemo(() => {
+        if (!call) return [] as CallParticipant[];
+        const map = new Map((call.participants ?? []).map((p) => [p.id, p] as const));
+        return recentSpeakerIds.map((id) => map.get(id)).filter(Boolean) as CallParticipant[];
+    }, [call, recentSpeakerIds]);
+
+    return (
+        <AnimatePresence>
       {call && (
         <div ref={constraintsRef} className="fixed inset-0 z-50 pointer-events-none">
           <motion.div
@@ -245,7 +328,7 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
                   <div className="truncate font-semibold text-sm">{call.title}</div>
                   <span className="text-xs text-white/60">{durationText}</span>
                               </div>
-                              <div className="text-xs text-white/60 mt-0.5">{phase === "connected" ? "Подключено" : "Подключение…"}</div>
+                              <div className="text-xs text-white/60 mt-0.5">{phase === "connected" ? "Подключено" : phase === "connecting" ? "Подключение…" : "Лобби"}</div>
                               <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
                                   <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/70">
                                       NS: {presetTitle(audio.preset)}
@@ -288,11 +371,47 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
                 >
                   ✕
                 </button>
-              </div>
-            </div>
+                            </div>
+                        </div>
 
-            {!minimized && (
-              <div className="px-4 pb-4 space-y-3">
+                        {!minimized && (
+                            <div className="px-4 pb-4 space-y-3">
+                                {/* Лобби (только для группового звонка) */}
+                                {phase === "lobby" && isGroupCall && (
+                                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div>
+                                                <div className="text-sm font-semibold text-white/90">Лобби перед входом</div>
+                                                <div className="text-xs text-white/60 mt-0.5">
+                                                    Вы войдёте как: {self?.label ?? "участник"}. Настройте микрофон/камеру и нажмите «Войти».
+                                                </div>
+                                            </div>
+                                            <div className="text-[11px] text-white/40">MVP</div>
+                                        </div>
+
+                                        <div className="mt-3 grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                className="rounded-xl border border-white/10 bg-white/10 hover:bg-white/15 px-3 py-2 text-sm text-white font-semibold"
+                                                onClick={joinLobby}
+                                                title="Подключиться к каналу"
+                                            >
+                                                Войти
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-sm text-white/90"
+                                                onClick={joinLobbyMuted}
+                                                title="Подключиться без микрофона"
+                                            >
+                                                Войти без микрофона
+                                            </button>
+                                        </div>
+
+                                        <div className="mt-2 text-[11px] text-white/50">Это мок. Реальные роли/лобби/потоки WebRTC подключим позже.</div>
+                                    </div>
+                                )}
+
                 {/* Политика/шифрование */}
                 <div className="flex flex-wrap gap-2 text-xs">
                   <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-emerald-200">
@@ -318,9 +437,58 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
                     📈 J {Math.round(quality.jitterMs)}ms
                   </span>
                   <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-white/80" title="Packet loss">
-                    📉 Loss {quality.lossPct.toFixed(1)}%
-                  </span>
-                </div>
+                                        📉 Loss {quality.lossPct.toFixed(1)}%
+                                    </span>
+                                </div>
+
+                                {/* Список говорящих (мок, только для группового звонка) */}
+                                {phase === "connected" && isGroupCall && (
+                                    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-xs text-white/60">Сейчас говорят</div>
+                                            <div className="text-[11px] text-white/40">мок</div>
+                                        </div>
+
+                                        <div className="mt-2">
+                                            <AnimatePresence mode="popLayout">
+                                                {activeSpeaker ? (
+                                                    <motion.div
+                                                        key={activeSpeaker.id}
+                                                        initial={{ opacity: 0, y: 4 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        exit={{ opacity: 0, y: -4 }}
+                                                        transition={{ duration: 0.15 }}
+                                                        className="flex items-center gap-2"
+                                                    >
+                                                        <div className="w-7 h-7 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-[11px] text-emerald-200">
+                                                            {initials(activeSpeaker.name)}
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <div className="text-sm text-white/90 truncate">{activeSpeaker.name}</div>
+                                                            {activeSpeaker.label && <div className="text-[11px] text-white/50 truncate">{activeSpeaker.label}</div>}
+                                                        </div>
+                                                        <div className="ml-auto text-xs text-emerald-200">●</div>
+                                                    </motion.div>
+                                                ) : (
+                                                    <motion.div
+                                                        key="none"
+                                                        initial={{ opacity: 0 }}
+                                                        animate={{ opacity: 1 }}
+                                                        exit={{ opacity: 0 }}
+                                                        transition={{ duration: 0.15 }}
+                                                        className="text-xs text-white/50"
+                                                    >
+                                                        Никто не говорит (все выключили микрофон).
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+
+                                        {recentSpeakers.length > 1 && (
+                                            <div className="mt-2 text-[11px] text-white/50">Недавно говорили: {recentSpeakers.map((p) => p.name).join(", ")}</div>
+                                        )}
+                                    </div>
+                                )}
 
 
                 {/* Участники (мок) */}
@@ -331,24 +499,32 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
                       <div className="text-[11px] text-white/40">MVP</div>
                     </div>
 
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      {call.participants.map((p) => (
-                        <div
-                          key={p.id}
-                          className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5"
-                        >
-                          <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[11px] text-white/80">
-                            {initials(p.name)}
-                          </div>
+                                        <div className="mt-2 grid grid-cols-2 gap-2">
+                                            {call.participants.map((p) => {
+                                                const muted = p.id === "me" ? micMuted : !!p.muted;
+                                                const active = phase === "connected" && isGroupCall && activeSpeakerId === p.id;
 
-                          <div className="min-w-0">
-                            <div className="text-sm leading-tight text-white/90 truncate">{p.name}</div>
-                            {p.label && <div className="text-[11px] text-white/50 truncate">{p.label}</div>}
-                          </div>
+                                                return (
+                                                    <div
+                                                        key={p.id}
+                                                        className={[
+                                                            "flex items-center gap-2 rounded-lg border bg-white/5 px-2 py-1.5 transition",
+                                                            active ? "border-emerald-500/30 bg-emerald-500/10" : "border-white/10",
+                                                        ].join(" ")}
+                                                    >
+                                                        <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-[11px] text-white/80">
+                                                            {initials(p.name)}
+                                                        </div>
 
-                          <div className="ml-auto text-xs">{p.muted ? "🔇" : "🎙️"}</div>
-                        </div>
-                      ))}
+                                                        <div className="min-w-0">
+                                                            <div className="text-sm leading-tight text-white/90 truncate">{p.name}</div>
+                                                            {p.label && <div className="text-[11px] text-white/50 truncate">{p.label}</div>}
+                                                        </div>
+
+                                                        <div className="ml-auto text-xs">{active ? "🟢" : muted ? "🔇" : "🎙️"}</div>
+                                                    </div>
+                                                );
+                                            })}
                     </div>
                   </div>
                 )}
