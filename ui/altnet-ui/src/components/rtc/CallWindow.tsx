@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useDragControls, useMotionValue } from "framer-motion";
+import { usePrivacyProfile } from "../../core/settings/profile";
+import { presetTitle, useRtcAudioConfig } from "../../core/rtc/audio";
+import { AudioTuning } from "./AudioTuning";
 import type { EffectiveSessionMode, RtcPolicy } from "../../core/policy/types";
 
 export type CallParticipant = {
@@ -92,6 +95,8 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
   const [micMuted, setMicMuted] = useState(false);
   const [camOn, setCamOn] = useState(false);
   const [speakerOn, setSpeakerOn] = useState(true);
+  const [profile] = usePrivacyProfile();
+  const [audio, patchAudio, resetAudio] = useRtcAudioConfig(profile);
 
   const [quality, setQuality] = useState<Quality>({
     rttMs: 120,
@@ -239,8 +244,29 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
                   <span className="text-lg">{call.kind === "video" ? "🎥" : "📞"}</span>
                   <div className="truncate font-semibold text-sm">{call.title}</div>
                   <span className="text-xs text-white/60">{durationText}</span>
-                </div>
-                <div className="text-xs text-white/60 mt-0.5">{phase === "connected" ? "Подключено" : "Подключение…"}</div>
+                              </div>
+                              <div className="text-xs text-white/60 mt-0.5">{phase === "connected" ? "Подключено" : "Подключение…"}</div>
+                              <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
+                                  <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/70">
+                                      NS: {presetTitle(audio.preset)}
+                                  </span>
+                                  {audio.aec && (
+                                      <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/70">
+                                          AEC
+                                      </span>
+                                  )}
+                                  {audio.agc && (
+                                      <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/70">
+                                          AGC
+                                      </span>
+                                  )}
+                                  {audio.dtx && (
+                                      <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/70">
+                                          DTX
+                                      </span>
+                                  )}
+                              </div>
+
               </div>
 
               <div className="flex items-center gap-1 shrink-0">
@@ -388,12 +414,13 @@ export default function CallWindow({ call, onEnd }: { call: CallWindowModel | nu
                     title="Завершить"
                   >
                     ⛔
-                  </button>
-                </div>
-
-                <details className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  <summary className="cursor-pointer text-sm text-white/80">Детали соединения</summary>
-                  <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-white/60">
+                                  </button>
+                              </div>
+                              {/* Звук/шумоподавление (мок) */}
+                              <AudioTuning profile={profile} cfg={audio} patch={patchAudio} reset={resetAudio} />
+                              <details className="rounded-xl border border-white/10 bg-white/5 p-3">
+                                  <summary className="cursor-pointer text-sm text-white/80">Детали соединения</summary>
+                                  <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-white/60">
                     <li>Сессия: {esmText}</li>
                     <li>{rtcText}</li>
                     <li>
