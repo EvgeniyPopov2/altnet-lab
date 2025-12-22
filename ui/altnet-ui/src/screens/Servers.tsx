@@ -589,14 +589,14 @@ export default function Servers({
                       title="Голосовой звонок (групповой)"
                       decision={voiceCallPreview}
                       onAllowed={() => onCall("voice")}
-                      onDenied={(d) => SecurityCoach.deniedByPolicy(d)}
+                      
                     />
                     <GuardedActionButton
                       icon="🎥"
                       title="Видео (групповой)"
                       decision={videoCallPreview}
                       onAllowed={() => onCall("video")}
-                      onDenied={(d) => SecurityCoach.deniedByPolicy(d)}
+                      
                     />
                   </div>
                 )}
