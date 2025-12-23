@@ -1,0 +1,162 @@
+import { useEffect, useMemo, useState } from "react";
+import type { PrivacyProfile } from "../policy/types";
+
+export type VoiceInputMode = "vad" | "ptt";
+export type InputProcessingProfile = "isolation" | "studio" | "custom";
+
+export type DuckingMode = "off" | "when_i_speak" | "when_others_speak";
+
+export type VoiceVideoSettings = {
+  inputDeviceId: string;
+  outputDeviceId: string;
+
+  micVolume: number; // 0..100
+  outputVolume: number; // 0..100
+
+  inputMode: VoiceInputMode;
+  vadThreshold: number; // 0..100 (мок, дальше станет реальным порогом)
+  pttHotkey: string | null; // мок-строка
+
+  inputProcessingProfile: InputProcessingProfile;
+
+  // Видео: этот флаг влияет на policy (решение checkStartCall в ANON)
+  allowVideoInAnon: boolean;
+
+  // Advanced (моки)
+  highPriorityPackets: boolean;
+  ducking: DuckingMode;
+};
+
+const LS_PREFIX = "altnet.voiceVideo.v1.";
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function getDefaultSettings(profile: PrivacyProfile): VoiceVideoSettings {
+  return {
+    inputDeviceId: "default",
+    outputDeviceId: "default",
+
+    micVolume: 100,
+    outputVolume: 60,
+
+    inputMode: "vad",
+    vadThreshold: 55,
+    pttHotkey: null,
+
+    inputProcessingProfile: "isolation",
+
+    // По умолчанию в ANON видео запрещено, но пользователь может включить
+    allowVideoInAnon: false,
+
+    highPriorityPackets: false,
+    ducking: "when_others_speak",
+  };
+}
+
+function read(profile: PrivacyProfile): VoiceVideoSettings {
+  if (typeof window === "undefined") return getDefaultSettings(profile);
+  try {
+    const raw = window.localStorage.getItem(LS_PREFIX + profile);
+    if (!raw) return getDefaultSettings(profile);
+    const parsed = JSON.parse(raw) as Partial<VoiceVideoSettings>;
+    const base = getDefaultSettings(profile);
+
+    const merged: VoiceVideoSettings = {
+      ...base,
+      ...parsed,
+    };
+
+    merged.micVolume = clamp(Number(merged.micVolume ?? base.micVolume), 0, 100);
+    merged.outputVolume = clamp(Number(merged.outputVolume ?? base.outputVolume), 0, 100);
+    merged.vadThreshold = clamp(Number(merged.vadThreshold ?? base.vadThreshold), 0, 100);
+
+    if (merged.inputMode !== "vad" && merged.inputMode !== "ptt") merged.inputMode = base.inputMode;
+    if (
+      merged.inputProcessingProfile !== "isolation" &&
+      merged.inputProcessingProfile !== "studio" &&
+      merged.inputProcessingProfile !== "custom"
+    ) {
+      merged.inputProcessingProfile = base.inputProcessingProfile;
+    }
+
+    if (merged.ducking !== "off" && merged.ducking !== "when_i_speak" && merged.ducking !== "when_others_speak") {
+      merged.ducking = base.ducking;
+    }
+
+    merged.inputDeviceId = String(merged.inputDeviceId ?? base.inputDeviceId);
+    merged.outputDeviceId = String(merged.outputDeviceId ?? base.outputDeviceId);
+
+    merged.pttHotkey = merged.pttHotkey ? String(merged.pttHotkey) : null;
+
+    merged.allowVideoInAnon = Boolean(merged.allowVideoInAnon);
+
+    merged.highPriorityPackets = Boolean(merged.highPriorityPackets);
+
+    return merged;
+  } catch {
+    return getDefaultSettings(profile);
+  }
+}
+
+function write(profile: PrivacyProfile, s: VoiceVideoSettings): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(LS_PREFIX + profile, JSON.stringify(s));
+  } catch {
+    // ignore
+  }
+}
+
+export function useVoiceVideoSettings(
+  profile: PrivacyProfile
+): [VoiceVideoSettings, (patch: Partial<VoiceVideoSettings>) => void, () => void] {
+  const key = profile;
+
+  const [state, setState] = useState<VoiceVideoSettings>(() => read(key));
+
+  useEffect(() => {
+    setState(read(key));
+  }, [key]);
+
+  useEffect(() => {
+    write(key, state);
+  }, [key, state]);
+
+  const patch = useMemo(() => {
+    return (p: Partial<VoiceVideoSettings>) => {
+      setState((prev) => {
+        const next: VoiceVideoSettings = { ...prev, ...p };
+
+        next.micVolume = clamp(Number(next.micVolume ?? prev.micVolume), 0, 100);
+        next.outputVolume = clamp(Number(next.outputVolume ?? prev.outputVolume), 0, 100);
+        next.vadThreshold = clamp(Number(next.vadThreshold ?? prev.vadThreshold), 0, 100);
+
+        if (next.inputMode !== "vad" && next.inputMode !== "ptt") next.inputMode = prev.inputMode;
+        if (next.inputProcessingProfile !== "isolation" && next.inputProcessingProfile !== "studio" && next.inputProcessingProfile !== "custom") {
+          next.inputProcessingProfile = prev.inputProcessingProfile;
+        }
+        if (next.ducking !== "off" && next.ducking !== "when_i_speak" && next.ducking !== "when_others_speak") {
+          next.ducking = prev.ducking;
+        }
+
+        next.inputDeviceId = String(next.inputDeviceId ?? prev.inputDeviceId);
+        next.outputDeviceId = String(next.outputDeviceId ?? prev.outputDeviceId);
+
+        next.pttHotkey = next.pttHotkey ? String(next.pttHotkey) : null;
+
+        next.allowVideoInAnon = Boolean(next.allowVideoInAnon);
+        next.highPriorityPackets = Boolean(next.highPriorityPackets);
+
+        return next;
+      });
+    };
+  }, []);
+
+  const reset = useMemo(() => {
+    return () => setState(getDefaultSettings(key));
+  }, [key]);
+
+  return [state, patch, reset];
+}

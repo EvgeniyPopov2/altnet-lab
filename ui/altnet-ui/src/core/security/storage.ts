@@ -34,3 +34,13 @@ export function dismiss(dedupeKey: string): void {
   keys.add(dedupeKey);
   writeDismissedKeys(keys);
 }
+
+export function clearDismissedKeys(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(LS_KEY);
+  } catch {
+    // fail-silent: не хотим ломать UI из-за quota/disabled storage
+  }
+}
+

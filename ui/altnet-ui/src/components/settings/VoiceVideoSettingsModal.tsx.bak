@@ -1,0 +1,769 @@
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "framer-motion";
+import { Lock, Mic, Video, Wrench, Music2, X } from "lucide-react";
+
+import type { PrivacyProfile } from "../../core/policy/types";
+import { useVoiceVideoSettings, type DuckingMode, type InputProcessingProfile, type VoiceInputMode } from "../../core/settings/voiceVideo";
+import { useRtcAudioConfig } from "../../core/rtc/audio";
+
+type TabKey = "voice" | "video" | "soundboard" | "debug";
+
+type Props = {
+  open: boolean;
+  profile: PrivacyProfile;
+  onClose: () => void;
+};
+
+function profileTitle(p: PrivacyProfile): string {
+  return p === "anon" ? "Анонимный" : "Приватный быстрый";
+}
+
+function tabTitle(t: TabKey): string {
+  switch (t) {
+    case "voice":
+      return "Голос";
+    case "video":
+      return "Видео";
+    case "soundboard":
+      return "Звуковая панель";
+    case "debug":
+      return "Отладка";
+  }
+}
+
+function duckingTitle(m: DuckingMode): string {
+  switch (m) {
+    case "off":
+      return "Выкл";
+    case "when_i_speak":
+      return "Когда я говорю";
+    case "when_others_speak":
+      return "Когда другие говорят";
+  }
+}
+
+function rangeFill(value: number): string {
+  const v = Math.max(0, Math.min(100, value));
+  return `linear-gradient(to right, rgba(99,102,241,0.95) 0%, rgba(99,102,241,0.95) ${v}%, rgba(255,255,255,0.14) ${v}%, rgba(255,255,255,0.14) 100%)`;
+}
+
+function hotkeyFromEvent(e: KeyboardEvent): string {
+  const parts: string[] = [];
+  if (e.ctrlKey) parts.push("Ctrl");
+  if (e.metaKey) parts.push("Meta");
+  if (e.altKey) parts.push("Alt");
+  if (e.shiftKey) parts.push("Shift");
+
+  const k = e.key;
+
+  // Нормализация “спец” клавиш
+  const normalized =
+    k === " " ? "Space" :
+    k === "Escape" ? "Esc" :
+    k === "ArrowUp" ? "Up" :
+    k === "ArrowDown" ? "Down" :
+    k === "ArrowLeft" ? "Left" :
+    k === "ArrowRight" ? "Right" :
+    k.length === 1 ? k.toUpperCase() :
+    k;
+
+  parts.push(normalized);
+  return parts.join("+");
+}
+
+function Switch({
+  checked,
+  onChange,
+  disabled,
+  label,
+  hint,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  disabled?: boolean;
+  label: string;
+  hint?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <div className="text-sm text-white/90">{label}</div>
+        {hint && <div className="text-xs text-white/60">{hint}</div>}
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => !disabled && onChange(!checked)}
+        className={[
+          "relative inline-flex h-6 w-11 items-center rounded-full border transition",
+          disabled ? "opacity-60 cursor-not-allowed" : "hover:brightness-110",
+          checked ? "bg-indigo-500/80 border-indigo-400/50" : "bg-white/10 border-white/15",
+        ].join(" ")}
+      >
+        <span
+          className={[
+            "inline-block h-5 w-5 rounded-full bg-white/90 shadow transition-transform",
+            checked ? "translate-x-5" : "translate-x-1",
+          ].join(" ")}
+        />
+      </button>
+    </div>
+  );
+}
+
+function RadioCard({
+  active,
+  title,
+  desc,
+  onPick,
+}: {
+  active: boolean;
+  title: string;
+  desc: string;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      className={[
+        "w-full text-left rounded-xl border p-3 transition",
+        active ? "bg-indigo-500/10 border-indigo-400/40" : "bg-white/5 border-white/10 hover:bg-white/7",
+      ].join(" ")}
+    >
+      <div className="text-sm font-semibold text-white/90">{title}</div>
+      <div className="mt-1 text-xs text-white/60">{desc}</div>
+    </button>
+  );
+}
+
+function PolicyLockHint({
+  title,
+  message,
+}: {
+  title: string;
+  message: string;
+}) {
+  return (
+    <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-sm text-amber-200 flex items-start gap-2">
+      <Lock className="w-4 h-4 mt-0.5 shrink-0" />
+      <div>
+        <div className="font-semibold">{title}</div>
+        <div className="text-xs text-amber-100/80 mt-0.5">{message}</div>
+      </div>
+    </div>
+  );
+}
+
+const MOCK_INPUTS = [
+  { id: "default", label: "Микрофон (по умолчанию)" },
+  { id: "redmi", label: "Микрофон (Redmi 电脑音箱)" },
+  { id: "usb", label: "USB Mic (мок)" },
+];
+
+const MOCK_OUTPUTS = [
+  { id: "default", label: "Динамики (по умолчанию)" },
+  { id: "hda", label: "Динамики (High Definition Audio Device)" },
+  { id: "headset", label: "Гарнитура (мок)" },
+];
+
+const MOCK_CAMERAS = [
+  { id: "default", label: "Камера (по умолчанию)" },
+  { id: "integrated", label: "Integrated Camera (мок)" },
+  { id: "virtual", label: "Virtual Camera (мок)" },
+];
+
+export default function VoiceVideoSettingsModal({ open, profile, onClose }: Props) {
+  const [tab, setTab] = useState<TabKey>("voice");
+
+  const [vv, patchVv, resetVv] = useVoiceVideoSettings(profile);
+  const [audio, patchAudio, resetAudio] = useRtcAudioConfig(profile);
+
+  // Mic test (мок): “уровень” как бегущая линейка
+  const [micTesting, setMicTesting] = useState(false);
+  const [micLevel, setMicLevel] = useState(0);
+
+  const [capturingHotkey, setCapturingHotkey] = useState(false);
+
+  const videoLockedInAnon = profile === "anon" && !vv.allowVideoInAnon;
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    // При открытии — не сбрасываем таб, но корректируем если надо
+    if (tab !== "voice" && tab !== "video" && tab !== "soundboard" && tab !== "debug") setTab("voice");
+  }, [open, tab]);
+
+  // Capture hotkey (мок)
+  useEffect(() => {
+    if (!capturingHotkey) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const hk = hotkeyFromEvent(e);
+      patchVv({ pttHotkey: hk });
+      setCapturingHotkey(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [capturingHotkey, patchVv]);
+
+  // Mic test (мок)
+  useEffect(() => {
+    if (!micTesting) return;
+    let raf = 0;
+    const tick = () => {
+      // Простая псевдо-амплитуда
+      const target = Math.random() * 100;
+      setMicLevel((prev) => prev * 0.6 + target * 0.4);
+      raf = window.setTimeout(tick, 80);
+    };
+    tick();
+    return () => {
+      window.clearTimeout(raf);
+      setMicLevel(0);
+    };
+  }, [micTesting]);
+
+  // Взаимосвязь “профиль обработки” -> аудиоконфиг (мок, но логика уже есть)
+  useEffect(() => {
+    if (!open) return;
+
+    if (vv.inputProcessingProfile === "isolation") {
+      patchAudio({ preset: "balanced", aec: true, agc: true });
+    } else if (vv.inputProcessingProfile === "studio") {
+      patchAudio({ preset: "off", aec: false, agc: false });
+    }
+    // custom: ничего не трогаем
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vv.inputProcessingProfile]);
+
+  const tabs = useMemo(
+    () =>
+      ([
+        { key: "voice" as const, icon: <Mic className="w-4 h-4" /> },
+        { key: "video" as const, icon: <Video className="w-4 h-4" /> },
+        { key: "soundboard" as const, icon: <Music2 className="w-4 h-4" /> },
+        { key: "debug" as const, icon: <Wrench className="w-4 h-4" /> },
+      ] as const),
+    []
+  );
+
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-[10050]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/55" onClick={onClose} />
+
+          {/* Dialog */}
+          <motion.div
+            className="absolute left-1/2 top-1/2 w-[min(980px,92vw)] h-[min(720px,88vh)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-[#0b1220] shadow-2xl overflow-hidden"
+            initial={{ opacity: 0, scale: 0.98, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.98, y: 10 }}
+            transition={{ duration: 0.18 }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10 bg-white/[0.03]">
+              <div className="min-w-0">
+                <div className="text-white/90 font-semibold truncate">Голос и видео</div>
+                <div className="text-xs text-white/55">
+                  Профиль: <span className="text-white/75 font-medium">{profileTitle(profile)}</span>
+                  {profile === "anon" ? " · policy более строгая" : " · policy быстрее/довереннее"}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10"
+                title="Закрыть"
+              >
+                <X className="w-4 h-4 text-white/80" />
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="px-5 py-3 border-b border-white/10">
+              <div className="flex flex-wrap items-center gap-2">
+                {tabs.map((t) => {
+                  const active = tab === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => setTab(t.key)}
+                      className={[
+                        "inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition",
+                        active
+                          ? "bg-indigo-500/15 border-indigo-400/30 text-white/90"
+                          : "bg-white/5 border-white/10 text-white/70 hover:bg-white/7",
+                      ].join(" ")}
+                    >
+                      {t.icon}
+                      {tabTitle(t.key)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="h-[calc(100%-120px)] overflow-y-auto px-5 py-4">
+              {tab === "voice" && (
+                <div className="space-y-6">
+                  {/* Devices */}
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-white/80 font-semibold">Устройство ввода</div>
+                      <select
+                        value={vv.inputDeviceId}
+                        onChange={(e) => patchVv({ inputDeviceId: e.target.value })}
+                        className="mt-2 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none"
+                      >
+                        {MOCK_INPUTS.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="mt-4 text-sm text-white/80 font-semibold">Громкость микрофона</div>
+                      <div className="mt-2 flex items-center gap-3">
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={vv.micVolume}
+                          onChange={(e) => patchVv({ micVolume: Number(e.target.value) })}
+                          className="altnet-range flex-1"
+                          style={{ background: rangeFill(vv.micVolume) }}
+                        />
+                        <div className="w-10 text-right text-xs text-white/70 tabular-nums">{vv.micVolume}%</div>
+                      </div>
+
+                      <div className="mt-4 text-sm text-white/80 font-semibold">Проверка микрофона</div>
+                      <div className="mt-2 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setMicTesting((v) => !v)}
+                          className={[
+                            "px-3 py-2 rounded-xl border text-sm font-semibold transition",
+                            micTesting
+                              ? "bg-red-500/15 border-red-400/25 text-red-200 hover:bg-red-500/20"
+                              : "bg-indigo-600 border-indigo-500/40 text-white hover:bg-indigo-500",
+                          ].join(" ")}
+                        >
+                          {micTesting ? "Остановить" : "Давайте проверим"}
+                        </button>
+
+                        <div className="flex-1 h-3 rounded-full border border-white/10 bg-white/5 overflow-hidden">
+                          <div
+                            className="h-full bg-emerald-400/70"
+                            style={{ width: `${Math.max(2, Math.min(100, micLevel))}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-2 text-xs text-white/55">
+                        Сейчас это мок-индикатор. На Шаге 15 подключим реальный getUserMedia + анализ уровня.
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-sm text-white/80 font-semibold">Устройство вывода</div>
+                      <select
+                        value={vv.outputDeviceId}
+                        onChange={(e) => patchVv({ outputDeviceId: e.target.value })}
+                        className="mt-2 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none"
+                      >
+                        {MOCK_OUTPUTS.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <div className="mt-4 text-sm text-white/80 font-semibold">Громкость звука</div>
+                      <div className="mt-2 flex items-center gap-3">
+                        <input
+                          type="range"
+                          min={0}
+                          max={100}
+                          value={vv.outputVolume}
+                          onChange={(e) => patchVv({ outputVolume: Number(e.target.value) })}
+                          className="altnet-range flex-1"
+                          style={{ background: rangeFill(vv.outputVolume) }}
+                        />
+                        <div className="w-10 text-right text-xs text-white/70 tabular-nums">{vv.outputVolume}%</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Input processing profile */}
+                  <div>
+                    <div className="text-sm text-white/80 font-semibold">Профиль ввода</div>
+                    <div className="mt-3 grid md:grid-cols-3 gap-3">
+                      <RadioCard
+                        active={vv.inputProcessingProfile === "isolation"}
+                        title="Изоляция голоса"
+                        desc="Только ваш голос: AltNet удаляет ненужный шум (мок)."
+                        onPick={() => patchVv({ inputProcessingProfile: "isolation" })}
+                      />
+                      <RadioCard
+                        active={vv.inputProcessingProfile === "studio"}
+                        title="Студия"
+                        desc="Чистый звук: открытый микрофон без обработки (мок)."
+                        onPick={() => patchVv({ inputProcessingProfile: "studio" })}
+                      />
+                      <RadioCard
+                        active={vv.inputProcessingProfile === "custom"}
+                        title="Пользовательский"
+                        desc="Продвинутый режим: мне нужны все переключатели (мок)."
+                        onPick={() => patchVv({ inputProcessingProfile: "custom" })}
+                      />
+                    </div>
+
+                    <div className="mt-3 text-xs text-white/55">
+                      Сейчас профиль управляет пресетом шумоподавления и AEC/AGC через локальные настройки RTC аудио.
+                    </div>
+                  </div>
+
+                  {/* Input mode */}
+                  <div>
+                    <div className="text-sm text-white/80 font-semibold">Режим ввода</div>
+
+                    <div className="mt-3 space-y-3">
+                      <RadioCard
+                        active={vv.inputMode === "vad"}
+                        title="Активация по голосу (VAD)"
+                        desc="Микрофон активен, когда голос выше порога."
+                        onPick={() => patchVv({ inputMode: "vad" })}
+                      />
+
+                      {vv.inputMode === "vad" && (
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm text-white/80">Порог активации</div>
+                            <div className="text-xs text-white/60 tabular-nums">{vv.vadThreshold}%</div>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={vv.vadThreshold}
+                            onChange={(e) => patchVv({ vadThreshold: Number(e.target.value) })}
+                            className="altnet-range w-full mt-2"
+                            style={{ background: rangeFill(vv.vadThreshold) }}
+                          />
+                          <div className="mt-2 text-xs text-white/55">
+                            На Шаге 15 сделаем реальный VAD (RMS/энергия) + связь с mute/unmute.
+                          </div>
+                        </div>
+                      )}
+
+                      <RadioCard
+                        active={vv.inputMode === "ptt"}
+                        title="Режим рации (Push-to-Talk)"
+                        desc="Микрофон активен только при удержании назначенной клавиши."
+                        onPick={() => patchVv({ inputMode: "ptt" })}
+                      />
+
+                      {vv.inputMode === "ptt" && (
+                        <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="text-sm text-white/80">
+                              Хоткей:{" "}
+                              <span className="text-white/90 font-semibold">
+                                {vv.pttHotkey ? vv.pttHotkey : "не назначен"}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setCapturingHotkey(true)}
+                                className={[
+                                  "px-3 py-2 rounded-xl border text-sm font-semibold transition",
+                                  capturingHotkey
+                                    ? "bg-amber-500/15 border-amber-400/25 text-amber-200"
+                                    : "bg-white/10 border-white/15 text-white/90 hover:bg-white/15",
+                                ].join(" ")}
+                              >
+                                {capturingHotkey ? "Нажмите клавишу…" : "Нажмите для назначения"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => patchVv({ pttHotkey: null })}
+                                className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-white/80"
+                              >
+                                Сбросить
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="mt-2 text-xs text-white/55">
+                            Сейчас это мок-настройка. На Шаге 15 привяжем к реальному mute/unmute и обработаем key repeat.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Advanced */}
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-sm text-white/90 font-semibold">Расширенные</div>
+                    <div className="mt-3 grid md:grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <Switch
+                          checked={audio.aec}
+                          onChange={(v) => patchAudio({ aec: v })}
+                          label="AEC (эхоподавление)"
+                          hint="В браузере позже свяжем с media constraints echoCancellation."
+                        />
+                        <Switch
+                          checked={audio.agc}
+                          onChange={(v) => patchAudio({ agc: v })}
+                          label="AGC (автогейн)"
+                          hint="В браузере позже свяжем с media constraints autoGainControl."
+                        />
+                        <Switch
+                          checked={audio.dtx}
+                          onChange={(v) => patchAudio({ dtx: v })}
+                          label="DTX (пропуск тишины)"
+                          hint="Снижение трафика. На MVP — настройка/мок."
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <Switch
+                          checked={vv.highPriorityPackets}
+                          onChange={(v) => patchVv({ highPriorityPackets: v })}
+                          label="Пакеты с высоким приоритетом"
+                          hint="Мок. Позже: DSCP/маркировка + policy."
+                        />
+
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm text-white/90">Глобальное приглушение (ducking)</div>
+                            <div className="text-xs text-white/60">
+                              Снижать громкость других приложений/потоков (мок).
+                            </div>
+                          </div>
+                          <select
+                            value={vv.ducking}
+                            onChange={(e) => patchVv({ ducking: e.target.value as DuckingMode })}
+                            className="rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90"
+                          >
+                            <option value="off">{duckingTitle("off")}</option>
+                            <option value="when_i_speak">{duckingTitle("when_i_speak")}</option>
+                            <option value="when_others_speak">{duckingTitle("when_others_speak")}</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          resetVv();
+                          resetAudio();
+                        }}
+                        className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-white/80"
+                      >
+                        Сбросить настройки (профиль)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {tab === "video" && (
+                <div className="space-y-6">
+                  {videoLockedInAnon && (
+                    <PolicyLockHint
+                      title="Видео заблокировано policy профиля ANON"
+                      message="По умолчанию видео запрещено, чтобы не раскрывать сетевые/устройственные метаданные. Вы можете включить явно — но это снижает приватность."
+                    />
+                  )}
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm text-white/90 font-semibold">Разрешить видео в ANON</div>
+                        <div className="text-xs text-white/60">
+                          Этот флаг влияет на policy: разрешит старт видеозвонков в профиле ANON.
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={profile !== "anon"}
+                        onClick={() => profile === "anon" && patchVv({ allowVideoInAnon: !vv.allowVideoInAnon })}
+                        className={[
+                          "relative inline-flex h-6 w-11 items-center rounded-full border transition",
+                          profile !== "anon" ? "opacity-50 cursor-not-allowed" : "hover:brightness-110",
+                          vv.allowVideoInAnon ? "bg-indigo-500/80 border-indigo-400/50" : "bg-white/10 border-white/15",
+                        ].join(" ")}
+                      >
+                        <span
+                          className={[
+                            "inline-block h-5 w-5 rounded-full bg-white/90 shadow transition-transform",
+                            vv.allowVideoInAnon ? "translate-x-5" : "translate-x-1",
+                          ].join(" ")}
+                        />
+                      </button>
+                    </div>
+
+                    {profile !== "anon" && (
+                      <div className="text-xs text-white/55">
+                        В профиле {profileTitle(profile)} видео не требует отдельного разрешения (policy другая).
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-sm text-white/80 font-semibold">Устройство видео</div>
+                      <select
+                        value={"default"}
+                        disabled={videoLockedInAnon}
+                        onChange={() => {}}
+                        className="mt-2 w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none disabled:opacity-60"
+                      >
+                        {MOCK_CAMERAS.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      {videoLockedInAnon && (
+                        <div className="mt-3 text-xs text-amber-200/80">
+                          Настройки камеры недоступны, пока видео запрещено policy.
+                        </div>
+                      )}
+
+                      <div className="mt-4 text-sm text-white/80 font-semibold">Предпросмотр</div>
+                      <div className="mt-2 h-40 rounded-xl border border-white/10 bg-black/30 flex items-center justify-center text-xs text-white/50">
+                        {videoLockedInAnon ? "Предпросмотр заблокирован policy" : "Здесь будет preview камеры (Шаг 15)"}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-sm text-white/90 font-semibold">Заметки</div>
+                      <div className="mt-2 text-sm text-white/70">
+                        <ul className="list-disc pl-5 space-y-1">
+                          <li>В ANON видео повышает риск раскрытия метаданных (тайминги, QoS, корреляция).</li>
+                          <li>Policy по умолчанию блокирует видео, но позволяет осознанный override.</li>
+                          <li>На Шаге 15 добавим реальные устройства и preview через getUserMedia.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {tab === "soundboard" && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-sm text-white/90 font-semibold">Звуковая панель</div>
+                  <div className="mt-2 text-sm text-white/70">
+                    Это мок-вкладка под будущие клипы/сэмплы (CID-вложения) и правила policy (NSFW/спам).
+                  </div>
+                  <div className="mt-4 grid sm:grid-cols-2 gap-3">
+                    {["airhorn", "bruh", "clap", "ding"].map((x) => (
+                      <button
+                        key={x}
+                        type="button"
+                        className="rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-3 text-left"
+                      >
+                        <div className="text-sm text-white/90 font-semibold">{x}</div>
+                        <div className="text-xs text-white/55 mt-1">Проигрывание — мок</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {tab === "debug" && (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-sm text-white/90 font-semibold">Текущее состояние</div>
+                    <div className="mt-3 grid md:grid-cols-2 gap-3 text-sm text-white/75">
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                        <div className="text-xs text-white/55">Профиль</div>
+                        <div className="font-semibold text-white/90">{profile}</div>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                        <div className="text-xs text-white/55">Video in ANON</div>
+                        <div className="font-semibold text-white/90">{vv.allowVideoInAnon ? "enabled" : "disabled"}</div>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                        <div className="text-xs text-white/55">Input mode</div>
+                        <div className="font-semibold text-white/90">{vv.inputMode}</div>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+                        <div className="text-xs text-white/55">Audio preset</div>
+                        <div className="font-semibold text-white/90">{audio.preset}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 text-xs text-white/55">
+                      Здесь будет расширенная диагностика RTC/ICE/политик. Сейчас вкладка нужна, чтобы быстро сверять значения настроек.
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-sm text-white/90 font-semibold">Полезное</div>
+                    <div className="mt-2 text-sm text-white/70">
+                      <ul className="list-disc pl-5 space-y-1">
+                        <li>Если подсказки “заблокировано policy” не появляются, вероятно они были скрыты (dismiss). Сброс есть в профиле → Безопасность.</li>
+                        <li>На Шаге 15 подключим реальные устройства и уровни микрофона.</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-white/10 bg-white/[0.02] flex items-center justify-between gap-3">
+              <div className="text-xs text-white/55">
+                Часть настроек сейчас мок. В реале они будут подключены к медиапайплайну и policy (Шаги 15–16).
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-3 py-2 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-white/80"
+                >
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body
+  );
+}

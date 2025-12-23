@@ -5,6 +5,7 @@ import { checkSendMessage, checkStartCall } from "../core/policy/decisions";
 import { computeRtcPolicy } from "../core/policy/rtc";
 import { SecurityCoach } from "../core/security/coach";
 import { usePanicMode } from "../core/security/usePanicMode";
+import { useVoiceVideoSettings } from "../core/settings/voiceVideo";
 import type { CallWindowModel } from "../components/rtc/CallWindow";
 import { GuardedActionButton } from "../components/policy/GuardedActionButton";
 
@@ -87,18 +88,21 @@ export default function Messages({
   profile,
   dm,
   onStartCall,
+  onOpenVoiceVideoSettings,
 }: {
   profile: PrivacyProfile;
   dm: DmContact;
   onStartCall: (call: CallWindowModel) => void;
+  onOpenVoiceVideoSettings?: () => void;
 }) {
+
   const [panic, setPanic] = usePanicMode();
 
   // Моки “готовности” (в реале придут из TAL/crypto)
   const [e2eReady, setE2eReady] = useState(true);
   const [anonPathReady, setAnonPathReady] = useState(true);
   const [hasTurnAllowList, setHasTurnAllowList] = useState(true);
-  const [allowVideoInAnon, setAllowVideoInAnon] = useState(false);
+  const [vv] = useVoiceVideoSettings(profile);
 
   const esm = useMemo(() => computeEsm(profile, dm.caps), [profile, dm.caps]);
 
@@ -124,9 +128,9 @@ export default function Messages({
       e2eReady,
       anonPathReady,
       hasTurnAllowList,
-      allowVideoInAnon,
+      allowVideoInAnon: vv.allowVideoInAnon,
     });
-  }, [panic, profile, dm.caps, e2eReady, anonPathReady, hasTurnAllowList, allowVideoInAnon]);
+  }, [panic, profile, dm.caps, e2eReady, anonPathReady, hasTurnAllowList, vv.allowVideoInAnon]);
 
   const videoCallPreview = useMemo(() => {
     if (panic) {
@@ -149,9 +153,9 @@ export default function Messages({
       e2eReady,
       anonPathReady,
       hasTurnAllowList,
-      allowVideoInAnon,
+      allowVideoInAnon: vv.allowVideoInAnon,
     });
-  }, [panic, profile, dm.caps, e2eReady, anonPathReady, hasTurnAllowList, allowVideoInAnon]);
+  }, [panic, profile, dm.caps, e2eReady, anonPathReady, hasTurnAllowList, vv.allowVideoInAnon]);
 
   const [draft, setDraft] = useState("");
 
@@ -259,7 +263,7 @@ export default function Messages({
       e2eReady,
       anonPathReady,
       hasTurnAllowList,
-      allowVideoInAnon,
+      allowVideoInAnon: vv.allowVideoInAnon,
     });
 
     if (!decision.ok) {
@@ -303,15 +307,25 @@ export default function Messages({
               title="Голосовой звонок"
               decision={voiceCallPreview}
               onAllowed={() => onCall("voice")}
-              onDenied={(d) => SecurityCoach.deniedByPolicy(d)}
+              
             />
             <GuardedActionButton
               icon="🎥"
               title="Видео-звонок"
               decision={videoCallPreview}
               onAllowed={() => onCall("video")}
-              onDenied={(d) => SecurityCoach.deniedByPolicy(d)}
+              
             />
+            <button
+              type="button"
+              onClick={() => onOpenVoiceVideoSettings?.()}
+              disabled={!onOpenVoiceVideoSettings}
+              className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/10 text-white/90 hover:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed h-9 w-9"
+              title="Голос и видео"
+            >
+              ⚙️
+            </button>
+
           </div>
         </div>
       </div>
@@ -383,10 +397,15 @@ export default function Messages({
             <input type="checkbox" checked={hasTurnAllowList} onChange={(e) => setHasTurnAllowList(e.target.checked)} />
             <span>Есть allow-list TURN</span>
           </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={allowVideoInAnon} onChange={(e) => setAllowVideoInAnon(e.target.checked)} />
-            <span>Разрешить видео в Anon</span>
-          </label>
+          <div className="sm:col-span-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-sm text-white/80">
+              Видео в Anon:{" "}
+              <span className="font-semibold text-white">
+                {vv.allowVideoInAnon ? "разрешено" : "выключено"}
+              </span>
+            </div>
+            <div className="mt-0.5 text-xs text-white/60">Меняется в «Голос и видео» (⚙️).</div>
+          </div>
         </div>
         <div className="mt-3 text-xs text-white/60">Эти переключатели имитируют сигналы TAL/crypto. В проде их не будет.</div>
       </details>

@@ -5,6 +5,7 @@ import { checkSendMessage, checkStartCall } from "../core/policy/decisions";
 import { computeRtcPolicy } from "../core/policy/rtc";
 import { SecurityCoach } from "../core/security/coach";
 import { usePanicMode } from "../core/security/usePanicMode";
+import { useVoiceVideoSettings } from "../core/settings/voiceVideo";
 import { GuardedActionButton } from "../components/policy/GuardedActionButton";
 import type { CallWindowModel } from "../components/rtc/CallWindow";
 
@@ -179,10 +180,12 @@ export default function Servers({
   profile,
   server,
   onStartCall,
+  onOpenVoiceVideoSettings,
 }: {
   profile: PrivacyProfile;
   server: ServerItem;
   onStartCall: (call: CallWindowModel) => void;
+  onOpenVoiceVideoSettings?: () => void;
 }) {
   const [panic, setPanic] = usePanicMode();
 
@@ -190,7 +193,7 @@ export default function Servers({
   const [e2eReady, setE2eReady] = useState(true);
   const [anonPathReady, setAnonPathReady] = useState(true);
   const [hasTurnAllowList, setHasTurnAllowList] = useState(true);
-  const [allowVideoInAnon, setAllowVideoInAnon] = useState(false);
+  const [vv] = useVoiceVideoSettings(profile);
 
   // Роль пользователя в этом сервере (мок)
   const [myRole, setMyRole] = useState<Role>("member");
@@ -314,7 +317,7 @@ export default function Servers({
       e2eReady,
       anonPathReady,
       hasTurnAllowList,
-      allowVideoInAnon,
+      allowVideoInAnon: vv.allowVideoInAnon,
     });
   }, [
     selectedChannel,
@@ -325,7 +328,7 @@ export default function Servers({
     e2eReady,
     anonPathReady,
     hasTurnAllowList,
-    allowVideoInAnon,
+    vv.allowVideoInAnon,
   ]);
 
   const videoCallPreview = useMemo(() => {
@@ -367,7 +370,7 @@ export default function Servers({
       e2eReady,
       anonPathReady,
       hasTurnAllowList,
-      allowVideoInAnon,
+      allowVideoInAnon: vv.allowVideoInAnon,
     });
   }, [
     selectedChannel,
@@ -378,7 +381,7 @@ export default function Servers({
     e2eReady,
     anonPathReady,
     hasTurnAllowList,
-    allowVideoInAnon,
+    vv.allowVideoInAnon,
   ]);
 
   function denyByUi(reason: string) {
@@ -477,7 +480,7 @@ export default function Servers({
       e2eReady,
       anonPathReady,
       hasTurnAllowList,
-      allowVideoInAnon,
+      allowVideoInAnon: vv.allowVideoInAnon,
     });
 
     if (!decision.ok) {
@@ -598,6 +601,16 @@ export default function Servers({
                       onAllowed={() => onCall("video")}
                       
                     />
+                    <button
+                      type="button"
+                      onClick={() => onOpenVoiceVideoSettings?.()}
+                      disabled={!onOpenVoiceVideoSettings}
+                      className="inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/10 text-white/90 hover:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed h-9 w-9"
+                      title="Голос и видео"
+                    >
+                      ⚙️
+                    </button>
+
                   </div>
                 )}
               </div>
@@ -711,10 +724,20 @@ export default function Servers({
             <input type="checkbox" checked={hasTurnAllowList} onChange={(e) => setHasTurnAllowList(e.target.checked)} />
             <span>Есть allow-list TURN</span>
           </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={allowVideoInAnon} onChange={(e) => setAllowVideoInAnon(e.target.checked)} />
-            <span>Разрешить видео в Anon</span>
-          </label>
+          <div className="sm:col-span-2 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-sm text-white/80">
+              Видео в Anon: <span className="font-semibold text-white">{vv.allowVideoInAnon ? "разрешено" : "выключено"}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenVoiceVideoSettings?.()}
+              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-sm"
+              disabled={!onOpenVoiceVideoSettings}
+              title="Открыть настройки микрофона/видео"
+            >
+              ⚙️ Голос и видео
+            </button>
+          </div>
 
           <label className="flex items-center gap-2">
             <span className="text-white/70">Моя роль:</span>

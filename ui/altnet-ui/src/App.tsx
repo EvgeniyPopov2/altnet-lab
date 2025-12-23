@@ -18,7 +18,7 @@ import { dismiss, isDismissed } from "./core/security/storage";
 import { usePanicMode } from "./core/security/usePanicMode";
 import { SecurityCoachHost } from "./components/security/SecurityCoachHost";
 import CallWindow, { type CallWindowModel } from "./components/rtc/CallWindow";
-
+import VoiceVideoSettingsModal from "./components/settings/VoiceVideoSettingsModal";
 type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "security" | "profile";
 type RailView = "global" | "messages" | "servers";
 
@@ -71,7 +71,7 @@ export default function App() {
   const [builderOpen, setBuilderOpen] = useState(false);
   const [browserNav, setBrowserNav] = useState<{ url: string; token: number } | null>(null);
   const [qsOpen, setQsOpen] = useState(false);
-
+  const [voiceVideoOpen, setVoiceVideoOpen] = useState(false);
   // === Профиль сети (глобальный, хранится в localStorage) ===
   const [profile, setProfile] = usePrivacyProfile();
 
@@ -492,9 +492,24 @@ export default function App() {
                 </div>
               )}
 
-              {section === "messages" && selectedDm && <Messages profile={profile} dm={selectedDm} onStartCall={openCall} />}
+              {section === "messages" && selectedDm && (
+                <Messages
+                  profile={profile}
+                  dm={selectedDm}
+                  onStartCall={openCall}
+                  onOpenVoiceVideoSettings={() => setVoiceVideoOpen(true)}
+                />
+              )}
 
-              {section === "servers" && selectedServer && <Servers profile={profile} server={selectedServer} onStartCall={openCall} />}
+              {section === "servers" && selectedServer && (
+                <Servers
+                  profile={profile}
+                  server={selectedServer}
+                  onStartCall={openCall}
+                  onOpenVoiceVideoSettings={() => setVoiceVideoOpen(true)}
+                />
+              )}
+
 
 
               {section === "explore" && <ExploreDiscover />}
@@ -528,6 +543,22 @@ export default function App() {
 
                   <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                     <div className="text-white/90 font-semibold">Безопасность</div>
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-white/90 font-semibold">Голос и видео</div>
+                      <div className="mt-2 text-sm text-white/70">
+                        Настройки микрофона, видео и режимов ввода (VAD/PTT). Часть опций может блокироваться policy профиля.
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setVoiceVideoOpen(true)}
+                          className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-sm"
+                        >
+                          🎙️ Открыть «Голос и видео»
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="mt-2 text-sm text-white/70">
                       Если вы подозреваете компрометацию устройства — включите «Панику». Это заблокирует сетевые действия и покажет чек‑лист.
                     </div>
@@ -554,6 +585,7 @@ export default function App() {
                         >
                           Выключить панику
                         </button>
+                        
                       )}
                     </div>
                   </div>
@@ -571,6 +603,13 @@ export default function App() {
       <SecurityCoachHost />
       {/* Call Window */}
       <CallWindow call={call} onEnd={() => setCall(null)} />
+      {/* Voice & Video Settings */}
+      <VoiceVideoSettingsModal
+        open={voiceVideoOpen}
+        profile={profile}
+        onClose={() => setVoiceVideoOpen(false)}
+      />
+
     </div>
   );
 }
