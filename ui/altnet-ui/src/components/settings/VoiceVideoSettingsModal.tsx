@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Lock, Mic, Video, Wrench, Music2, X } from "lucide-react";
@@ -6,7 +6,8 @@ import { clearDismissedKeys } from "../../core/security/storage";
 import type { PrivacyProfile } from "../../core/policy/types";
 import { useVoiceVideoSettings, type DuckingMode, type InputProcessingProfile, type VoiceInputMode } from "../../core/settings/voiceVideo";
 import { useRtcAudioConfig } from "../../core/rtc/audio";
-
+import { useMediaDevices } from "../../core/media/useMediaDevices";
+import { useMicTest } from "../../core/media/useMicTest";
 type TabKey = "voice" | "video" | "soundboard" | "debug";
 
 type Props = {
@@ -185,15 +186,39 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
   const [tab, setTab] = useState<TabKey>("voice");
   const [vv, patchVv, resetVv] = useVoiceVideoSettings(profile);
   const [audio, patchAudio, resetAudio] = useRtcAudioConfig(profile);
-
-  // Мок “теста микрофона”, чтобы UI выглядел как у Discord без запроса разрешений.
+  // Реальный тест микрофона (WebAudio + getUserMedia).
   const [testing, setTesting] = useState(false);
-  const [level, setLevel] = useState(0);
+  const monitorAudioRef = useRef<HTMLAudioElement | null>(null);
+  const media = useMediaDevices(open);
+  const micTest = useMicTest({
+    active: open && tab === "voice" && testing,
+    inputDeviceId: vv.inputDeviceId,
+    outputDeviceId: vv.outputDeviceId,
+    micVolumePct: vv.micVolume,
+    outputVolumePct: vv.outputVolume,
+    inputMode: vv.inputMode,
+    vadThresholdPct: vv.vadThreshold,
+    pttHotkey: vv.pttHotkey,
+    monitor: true,
+    audioElRef: monitorAudioRef,
+    constraints: {
+      echoCancellation: audio.aec,
+      autoGainControl: audio.agc,
+      noiseSuppression: audio.preset !== "off",
+    },
+  });
+
+  // После выдачи разрешения на микрофон браузер начинает раскрывать реальные label устройств.
+  // Освежаем список, чтобы селекты не оставались "Микрофон 1/2".
   useEffect(() => {
+    if (!open) return;
     if (!testing) return;
-    const i = window.setInterval(() => setLevel((Math.random() * 0.85 + 0.05) % 1), 160);
-    return () => window.clearInterval(i);
-  }, [testing]);
+    const t = window.setTimeout(() => {
+      void media.refresh();
+    }, 650);
+    return () => window.clearTimeout(t);
+  }, [open, testing, media.refresh]);
+
 
   // Захват hotkey (мок)
   const [capturingHotkey, setCapturingHotkey] = useState(false);
@@ -230,29 +255,9 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
 
   const canShowVideoControls = profile !== "anon" || vv.allowVideoInAnon;
 
-  const inputDevices = useMemo(
-    () => [
-      { id: "default", label: "Микрофон (по умолчанию)" },
-      { id: "redmi", label: "Микрофон (Redmi 电脑音箱)" },
-      { id: "usb", label: "USB Mic (Mock)" },
-    ],
-    []
-  );
-  const outputDevices = useMemo(
-    () => [
-      { id: "default", label: "Динамики (по умолчанию)" },
-      { id: "hd", label: "Динамики (High Definition Audio Device)" },
-      { id: "headset", label: "Гарнитура (Mock)" },
-    ],
-    []
-  );
-  const cameraDevices = useMemo(
-    () => [
-      { id: "default", label: "Камера (по умолчанию)" },
-      { id: "integrated", label: "Integrated Webcam (Mock)" },
-    ],
-    []
-  );
+  const inputDevices = media.audioInputs;
+  const outputDevices = media.audioOutputs;
+  const cameraDevices = media.videoInputs;
 
   const applyProcProfile = (p: InputProcessingProfile) => {
     patchVv({ inputProcessingProfile: p });
@@ -409,28 +414,66 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
+                                        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
                           <div className="text-sm font-semibold text-white/85">Проверка микрофона</div>
                           <div className="mt-0.5 text-[11px] text-white/50">
-                            MVP: сейчас это мок‑индикатор. Следующим шагом подключим реальный уровень через getUserMedia.
+                            Реальный уровень через getUserMedia + WebAudio (локально, без сети).
+                            {!media.hasRealLabels && " Названия устройств появятся после разрешения на микрофон."}
                           </div>
+
+                          {media.error && <div className="mt-1 text-[11px] text-amber-200">Устройства: {media.error}</div>}
+                          {micTest.error && <div className="mt-1 text-[11px] text-red-200">Микрофон: {micTest.error}</div>}
                         </div>
 
                         <button
                           type="button"
-                          className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                          disabled={!media.supported}
+                          className={[
+                            "rounded-lg px-3 py-2 text-sm font-semibold text-white",
+                            !media.supported ? "cursor-not-allowed bg-white/10 text-white/40" : "bg-indigo-600 hover:bg-indigo-500",
+                          ].join(" ")}
                           onClick={() => setTesting((v) => !v)}
+                          title={!media.supported ? "getUserMedia/enumerateDevices недоступны" : testing ? "Остановить" : "Начать"}
                         >
                           {testing ? "Остановить" : "Давайте проверим"}
                         </button>
                       </div>
 
-                      <div className="mt-3 h-2 rounded-full bg-white/10 overflow-hidden">
-                        <div className="h-2 bg-emerald-400/50" style={{ width: `${Math.round(level * 100)}%` }} />
+                      <div className="mt-3 relative h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-2 bg-emerald-400/50" style={{ width: `${Math.round(micTest.level * 100)}%` }} />
+                        {/* маркер порога VAD */}
+                        <div
+                          className="absolute top-0 bottom-0 w-[2px] bg-white/40"
+                          style={{ left: `${Math.round(Math.min(1, micTest.thresholdRms * 3.2) * 100)}%` }}
+                        />
                       </div>
+
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/50">
+                        <div className="flex items-center gap-2">
+                          <span className={micTest.speaking ? "text-emerald-200" : "text-white/50"}>
+                            {micTest.speaking ? "● Говорю" : "○ Тишина"}
+                          </span>
+                          {micTest.clipped && <span className="text-amber-200">Клиппинг</span>}
+                        </div>
+
+                        {vv.inputMode === "ptt" && (
+                          <span className={micTest.pttDown ? "text-emerald-200" : "text-white/50"}>
+                            PTT:{" "}
+                            {micTest.pttDown
+                              ? "удерживаю"
+                              : vv.pttHotkey && vv.pttHotkey !== "Не назначено"
+                                ? `удерживайте ${vv.pttHotkey}`
+                                : "не назначено"}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* скрытый audio-элемент для вывода мониторинга (нужен для setSinkId) */}
+                      <audio ref={monitorAudioRef} className="hidden" />
                     </div>
+
 
                     <div className="space-y-3">
                       <SectionTitle>Профиль ввода</SectionTitle>
