@@ -8,6 +8,7 @@ import { useVoiceVideoSettings, type DuckingMode, type InputProcessingProfile, t
 import { useRtcAudioConfig } from "../../core/rtc/audio";
 import { useMediaDevices } from "../../core/media/useMediaDevices";
 import { useMicTest } from "../../core/media/useMicTest";
+import { useCameraPreview } from "../../core/media/useCameraPreview";
 type TabKey = "voice" | "video" | "soundboard" | "debug";
 
 type Props = {
@@ -207,7 +208,16 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
       noiseSuppression: audio.preset !== "off",
     },
   });
+  // Реальный тест камеры (getUserMedia, локально, без сети).
+  const [videoTesting, setVideoTesting] = useState(false);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
 
+  const camPreview = useCameraPreview({
+    active: open && tab === "video" && videoTesting && (profile !== "anon" || vv.allowVideoInAnon),
+    deviceId: vv.cameraDeviceId,
+    videoElRef: videoPreviewRef,
+  });
+  void camPreview;
   // После выдачи разрешения на микрофон браузер начинает раскрывать реальные label устройств.
   // Освежаем список, чтобы селекты не оставались "Микрофон 1/2".
   useEffect(() => {
@@ -218,6 +228,24 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
     }, 650);
     return () => window.clearTimeout(t);
   }, [open, testing, media.refresh]);
+
+  // После разрешения на камеру — обновим список устройств (label становятся реальными).
+  useEffect(() => {
+    if (!open) return;
+    if (!videoTesting) return;
+    const t = window.setTimeout(() => {
+      void media.refresh();
+    }, 650);
+    return () => window.clearTimeout(t);
+  }, [open, videoTesting, media.refresh]);
+
+  // Если policy запретила видео (ANON без allowVideoInAnon) — принудительно выключаем тест.
+  useEffect(() => {
+    if (!open) return;
+    if (profile !== "anon") return;
+    if (vv.allowVideoInAnon) return;
+    if (videoTesting) setVideoTesting(false);
+  }, [open, profile, vv.allowVideoInAnon, videoTesting]);
 
 
   // Захват hotkey (мок)
@@ -251,6 +279,7 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
     if (open) return;
     setTesting(false);
     setCapturingHotkey(false);
+    setVideoTesting(false);
   }, [open]);
 
   const canShowVideoControls = profile !== "anon" || vv.allowVideoInAnon;
@@ -414,7 +443,7 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
                       </div>
                     </div>
 
-                                        <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-sm font-semibold text-white/85">Проверка микрофона</div>
@@ -697,11 +726,11 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
                     <div className="space-y-4">
                       <SectionTitle>Устройство видео</SectionTitle>
                       <select
-                        value={"default"}
+                        value={vv.cameraDeviceId || "default"}
                         disabled={!canShowVideoControls}
-                        onChange={() => {
-                          /* мок */
-                        }}
+                        onChange={(e) => patchVv({ cameraDeviceId: e.target.value })}
+                        /* мок */
+
                         className={[
                           "w-full rounded-xl border px-3 py-2 text-sm outline-none",
                           !canShowVideoControls
@@ -724,12 +753,76 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
                       )}
                     </div>
 
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                      <div className="text-sm font-semibold text-white/80">Предпросмотр (мок)</div>
-                      <div className="mt-2 h-44 rounded-xl border border-white/10 bg-black/30 flex items-center justify-center text-sm text-white/50">
-                        {canShowVideoControls ? "Видео превью подключим после getUserMedia" : "Недоступно"}
+                    <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-white/85">Проверка видео</div>
+                          <div className="mt-0.5 text-[11px] text-white/50">
+                            Реальный предпросмотр через getUserMedia (локально, без сети).
+                            {!media.hasRealLabels && " Названия камер могут появиться после разрешения на камеру/микрофон."}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className={[
+                            "rounded-lg px-3 py-2 text-sm font-semibold text-white transition",
+                            !media.supported || !canShowVideoControls
+                              ? "cursor-not-allowed bg-white/10 text-white/40"
+                              : "bg-indigo-600 hover:bg-indigo-500",
+                          ].join(" ")}
+                          disabled={!media.supported || !canShowVideoControls}
+                          onClick={() => setVideoTesting((v) => !v)}
+                          title={
+                            !media.supported
+                              ? "getUserMedia/enumerateDevices недоступны"
+                              : !canShowVideoControls
+                                ? "Недоступно в текущем профиле"
+                                : videoTesting
+                                  ? "Остановить"
+                                  : "Начать"
+                          }
+                        >
+                          {videoTesting ? "Остановить" : "Давайте проверим"}
+                        </button>
+                      </div>
+
+                      {media.error && (
+                        <div className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-white/60">
+                          Устройства: {media.error}
+                        </div>
+                      )}
+
+                      {camPreview.error && (
+                        <div className="mt-2 rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-[11px] text-rose-200/90">
+                          Камера: {camPreview.error}
+                        </div>
+                      )}
+
+                      <div className="mt-3 relative aspect-video overflow-hidden rounded-xl border border-white/10 bg-black/30">
+                        <video
+                          ref={videoPreviewRef}
+                          className={[
+                            "h-full w-full object-cover transition-opacity",
+                            camPreview.running ? "opacity-100" : "opacity-0",
+                          ].join(" ")}
+                          muted
+                          playsInline
+                          autoPlay
+                        />
+
+                        {!camPreview.running && (
+                          <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-white/50">
+                            {canShowVideoControls
+                              ? videoTesting
+                                ? "Запуск предпросмотра… (проверьте разрешения браузера)"
+                                : "Нажмите “Давайте проверим”, чтобы запустить предпросмотр"
+                              : "Недоступно"}
+                          </div>
+                        )}
                       </div>
                     </div>
+
                   </div>
                 )}
 

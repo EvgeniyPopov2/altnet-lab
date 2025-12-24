@@ -24,6 +24,7 @@ export type VoiceVideoSettings = {
   pttHotkey: string; // "Не назначено" | "Ctrl+Shift+V" и т.д.
 
   // Видео
+  cameraDeviceId: string;
   /**
    * В анонимном профиле видео по умолчанию выключено политикой.
    * Этот флаг — явное согласие пользователя (пониженная приватность/качество).
@@ -83,6 +84,7 @@ export function getDefaultVoiceVideoSettings(profile: PrivacyProfile): VoiceVide
     inputMode: "vad",
     vadThreshold: isAnon ? 70 : 65,
     pttHotkey: "Не назначено",
+    cameraDeviceId: "default",
     allowVideoInAnon: false,
     highPriorityPackets: false,
     ducking: "when_others_speak",
@@ -107,6 +109,7 @@ export function readVoiceVideoSettings(profile: PrivacyProfile): VoiceVideoSetti
     inputMode: isInputMode(o.inputMode) ? o.inputMode : def.inputMode,
     vadThreshold: typeof o.vadThreshold === "number" ? clamp01x100(o.vadThreshold) : def.vadThreshold,
     pttHotkey: typeof o.pttHotkey === "string" ? o.pttHotkey : def.pttHotkey,
+    cameraDeviceId: typeof o.cameraDeviceId === "string" ? o.cameraDeviceId : def.cameraDeviceId,
     allowVideoInAnon: typeof o.allowVideoInAnon === "boolean" ? o.allowVideoInAnon : def.allowVideoInAnon,
     highPriorityPackets: typeof o.highPriorityPackets === "boolean" ? o.highPriorityPackets : def.highPriorityPackets,
     ducking: isDucking(o.ducking) ? o.ducking : def.ducking,
