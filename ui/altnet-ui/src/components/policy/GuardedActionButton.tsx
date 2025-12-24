@@ -105,7 +105,7 @@ export function GuardedActionButton({
       <button
         type="button"
         className={btnClass}
-        title={title}
+        title={decision.ok ? title : decision.title}
         onClick={() => {
           if (denied) {
             onDenied?.(decision);
