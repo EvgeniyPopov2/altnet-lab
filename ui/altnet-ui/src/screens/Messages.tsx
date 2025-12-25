@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import type { ContactCapabilities, PrivacyProfile } from "../core/policy/types";
 import { computeEsm } from "../core/policy/esm";
 import { checkSendMessage, checkStartCall } from "../core/policy/decisions";
@@ -9,11 +10,9 @@ import { useVoiceVideoSettings } from "../core/settings/voiceVideo";
 import type { CallWindowModel } from "../components/rtc/CallWindow";
 import { GuardedActionButton } from "../components/policy/GuardedActionButton";
 
-import type { DmAttachment, DmJournalV1, DmMessage } from "../core/dm/types";
-import { appendMessage, createEmptyJournal, getOrderedMessages } from "../core/dm/journal";
+import type { DmJournalV1, DmMessage } from "../core/dm/types";
+import { appendMessage, createEmptyJournal, getOrderedMessages, mergeJournals } from "../core/dm/journal";
 import { clearDmJournal, loadDmJournal, saveDmJournal } from "../core/dm/storage";
-import { fileToCid, shortCid } from "../core/content/cid";
-import { getUrl, putFile } from "../core/content/blobStore";
 import { getOrCreateDeviceId, nextDeviceSeq } from "../core/identity/device";
 
 export type DmContact = {
@@ -23,33 +22,15 @@ export type DmContact = {
   caps: ContactCapabilities;
 };
 
-function nowHHMM(): string {
-  const now = new Date();
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mm = String(now.getMinutes()).padStart(2, "0");
+type Presence = "online" | "away" | "offline";
+
+const REACTION_EMOJI = ["👍", "❤️", "😂", "🔥", "👀", "😮"] as const;
+
+function hhmm(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
   return `${hh}:${mm}`;
-}
-
-function fmtTime(ts: number): string {
-  try {
-    return new Date(ts).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return nowHHMM();
-  }
-}
-
-function fmtBytes(n: number): string {
-  const v0 = Number(n);
-  if (!Number.isFinite(v0) || v0 < 0) return "—";
-  const units = ["B", "KB", "MB", "GB"];
-  let v = v0;
-  let i = 0;
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  const digits = i <= 1 ? 0 : 1;
-  return `${v.toFixed(digits)} ${units[i]}`;
 }
 
 function badgeClass(kind: "ok" | "warn" | "deny") {
@@ -70,7 +51,7 @@ function Badge({
   title,
 }: {
   kind: "ok" | "warn" | "deny";
-  children: React.ReactNode;
+  children: ReactNode;
   title?: string;
 }) {
   return (
@@ -86,95 +67,98 @@ function Badge({
   );
 }
 
+function inferPresence(subtitle?: string): Presence {
+  const s = (subtitle ?? "").toLowerCase();
+  if (s.includes("не в сети") || s.includes("offline")) return "offline";
+  if (s.includes("afk") || s.includes("away") || s.includes("отош")) return "away";
+  if (s.includes("в сети") || s.includes("online")) return "online";
+  // нейтральный дефолт
+  return "online";
+}
+
+function inferTyping(subtitle?: string): boolean {
+  const s = (subtitle ?? "").toLowerCase();
+  return s.includes("пишет") || s.includes("печатает") || s.includes("typing");
+}
+
+function presenceDot(p: Presence): string {
+  switch (p) {
+    case "online":
+      return "bg-emerald-400";
+    case "away":
+      return "bg-amber-400";
+    case "offline":
+    default:
+      return "bg-white/30";
+  }
+}
+
+function presenceLabel(p: Presence): string {
+  switch (p) {
+    case "online":
+      return "онлайн";
+    case "away":
+      return "AFK";
+    case "offline":
+    default:
+      return "не в сети";
+  }
+}
+
+function deliveryIcon(d?: DmMessage["delivery"]): string {
+  switch (d) {
+    case "sent":
+      return "✓";
+    case "delivered":
+      return "✓✓";
+    case "read":
+      return "✓✓";
+    default:
+      return "";
+  }
+}
+
+function deliveryClass(d?: DmMessage["delivery"]): string {
+  switch (d) {
+    case "read":
+      return "text-indigo-300";
+    default:
+      return "text-white/40";
+  }
+}
+
 function seedJournal(dm: DmContact): DmJournalV1 {
   const base = createEmptyJournal(dm.id);
-  const t0 = Date.now() - 1000 * 60 * 12;
-  let j = base;
-  j = appendMessage(j, {
+  const now = Date.now();
+
+  const m1: DmMessage = {
     id: `seed:${dm.id}:1`,
-    createdAt: t0,
+    createdAt: now - 2 * 60_000,
+    updatedAt: now - 2 * 60_000,
     author: "them",
-    text: "Привет. Тут будет CRDT-журнал (мок) + вложения CID (локально).",
-  });
-  j = appendMessage(j, {
+    text: "Привет. Тут будет CRDT-журнал (мок) + реакции/статусы/контекст-меню.",
+  };
+
+  const m2: DmMessage = {
     id: `seed:${dm.id}:2`,
-    createdAt: t0 + 1000 * 60 * 2,
+    createdAt: now - 90_000,
+    updatedAt: now - 90_000,
     author: "me",
-    text: "Ок. Сейчас подключим локальный журнал (localStorage) и CID-вложения с превью (in-memory blob).",
-  });
-  return j;
+    text: "Ок. Дальше — симуляция мержа mergeJournals + UX (fail-closed).",
+    delivery: "read",
+  };
+
+  return appendMessage(appendMessage(base, m1), m2);
 }
 
-function AttachmentRow({
-  a,
-  onRemove,
-}: {
-  a: DmAttachment;
-  onRemove?: () => void;
-}) {
-  const url = getUrl(a.cid);
-  const isImage = (a.mime || "").toLowerCase().startsWith("image/");
-
-  return (
-    <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 p-2">
-      {isImage && url ? (
-        <img
-          src={url}
-          alt={a.name}
-          className="h-11 w-11 rounded-md object-cover border border-white/10"
-        />
-      ) : (
-        <div className="h-11 w-11 rounded-md bg-white/10 border border-white/10 flex items-center justify-center text-base">
-          📎
-        </div>
-      )}
-
-      <div className="min-w-0 flex-1">
-        <div className="text-xs text-white/90 truncate" title={a.name}>
-          {a.name}
-        </div>
-        <div className="text-[11px] text-white/60 flex flex-wrap gap-x-2">
-          <span title={a.cid}>{shortCid(a.cid)}</span>
-          <span>· {fmtBytes(a.size)}</span>
-          {!url && <span className="text-amber-200/80">нет локального blob</span>}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-1">
-        {url ? (
-          <a
-            href={url}
-            download={a.name}
-            className="text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white/90"
-            title="Скачать (локальный blob)"
-          >
-            Скачать
-          </a>
-        ) : (
-          <button
-            type="button"
-            className="text-xs px-2 py-1 rounded-md bg-white/5 border border-white/10 text-white/50 cursor-not-allowed"
-            title="Blob не найден локально (в проде загрузим по CID)"
-            disabled
-          >
-            CID
-          </button>
-        )}
-
-        {onRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="text-xs px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white/90"
-            title="Убрать"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
+type MsgMenuState =
+  | { open: false }
+  | {
+      open: true;
+      messageId: string;
+      x: number;
+      y: number;
+    };
 
 export default function Messages({
   profile,
@@ -187,6 +171,9 @@ export default function Messages({
   onStartCall: (call: CallWindowModel) => void;
   onOpenVoiceVideoSettings?: () => void;
 }) {
+  const deviceId = useMemo(() => getOrCreateDeviceId(), []);
+  const remoteActorId = useMemo(() => `contact:${dm.id}`, [dm.id]);
+
   const [panic, setPanic] = usePanicMode();
 
   // Моки “готовности” (в реале придут из TAL/crypto)
@@ -197,40 +184,6 @@ export default function Messages({
 
   const esm = useMemo(() => computeEsm(profile, dm.caps), [profile, dm.caps]);
 
-  // Device identity (для id сообщений)
-  const deviceId = useMemo(() => getOrCreateDeviceId(), []);
-
-  const [journal, setJournal] = useState<DmJournalV1>(() => loadDmJournal(dm.id) ?? seedJournal(dm));
-
-  // draft
-  const [draft, setDraft] = useState("");
-  const [draftAtts, setDraftAtts] = useState<DmAttachment[]>([]);
-  const [addingFiles, setAddingFiles] = useState(false);
-  const fileRef = useRef<HTMLInputElement | null>(null);
-
-  // MVP: при смене контакта — загружаем/инициализируем другой журнал
-  useEffect(() => {
-    const loaded = loadDmJournal(dm.id);
-    const next = loaded ?? seedJournal(dm);
-    setJournal(next);
-    setDraft("");
-    setDraftAtts([]);
-  }, [dm.id]);
-
-  // Persist текущего журнала (важно: используем journal.dmId)
-  useEffect(() => {
-    saveDmJournal(journal.dmId, journal);
-  }, [journal]);
-
-  const messages = useMemo(() => getOrderedMessages(journal), [journal]);
-
-  // автоскролл
-  const endRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length]);
-
-  // Превью-проверка звонков (для UI состояния кнопок + popover "почему заблокировано")
   const voiceCallPreview = useMemo(() => {
     if (panic) {
       return {
@@ -239,7 +192,7 @@ export default function Messages({
         title: "Паника включена",
         message: "Сетевые действия временно заблокированы (fail-closed).",
         details: [
-          "Отключите \"Панику\", если вы уверены, что устройство не скомпрометировано.",
+          'Отключите "Панику", если вы уверены, что устройство не скомпрометировано.',
           "Если есть риск компрометации — сначала выполните отзыв/ротацию ключей в Security Center.",
         ],
       };
@@ -264,7 +217,7 @@ export default function Messages({
         title: "Паника включена",
         message: "Сетевые действия временно заблокированы (fail-closed).",
         details: [
-          "Отключите \"Панику\", если вы уверены, что устройство не скомпрометировано.",
+          'Отключите "Панику", если вы уверены, что устройство не скомпрометировано.',
           "Если есть риск компрометации — сначала выполните отзыв/ротацию ключей в Security Center.",
         ],
       };
@@ -280,6 +233,57 @@ export default function Messages({
       allowVideoInAnon: vv.allowVideoInAnon,
     });
   }, [panic, profile, dm.caps, e2eReady, anonPathReady, hasTurnAllowList, vv.allowVideoInAnon]);
+
+  const [draft, setDraft] = useState("");
+  const [replyToId, setReplyToId] = useState<string | null>(null);
+
+  const [presence, setPresence] = useState<Presence>(() => inferPresence(dm.subtitle));
+  const [remoteTyping, setRemoteTyping] = useState<boolean>(() => inferTyping(dm.subtitle));
+
+  const [mergeHint, setMergeHint] = useState<string | null>(null);
+
+  const [menu, setMenu] = useState<MsgMenuState>({ open: false });
+
+  const [journal, setJournal] = useState<DmJournalV1>(() => {
+    const loaded = loadDmJournal(dm.id);
+    if (loaded) return loaded;
+    const seeded = seedJournal(dm);
+    saveDmJournal(dm.id, seeded);
+    return seeded;
+  });
+
+  const ordered = useMemo(() => getOrderedMessages(journal), [journal]);
+  const byId = useMemo(() => new Map(ordered.map((m) => [m.id, m])), [ordered]);
+
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // при смене диалога
+    const loaded = loadDmJournal(dm.id);
+    const next = loaded ?? seedJournal(dm);
+    setJournal(next);
+    if (!loaded) saveDmJournal(dm.id, next);
+
+    setDraft("");
+    setReplyToId(null);
+    setMenu({ open: false });
+    setMergeHint(null);
+    setPresence(inferPresence(dm.subtitle));
+    setRemoteTyping(inferTyping(dm.subtitle));
+  }, [dm.id, dm.subtitle]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [ordered.length, dm.id]);
+
+  useEffect(() => {
+    if (!menu.open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu({ open: false });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu.open]);
 
   const e2eBadge = e2eReady ? (
     <Badge kind="ok" title="Сквозное шифрование установлено">
@@ -323,49 +327,10 @@ export default function Messages({
     });
   }
 
-  const canSend = draft.trim().length > 0 || draftAtts.length > 0;
-
-  async function onPickFiles(files: FileList | null) {
-    if (!files || files.length === 0) return;
+  function canSendOrCoach(): boolean {
     if (panic) {
-      denyByUi("Паника включена: добавление вложений заблокировано (fail-closed).");
-      if (fileRef.current) fileRef.current.value = "";
-      return;
-    }
-
-    setAddingFiles(true);
-    try {
-      const list = Array.from(files);
-      const next: DmAttachment[] = [];
-
-      for (const f of list) {
-        const cid = await fileToCid(f);
-        putFile(cid, f);
-        next.push({
-          cid,
-          name: f.name,
-          mime: f.type || "application/octet-stream",
-          size: f.size,
-        });
-      }
-
-      // dedupe по cid
-      setDraftAtts((prev) => {
-        const map = new Map<string, DmAttachment>();
-        for (const a of prev) map.set(a.cid, a);
-        for (const a of next) map.set(a.cid, a);
-        return Array.from(map.values());
-      });
-    } finally {
-      setAddingFiles(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-
-  function onSend() {
-    if (panic) {
-      denyByUi("Паника включена: отправка заблокирована (fail-closed).");
-      return;
+      denyByUi("Паника включена: действие заблокировано (fail-closed). ");
+      return false;
     }
 
     const decision = checkSendMessage({
@@ -377,41 +342,118 @@ export default function Messages({
 
     if (!decision.ok) {
       SecurityCoach.deniedByPolicy(decision);
-      return;
+      return false;
     }
 
-    const text = draft.trim();
-    if (text.length === 0 && draftAtts.length === 0) return;
+    return true;
+  }
 
+  function commit(next: DmJournalV1) {
+    setJournal(next);
+    saveDmJournal(dm.id, next);
+  }
+
+  function updateMessage(messageId: string, upd: (m: DmMessage) => DmMessage) {
+    const exists = journal.entries.some((m) => m.id === messageId);
+    if (!exists) return;
+    commit({
+      ...journal,
+      entries: journal.entries.map((m) => (m.id === messageId ? upd(m) : m)),
+    });
+  }
+
+  function setDelivery(messageId: string, d: NonNullable<DmMessage["delivery"]>) {
+    updateMessage(messageId, (m) => {
+      const rank = (x?: DmMessage["delivery"]) => (x === "read" ? 3 : x === "delivered" ? 2 : x === "sent" ? 1 : 0);
+      if (rank(m.delivery) >= rank(d)) return m;
+      return { ...m, delivery: d, updatedAt: Date.now() };
+    });
+  }
+
+  async function copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // fallback: старая среда
+      window.prompt("Скопируйте текст:", text);
+    }
+  }
+
+  function openMenuAt(messageId: string, x: number, y: number) {
+    const padding = 12;
+    const w = 248;
+    const h = 240;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const nx = Math.max(padding, Math.min(x, vw - w - padding));
+    const ny = Math.max(padding, Math.min(y, vh - h - padding));
+    setMenu({ open: true, messageId, x: nx, y: ny });
+  }
+
+  function applyReaction(messageId: string, emoji: string, actorId: string) {
+    updateMessage(messageId, (m) => {
+      if (m.deletedAt) return m;
+      const next = { ...m, reactions: { ...(m.reactions ?? {}) }, updatedAt: Date.now() };
+      const current = new Set(next.reactions?.[emoji] ?? []);
+      if (current.has(actorId)) current.delete(actorId);
+      else current.add(actorId);
+
+      const arr = Array.from(current);
+      arr.sort();
+
+      if (arr.length === 0) {
+        // Не используем delete (ts(2790)): убираем ключ через rest-оператор.
+        const { [emoji]: _removed, ...rest } = next.reactions ?? {};
+        next.reactions = rest;
+      } else {
+        next.reactions = { ...(next.reactions ?? {}), [emoji]: arr };
+      }
+
+
+      return next;
+    });
+  }
+
+  function toggleMyReaction(messageId: string, emoji: string) {
+    if (!canSendOrCoach()) return;
+    applyReaction(messageId, emoji, deviceId);
+  }
+
+  function deleteMyMessage(messageId: string) {
+    if (!canSendOrCoach()) return;
+
+    updateMessage(messageId, (m) => {
+      if (m.author !== "me") return m;
+      if (m.deletedAt) return m;
+      const t = Date.now();
+      return { ...m, deletedAt: t, updatedAt: t };
+    });
+  }
+
+  function onSend() {
+    const text = draft.trim();
+    if (text.length === 0) return;
+    if (!canSendOrCoach()) return;
+
+    const now = Date.now();
     const msg: DmMessage = {
       id: `${deviceId}:${nextDeviceSeq()}`,
-      createdAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
       author: "me",
       text,
-      attachments: draftAtts.length ? draftAtts : undefined,
+      delivery: "sent",
+      replyTo: replyToId ?? undefined,
     };
 
-    setJournal((prev) => appendMessage(prev, msg));
+    const next = appendMessage(journal, msg);
+    commit(next);
     setDraft("");
-    setDraftAtts([]);
-  }
+    setReplyToId(null);
 
-  function onMockIncoming() {
-    const msg: DmMessage = {
-      id: `remote:${Date.now()}`,
-      createdAt: Date.now(),
-      author: "them",
-      text: "(мок) Входящее сообщение. В проде сюда придёт CRDT-мерж + подпись.",
-    };
-
-    setJournal((prev) => appendMessage(prev, msg));
-  }
-
-  function onResetDialog() {
-    clearDmJournal(dm.id);
-    setJournal(seedJournal(dm));
-    setDraft("");
-    setDraftAtts([]);
+    // мок: прогресс доставки
+    window.setTimeout(() => setDelivery(msg.id, "delivered"), 700);
+    window.setTimeout(() => setDelivery(msg.id, "read"), 1600);
   }
 
   function onCall(kind: "voice" | "video") {
@@ -449,14 +491,102 @@ export default function Messages({
     });
   }
 
+  function simulateIncoming() {
+    const now = Date.now();
+    const msg: DmMessage = {
+      id: `remote:${dm.id}:${now}`,
+      createdAt: now,
+      updatedAt: now,
+      author: "them",
+      text: "(входящее) Проверка: реакции, статус, контекст-меню.",
+    };
+    commit(appendMessage(journal, msg));
+  }
+
+  function simulateMerge() {
+    const now = Date.now();
+
+    // «Удалённый» журнал (как будто пришёл из сети)
+    let remote: DmJournalV1 = { ...journal, entries: [...journal.entries] };
+
+    // 1) новое входящее сообщение
+    remote = appendMessage(remote, {
+      id: `remote-merge:${dm.id}:${now}`,
+      createdAt: now,
+      updatedAt: now,
+      author: "them",
+      text: "(merge) Входящее из удалённого журнала. mergeJournals должен добавить его.",
+    });
+
+    // 2) реакция от контакта на последнее не-удалённое
+    const target = [...remote.entries].reverse().find((m) => !m.deletedAt);
+    if (target) {
+      remote = {
+        ...remote,
+        entries: remote.entries.map((m) => {
+          if (m.id !== target.id) return m;
+          const reactions = { ...(m.reactions ?? {}) };
+          const set = new Set(reactions["👀"] ?? []);
+          set.add(remoteActorId);
+          reactions["👀"] = Array.from(set).sort();
+          return { ...m, reactions, updatedAt: now };
+        }),
+      };
+    }
+
+    // 3) удаление первого сообщения контакта (tombstone)
+    const firstThem = remote.entries.find((m) => m.author === "them" && !m.deletedAt);
+    if (firstThem) {
+      remote = {
+        ...remote,
+        entries: remote.entries.map((m) =>
+          m.id === firstThem.id ? { ...m, deletedAt: now, updatedAt: now } : m
+        ),
+      };
+    }
+
+    const before = journal;
+    const merged = mergeJournals(journal, remote);
+
+    const added = merged.entries.length - before.entries.length;
+    const changed = merged.entries.filter((m) => {
+      const prev = before.entries.find((x) => x.id === m.id);
+      if (!prev) return false;
+      const a = JSON.stringify(prev.reactions ?? {});
+      const b = JSON.stringify(m.reactions ?? {});
+      return a !== b || (prev.deletedAt ?? 0) !== (m.deletedAt ?? 0);
+    }).length;
+
+    commit(merged);
+    setMergeHint(`mergeJournals: +${added} новых, изменено ${changed} сообщений`);
+  }
+
+  function resetChat() {
+    clearDmJournal(dm.id);
+    const seeded = seedJournal(dm);
+    commit(seeded);
+    setDraft("");
+    setReplyToId(null);
+    setMenu({ open: false });
+    setMergeHint("Журнал очищен (localStorage)");
+  }
+
+  const replyPreview = replyToId ? byId.get(replyToId) : null;
+
   return (
     <div className="h-full min-h-0 flex flex-col gap-4">
       {/* Заголовок диалога */}
       <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="text-white/90 font-semibold">{dm.title}</div>
+            <div className="text-white/90 font-semibold flex items-center gap-2">
+              <span className={`inline-block h-2.5 w-2.5 rounded-full ${presenceDot(presence)}`} />
+              <span>{dm.title}</span>
+              <span className="text-xs text-white/50">· {presenceLabel(presence)}</span>
+              {remoteTyping && <span className="text-xs text-white/50">· печатает…</span>}
+            </div>
             {dm.subtitle && <div className="text-xs text-white/60">{dm.subtitle}</div>}
+            {mergeHint && <div className="text-[11px] text-white/50 mt-1">{mergeHint}</div>}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -466,18 +596,8 @@ export default function Messages({
 
             <div className="h-6 w-px bg-white/10 mx-1" />
 
-            <GuardedActionButton
-              icon="📞"
-              title="Голосовой звонок"
-              decision={voiceCallPreview}
-              onAllowed={() => onCall("voice")}
-            />
-            <GuardedActionButton
-              icon="🎥"
-              title="Видео-звонок"
-              decision={videoCallPreview}
-              onAllowed={() => onCall("video")}
-            />
+            <GuardedActionButton icon="📞" title="Голосовой звонок" decision={voiceCallPreview} onAllowed={() => onCall("voice")} />
+            <GuardedActionButton icon="🎥" title="Видео-звонок" decision={videoCallPreview} onAllowed={() => onCall("video")} />
             <button
               type="button"
               onClick={() => onOpenVoiceVideoSettings?.()}
@@ -491,34 +611,86 @@ export default function Messages({
         </div>
       </div>
 
-      {/* Лента сообщений (журнал) */}
+      {/* Лента сообщений (CRDT-мок) */}
       <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-4">
         <div className="space-y-3 text-sm">
-          {messages.map((m) => {
+          {ordered.map((m) => {
             const isMe = m.author === "me";
+            const time = hhmm(m.createdAt);
             const who = isMe ? "Вы" : dm.title;
-            const when = fmtTime(m.createdAt);
+            const reactions = Object.entries(m.reactions ?? {});
+            const myReacted = (emoji: string) => (m.reactions?.[emoji] ?? []).includes(deviceId);
+
+            const quoted = m.replyTo ? byId.get(m.replyTo) : null;
+
             return (
-              <div key={m.id} className={["flex", isMe ? "justify-end" : "justify-start"].join(" ")}>
+              <div
+                key={m.id}
+                className={["flex group", isMe ? "justify-end" : "justify-start"].join(" ")}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  openMenuAt(m.id, e.clientX, e.clientY);
+                }}
+              >
                 <div
                   className={[
-                    "max-w-[78%] rounded-2xl px-4 py-2 border",
+                    "relative max-w-[78%] rounded-2xl px-4 py-2 border",
                     isMe
                       ? "bg-indigo-600/20 border-indigo-400/20 text-white/90"
                       : "bg-white/5 border-white/10 text-white/90",
                   ].join(" ")}
-                  title={m.id}
                 >
-                  <div className="text-[11px] text-white/50 mb-1">
-                    {who} · {when}
+                  {/* кнопка меню */}
+                  <button
+                    type="button"
+                    title="Меню сообщения"
+                    onClick={(e) => {
+                      const r = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                      openMenuAt(m.id, r.right, r.bottom);
+                    }}
+                    className="absolute top-2 right-2 h-7 w-7 rounded-lg border border-white/10 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 opacity-0 group-hover:opacity-100 transition"
+                  >
+                    ⋯
+                  </button>
+
+                  <div className="text-[11px] text-white/50 mb-1 pr-8">
+                    {who} · {time}
+                    {isMe && (
+                      <span className={["ml-2", deliveryClass(m.delivery)].join(" ")}>{deliveryIcon(m.delivery)}</span>
+                    )}
                   </div>
 
-                  {m.text && <div className="leading-relaxed whitespace-pre-wrap">{m.text}</div>}
+                  {quoted && (
+                    <div className="mb-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70">
+                      <div className="text-[11px] text-white/50">Ответ на: {quoted.author === "me" ? "Вы" : dm.title}</div>
+                      <div className="mt-1 line-clamp-2 whitespace-pre-wrap">
+                        {quoted.deletedAt ? "(сообщение удалено)" : quoted.text}
+                      </div>
+                    </div>
+                  )}
 
-                  {!!m.attachments?.length && (
-                    <div className="mt-2 space-y-2">
-                      {m.attachments.map((a) => (
-                        <AttachmentRow key={`${a.cid}:${a.name}`} a={a} />
+                  <div className="leading-relaxed whitespace-pre-wrap">
+                    {m.deletedAt ? <span className="text-white/60 italic">(сообщение удалено)</span> : m.text}
+                  </div>
+
+                  {!m.deletedAt && reactions.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {reactions.map(([emoji, actors]) => (
+                        <button
+                          key={emoji}
+                          type="button"
+                          onClick={() => toggleMyReaction(m.id, emoji)}
+                          className={[
+                            "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition",
+                            myReacted(emoji)
+                              ? "bg-indigo-500/25 border-indigo-400/30 text-white"
+                              : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10",
+                          ].join(" ")}
+                          title={actors.join(", ")}
+                        >
+                          <span>{emoji}</span>
+                          <span className="text-[11px] text-white/70">{actors.length}</span>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -537,24 +709,26 @@ export default function Messages({
 
       {/* Ввод */}
       <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-        <div className="flex items-end gap-2">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={panic || addingFiles}
-            className="h-[42px] w-[42px] rounded-xl bg-white/10 hover:bg-white/20 text-white/90 disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Прикрепить файл (CID)"
-          >
-            📎
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(e) => void onPickFiles(e.target.files)}
-          />
+        {replyPreview && (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            <div className="min-w-0">
+              <div className="text-[11px] text-white/50">Ответ</div>
+              <div className="text-xs text-white/80 truncate">
+                {replyPreview.deletedAt ? "(сообщение удалено)" : replyPreview.text}
+              </div>
+            </div>
+            <button
+              type="button"
+              className="h-8 w-8 rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+              title="Убрать ответ"
+              onClick={() => setReplyToId(null)}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
+        <div className="flex items-end gap-2">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -565,37 +739,116 @@ export default function Messages({
           <button
             type="button"
             onClick={onSend}
-            className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
-            disabled={!canSend || addingFiles}
-            title={
-              addingFiles
-                ? "Файлы обрабатываются…"
-                : !canSend
-                  ? "Добавьте текст или вложения"
-                  : "Отправить"
-            }
+            className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
+            disabled={draft.trim().length === 0}
+            title="Отправить"
           >
-            {addingFiles ? "…" : "Отправить"}
+            Отправить
           </button>
         </div>
-
-        {draftAtts.length > 0 && (
-          <div className="mt-2 space-y-2">
-            {draftAtts.map((a) => (
-              <AttachmentRow
-                key={`${a.cid}:${a.name}`}
-                a={a}
-                onRemove={() => setDraftAtts((prev) => prev.filter((x) => x.cid !== a.cid))}
-              />
-            ))}
-            <div className="text-xs text-white/50">
-              Вложения в MVP — это <span className="text-white/70">(file → CID)</span>. Blob держим только в памяти для превью.
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Моки-переключатели для проверки политики */}
+      {/* Контекст-меню */}
+      {menu.open && (() => {
+        const m = byId.get(menu.messageId);
+        if (!m) return null;
+        const isMe = m.author === "me";
+        const canDelete = isMe && !m.deletedAt;
+
+        return (
+          <div
+            className="fixed inset-0 z-50"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setMenu({ open: false });
+            }}
+          >
+            <div
+              className="fixed w-[248px] rounded-xl border border-white/10 bg-[#0f1115]/95 backdrop-blur px-2 py-2 text-sm shadow-xl"
+              style={{ left: menu.x, top: menu.y }}
+            >
+              <button
+                type="button"
+                className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/90"
+                onClick={() => {
+                  setReplyToId(m.id);
+                  setMenu({ open: false });
+                }}
+              >
+                Ответить
+              </button>
+
+              <button
+                type="button"
+                className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/90"
+                onClick={() => {
+                  copyText(m.text);
+                  setMenu({ open: false });
+                }}
+              >
+                Копировать текст
+              </button>
+
+              <div className="my-1 h-px bg-white/10" />
+
+              <div className="px-3 py-2">
+                <div className="text-[11px] text-white/50 mb-1">Реакция</div>
+                <div className="flex flex-wrap gap-1">
+                  {REACTION_EMOJI.map((emoji) => {
+                    const active = (m.reactions?.[emoji] ?? []).includes(deviceId);
+                    return (
+                      <button
+                        key={emoji}
+                        type="button"
+                        className={[
+                          "h-8 w-8 rounded-lg border text-base",
+                          active
+                            ? "border-indigo-400/40 bg-indigo-500/25"
+                            : "border-white/10 bg-white/5 hover:bg-white/10",
+                        ].join(" ")}
+                        title={active ? "Убрать" : "Поставить"}
+                        onClick={() => {
+                          toggleMyReaction(m.id, emoji);
+                          setMenu({ open: false });
+                        }}
+                      >
+                        {emoji}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {canDelete && (
+                <>
+                  <div className="my-1 h-px bg-white/10" />
+                  <button
+                    type="button"
+                    className="w-full text-left rounded-lg px-3 py-2 hover:bg-red-500/10 text-red-200"
+                    onClick={() => {
+                      deleteMyMessage(m.id);
+                      setMenu({ open: false });
+                    }}
+                  >
+                    Удалить (моё)
+                  </button>
+                </>
+              )}
+
+              <div className="my-1 h-px bg-white/10" />
+
+              <button
+                type="button"
+                className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/70"
+                onClick={() => setMenu({ open: false })}
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Моки-переключатели для проверки политики и CRDT */}
       <details className="rounded-2xl border border-white/10 bg-white/5 p-4">
         <summary className="cursor-pointer text-sm text-white/80">Моки (для разработки)</summary>
         <div className="mt-3 grid sm:grid-cols-2 gap-3 text-sm">
@@ -611,6 +864,7 @@ export default function Messages({
             <input type="checkbox" checked={hasTurnAllowList} onChange={(e) => setHasTurnAllowList(e.target.checked)} />
             <span>Есть allow-list TURN</span>
           </label>
+
           <div className="sm:col-span-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
             <div className="text-sm text-white/80">
               Видео в Anon:{" "}
@@ -618,29 +872,68 @@ export default function Messages({
             </div>
             <div className="mt-0.5 text-xs text-white/60">Меняется в «Голос и видео» (⚙️).</div>
           </div>
-        </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={onMockIncoming}
-            className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-sm"
-          >
-            Сымитировать входящее
-          </button>
-          <button
-            type="button"
-            onClick={onResetDialog}
-            className="px-3 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-sm"
-          >
-            Сбросить диалог (localStorage)
-          </button>
-          <div className="text-xs text-white/60 self-center">Сообщений: {messages.length} • deviceId: {deviceId}</div>
-        </div>
+          <div className="sm:col-span-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+            <div className="text-xs text-white/60">Статусы (мок)</div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="text-sm text-white/80">Статус контакта:</label>
+              <select
+                value={presence}
+                onChange={(e) => setPresence(e.target.value as Presence)}
+                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/90"
+              >
+                <option value="online">онлайн</option>
+                <option value="away">AFK</option>
+                <option value="offline">не в сети</option>
+              </select>
 
+              <label className="flex items-center gap-2 ml-2">
+                <input type="checkbox" checked={remoteTyping} onChange={(e) => setRemoteTyping(e.target.checked)} />
+                <span>Печатает…</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="sm:col-span-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 text-white/80"
+              onClick={simulateIncoming}
+            >
+              + Входящее сообщение
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 text-white/80"
+              onClick={simulateMerge}
+            >
+              Симулировать mergeJournals
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 text-white/80"
+              onClick={() => {
+                if (!ordered[0]) return;
+                applyReaction(ordered[0].id, "🔥", remoteActorId);
+              }}
+              title="Добавить реакцию от контакта на первое сообщение"
+            >
+              Реакция от контакта (🔥)
+            </button>
+            <button
+              type="button"
+              className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 hover:bg-red-500/15 text-red-200"
+              onClick={resetChat}
+              title="Удалит журнал текущего диалога из localStorage"
+            >
+              Сбросить журнал
+            </button>
+          </div>
+        </div>
         <div className="mt-3 text-xs text-white/60">
-          Эти переключатели имитируют сигналы TAL/crypto. В проде их не будет.
+          Эти переключатели имитируют сигналы TAL/crypto и сетевые события. В проде их не будет.
         </div>
+        <div className="mt-1 text-[11px] text-white/50">deviceId: {deviceId}</div>
       </details>
     </div>
   );
