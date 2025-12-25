@@ -704,8 +704,8 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
                   <div className="space-y-6">
                     {profile === "anon" && !vv.allowVideoInAnon && (
                       <PolicyLockHint
-                        title="Видео ограничено политикой профиля"
-                        message="В Anon видео по умолчанию выключено (риск утечек/качества). Вы можете включить вручную — это понижает приватность и может ухудшить задержку."
+                        title="Видео отключено политикой (ANON)"
+                        message="В анонимном профиле видео по умолчанию запрещено (fail-closed). Чтобы разрешить — включите «Разрешить видео в анонимном профиле» ниже. Включайте только при явном согласии."
                       />
                     )}
 
@@ -726,8 +726,8 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
                     <div className="space-y-4">
                       <SectionTitle>Устройство видео</SectionTitle>
                       <select
-                        value={vv.cameraDeviceId || "default"}
-                        disabled={!canShowVideoControls}
+                        value={vv.cameraDeviceId}
+                        disabled={!canShowVideoControls || !media.supported}
                         onChange={(e) => patchVv({ cameraDeviceId: e.target.value })}
                         /* мок */
 
