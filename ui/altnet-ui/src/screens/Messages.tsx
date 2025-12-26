@@ -962,7 +962,7 @@ export default function Messages({
         )}
 
 
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-3">
           <input
             ref={fileInputRef}
             type="file"
@@ -975,7 +975,7 @@ export default function Messages({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="h-[42px] w-[42px] rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="shrink-0 inline-flex items-center justify-center h-[42px] w-[42px] rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed"
             disabled={attachBusy}
             title={attachBusy ? "Обработка…" : "Прикрепить файл (MVP: только изображения, CDR → PNG)"}
           >
@@ -993,7 +993,7 @@ export default function Messages({
           <button
             type="button"
             onClick={onSend}
-            className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
+            className="shrink-0 h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60 whitespace-nowrap"
             disabled={(draft.trim().length === 0 && pendingAttachments.length === 0) || attachBusy}
             title="Отправить"
           >
