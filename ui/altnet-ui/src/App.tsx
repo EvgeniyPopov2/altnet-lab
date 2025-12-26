@@ -565,7 +565,12 @@ export default function App() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={() => SecurityCoach.suspectedCompromise()}
+                        onClick={() => {
+                          // Критическая кнопка должна давать немедленный эффект:
+                          // включаем «Панику» сразу, а не только через подсказку.
+                          setPanic(true);
+                          SecurityCoach.suspectedCompromise();
+                        }}
                         className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold"
                       >
                         🛑 Я думаю, устройство скомпрометировано
