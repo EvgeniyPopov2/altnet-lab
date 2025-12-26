@@ -10,10 +10,14 @@ import { useVoiceVideoSettings } from "../core/settings/voiceVideo";
 import type { CallWindowModel } from "../components/rtc/CallWindow";
 import { GuardedActionButton } from "../components/policy/GuardedActionButton";
 
-import type { DmJournalV1, DmMessage } from "../core/dm/types";
+import type { DmAttachment, DmJournalV1, DmMessage } from "../core/dm/types";
 import { appendMessage, createEmptyJournal, getOrderedMessages, mergeJournals } from "../core/dm/journal";
 import { clearDmJournal, loadDmJournal, saveDmJournal } from "../core/dm/storage";
 import { getOrCreateDeviceId, nextDeviceSeq } from "../core/identity/device";
+import { fileToCid, shortCid } from "../core/content/cid";
+import { getBlob, putFile } from "../core/content/blobStore";
+import { cdrSanitizeUpload, CdrError } from "../core/security/cdr";
+import { pushSecurityEvent } from "../core/security/bus";
 
 export type DmContact = {
   id: string;
@@ -25,6 +29,21 @@ export type DmContact = {
 type Presence = "online" | "away" | "offline";
 
 const REACTION_EMOJI = ["👍", "❤️", "😂", "🔥", "👀", "😮"] as const;
+const MAX_ATTACHMENTS_PER_MESSAGE = 4;
+
+function fmtBytes(n: number): string {
+  const v = Math.max(0, n || 0);
+  if (v < 1024) return `${v} B`;
+  const kb = v / 1024;
+  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
+}
+
+function isImageMime(mime: string): boolean {
+  const m = (mime || "").toLowerCase();
+  return m.startsWith("image/") && m !== "image/svg+xml";
+}
 
 function hhmm(ts: number): string {
   const d = new Date(ts);
@@ -154,11 +173,11 @@ function seedJournal(dm: DmContact): DmJournalV1 {
 type MsgMenuState =
   | { open: false }
   | {
-      open: true;
-      messageId: string;
-      x: number;
-      y: number;
-    };
+    open: true;
+    messageId: string;
+    x: number;
+    y: number;
+  };
 
 export default function Messages({
   profile,
@@ -236,6 +255,8 @@ export default function Messages({
 
   const [draft, setDraft] = useState("");
   const [replyToId, setReplyToId] = useState<string | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<DmAttachment[]>([]);
+  const [attachBusy, setAttachBusy] = useState(false);
 
   const [presence, setPresence] = useState<Presence>(() => inferPresence(dm.subtitle));
   const [remoteTyping, setRemoteTyping] = useState<boolean>(() => inferTyping(dm.subtitle));
@@ -256,6 +277,7 @@ export default function Messages({
   const byId = useMemo(() => new Map(ordered.map((m) => [m.id, m])), [ordered]);
 
   const endRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     // при смене диалога
@@ -266,6 +288,8 @@ export default function Messages({
 
     setDraft("");
     setReplyToId(null);
+    setPendingAttachments([]);
+    setAttachBusy(false);
     setMenu({ open: false });
     setMergeHint(null);
     setPresence(inferPresence(dm.subtitle));
@@ -379,10 +403,101 @@ export default function Messages({
     }
   }
 
+  function notifyAttachmentBlocked(fileName: string, err: unknown) {
+    const title = "Вложение заблокировано";
+
+    if (err instanceof CdrError) {
+      const details = [
+        `Файл: ${fileName}`,
+        err.details ? `Детали: ${err.details}` : undefined,
+        "MVP: CDR поддерживает только изображения (PNG/JPEG/WEBP/GIF) и перекодирует их в PNG.",
+        "По доктрине безопасности неподдерживаемые форматы должны блокироваться (fail-closed).",
+      ].filter(Boolean) as string[];
+
+      pushSecurityEvent({
+        severity: "warning",
+        code: `CDR_${err.code}`,
+        title,
+        message: err.message,
+        details,
+        ttlMs: 12000,
+      });
+      return;
+    }
+
+    const msg = err instanceof Error ? err.message : String(err);
+    pushSecurityEvent({
+      severity: "warning",
+      code: "CDR_UNKNOWN",
+      title,
+      message: "Не удалось обработать файл для безопасного вложения.",
+      details: [`Файл: ${fileName}`, msg],
+      ttlMs: 12000,
+    });
+  }
+
+  async function addAttachments(files: FileList | null) {
+    const list = Array.from(files ?? []);
+    if (list.length === 0) return;
+
+    // Сбрасываем значение input, чтобы повторный выбор того же файла снова триггерил onChange.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    setAttachBusy(true);
+    try {
+      const existing = new Set(pendingAttachments.map((a) => a.cid));
+      const added: DmAttachment[] = [];
+
+      for (const raw of list) {
+        if (pendingAttachments.length + added.length >= MAX_ATTACHMENTS_PER_MESSAGE) {
+          pushSecurityEvent({
+            severity: "warning",
+            code: "ATTACH_LIMIT",
+            title: "Слишком много вложений",
+            message: `MVP лимит: ${MAX_ATTACHMENTS_PER_MESSAGE} вложения на сообщение.`,
+            details: ["Разбейте на несколько сообщений."],
+            ttlMs: 10000,
+          });
+          break;
+        }
+
+        try {
+          // 1) CDR/очистка
+          const cleaned = await cdrSanitizeUpload(raw);
+
+          // 2) CID считаем от очищенного результата
+          const cid = await fileToCid(cleaned.file);
+
+          if (existing.has(cid) || added.some((a) => a.cid === cid)) continue;
+          existing.add(cid);
+
+          // 3) кладём в локальный blob store для предпросмотра
+          putFile(cid, cleaned.file);
+
+          added.push({
+            cid,
+            name: cleaned.file.name,
+            mime: cleaned.file.type || "application/octet-stream",
+            size: cleaned.file.size,
+          });
+        } catch (e) {
+          notifyAttachmentBlocked(raw.name || "(без имени)", e);
+        }
+      }
+
+      if (added.length > 0) {
+        setPendingAttachments((prev) => [...prev, ...added]);
+      }
+    } finally {
+      setAttachBusy(false);
+    }
+  }
+
+
   function openMenuAt(messageId: string, x: number, y: number) {
     const padding = 12;
     const w = 248;
-    const h = 240;
+    const h = 292; // чуть с запасом (есть опциональный пункт про CID вложений)
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const nx = Math.max(padding, Math.min(x, vw - w - padding));
@@ -432,7 +547,8 @@ export default function Messages({
 
   function onSend() {
     const text = draft.trim();
-    if (text.length === 0) return;
+    if (text.length === 0 && pendingAttachments.length === 0) return;
+    if (attachBusy) return;
     if (!canSendOrCoach()) return;
 
     const now = Date.now();
@@ -444,17 +560,20 @@ export default function Messages({
       text,
       delivery: "sent",
       replyTo: replyToId ?? undefined,
+      attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
     };
 
     const next = appendMessage(journal, msg);
     commit(next);
     setDraft("");
     setReplyToId(null);
+    setPendingAttachments([]);
 
     // мок: прогресс доставки
     window.setTimeout(() => setDelivery(msg.id, "delivered"), 700);
     window.setTimeout(() => setDelivery(msg.id, "read"), 1600);
   }
+
 
   function onCall(kind: "voice" | "video") {
     if (panic) {
@@ -620,7 +739,7 @@ export default function Messages({
             const who = isMe ? "Вы" : dm.title;
             const reactions = Object.entries(m.reactions ?? {});
             const myReacted = (emoji: string) => (m.reactions?.[emoji] ?? []).includes(deviceId);
-
+            const atts = m.attachments ?? [];
             const quoted = m.replyTo ? byId.get(m.replyTo) : null;
 
             return (
@@ -672,6 +791,74 @@ export default function Messages({
                   <div className="leading-relaxed whitespace-pre-wrap">
                     {m.deletedAt ? <span className="text-white/60 italic">(сообщение удалено)</span> : m.text}
                   </div>
+                  {!m.deletedAt && atts.length > 0 && (
+                    <div className="mt-2 grid gap-2">
+                      {atts.map((att) => {
+                        const blob = getBlob(att.cid);
+                        const url = blob?.url ?? null;
+                        const img = isImageMime(att.mime);
+
+                        if (img && url) {
+                          return (
+                            <button
+                              key={att.cid}
+                              type="button"
+                              className="block text-left"
+                              title={`${att.name} • ${shortCid(att.cid)}`}
+                              onClick={() => {
+                                try {
+                                  window.open(url, "_blank", "noopener,noreferrer");
+                                } catch {
+                                  // ignore
+                                }
+                              }}
+                            >
+                              <img
+                                src={url}
+                                alt={att.name}
+                                className="max-h-[240px] w-auto rounded-xl border border-white/10 bg-black/20"
+                              />
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={att.cid}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs text-white/90 truncate">📎 {att.name}</div>
+                              <div className="text-[11px] text-white/50 truncate">
+                                {shortCid(att.cid)} · {fmtBytes(att.size)}
+                                {!url ? " · превью недоступно" : ""}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className="h-8 px-2 rounded-lg border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                                title="Скопировать CID"
+                                onClick={() => copyText(att.cid)}
+                              >
+                                CID
+                              </button>
+                              {url && (
+                                <a
+                                  href={url}
+                                  download={att.name}
+                                  className="h-8 px-2 inline-flex items-center rounded-lg border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                                  title="Скачать"
+                                >
+                                  ⬇
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {!m.deletedAt && reactions.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1">
@@ -728,7 +915,73 @@ export default function Messages({
           </div>
         )}
 
+        {pendingAttachments.length > 0 && (
+          <div className="mb-2 grid gap-2">
+            {pendingAttachments.map((att) => {
+              const blob = getBlob(att.cid);
+              const url = blob?.url ?? null;
+              const img = isImageMime(att.mime);
+
+              return (
+                <div
+                  key={att.cid}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+                >
+                  <div className="min-w-0 flex items-center gap-3">
+                    {img && url ? (
+                      <img
+                        src={url}
+                        alt={att.name}
+                        className="h-12 w-12 rounded-lg object-cover border border-white/10 bg-black/20"
+                      />
+                    ) : (
+                      <div className="h-12 w-12 rounded-lg border border-white/10 bg-black/20 flex items-center justify-center text-white/60">
+                        📎
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-xs text-white/90 truncate">{att.name}</div>
+                      <div className="text-[11px] text-white/50 truncate">
+                        {shortCid(att.cid)} · {fmtBytes(att.size)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="h-8 w-8 rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                    title="Убрать вложение"
+                    onClick={() => setPendingAttachments((prev) => prev.filter((x) => x.cid !== att.cid))}
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+
         <div className="flex items-end gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            onChange={(e) => addAttachments(e.target.files)}
+          />
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="h-[42px] w-[42px] rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={attachBusy}
+            title={attachBusy ? "Обработка…" : "Прикрепить файл (MVP: только изображения, CDR → PNG)"}
+          >
+            {attachBusy ? "⏳" : "📎"}
+          </button>
+
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
@@ -736,205 +989,219 @@ export default function Messages({
             placeholder="Написать сообщение…"
             className="flex-1 resize-none rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none placeholder-white/40"
           />
+
           <button
             type="button"
             onClick={onSend}
             className="h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60"
-            disabled={draft.trim().length === 0}
+            disabled={(draft.trim().length === 0 && pendingAttachments.length === 0) || attachBusy}
             title="Отправить"
           >
             Отправить
           </button>
         </div>
-      </div>
 
-      {/* Контекст-меню */}
-      {menu.open && (() => {
-        const m = byId.get(menu.messageId);
-        if (!m) return null;
-        const isMe = m.author === "me";
-        const canDelete = isMe && !m.deletedAt;
+        {/* Контекст-меню */}
+        {menu.open && (() => {
+          const m = byId.get(menu.messageId);
+          if (!m) return null;
+          const isMe = m.author === "me";
+          const canDelete = isMe && !m.deletedAt;
 
-        return (
-          <div
-            className="fixed inset-0 z-50"
-            onMouseDown={(e) => {
-              if (e.target === e.currentTarget) setMenu({ open: false });
-            }}
-          >
+          return (
             <div
-              className="fixed w-[248px] rounded-xl border border-white/10 bg-[#0f1115]/95 backdrop-blur px-2 py-2 text-sm shadow-xl"
-              style={{ left: menu.x, top: menu.y }}
+              className="fixed inset-0 z-50"
+              onMouseDown={(e) => {
+                if (e.target === e.currentTarget) setMenu({ open: false });
+              }}
             >
-              <button
-                type="button"
-                className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/90"
-                onClick={() => {
-                  setReplyToId(m.id);
-                  setMenu({ open: false });
-                }}
+              <div
+                className="fixed w-[248px] rounded-xl border border-white/10 bg-[#0f1115]/95 backdrop-blur px-2 py-2 text-sm shadow-xl"
+                style={{ left: menu.x, top: menu.y }}
               >
-                Ответить
-              </button>
+                <button
+                  type="button"
+                  className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/90"
+                  onClick={() => {
+                    setReplyToId(m.id);
+                    setMenu({ open: false });
+                  }}
+                >
+                  Ответить
+                </button>
 
-              <button
-                type="button"
-                className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/90"
-                onClick={() => {
-                  copyText(m.text);
-                  setMenu({ open: false });
-                }}
-              >
-                Копировать текст
-              </button>
-
-              <div className="my-1 h-px bg-white/10" />
-
-              <div className="px-3 py-2">
-                <div className="text-[11px] text-white/50 mb-1">Реакция</div>
-                <div className="flex flex-wrap gap-1">
-                  {REACTION_EMOJI.map((emoji) => {
-                    const active = (m.reactions?.[emoji] ?? []).includes(deviceId);
-                    return (
-                      <button
-                        key={emoji}
-                        type="button"
-                        className={[
-                          "h-8 w-8 rounded-lg border text-base",
-                          active
-                            ? "border-indigo-400/40 bg-indigo-500/25"
-                            : "border-white/10 bg-white/5 hover:bg-white/10",
-                        ].join(" ")}
-                        title={active ? "Убрать" : "Поставить"}
-                        onClick={() => {
-                          toggleMyReaction(m.id, emoji);
-                          setMenu({ open: false });
-                        }}
-                      >
-                        {emoji}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {canDelete && (
-                <>
-                  <div className="my-1 h-px bg-white/10" />
+                <button
+                  type="button"
+                  className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/90"
+                  onClick={() => {
+                    copyText(m.text);
+                    setMenu({ open: false });
+                  }}
+                >
+                  Копировать текст
+                </button>
+                {(m.attachments?.length ?? 0) > 0 && (
                   <button
                     type="button"
-                    className="w-full text-left rounded-lg px-3 py-2 hover:bg-red-500/10 text-red-200"
+                    className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/90"
                     onClick={() => {
-                      deleteMyMessage(m.id);
+                      const cids = (m.attachments ?? []).map((a) => a.cid).join("\n");
+                      copyText(cids);
                       setMenu({ open: false });
                     }}
                   >
-                    Удалить (моё)
+                    Копировать CID вложений
                   </button>
-                </>
-              )}
+                )}
 
-              <div className="my-1 h-px bg-white/10" />
+                <div className="my-1 h-px bg-white/10" />
 
+                <div className="px-3 py-2">
+                  <div className="text-[11px] text-white/50 mb-1">Реакция</div>
+                  <div className="flex flex-wrap gap-1">
+                    {REACTION_EMOJI.map((emoji) => {
+                      const active = (m.reactions?.[emoji] ?? []).includes(deviceId);
+                      return (
+                        <button
+                          key={emoji}
+                          type="button"
+                          className={[
+                            "h-8 w-8 rounded-lg border text-base",
+                            active
+                              ? "border-indigo-400/40 bg-indigo-500/25"
+                              : "border-white/10 bg-white/5 hover:bg-white/10",
+                          ].join(" ")}
+                          title={active ? "Убрать" : "Поставить"}
+                          onClick={() => {
+                            toggleMyReaction(m.id, emoji);
+                            setMenu({ open: false });
+                          }}
+                        >
+                          {emoji}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {canDelete && (
+                  <>
+                    <div className="my-1 h-px bg-white/10" />
+                    <button
+                      type="button"
+                      className="w-full text-left rounded-lg px-3 py-2 hover:bg-red-500/10 text-red-200"
+                      onClick={() => {
+                        deleteMyMessage(m.id);
+                        setMenu({ open: false });
+                      }}
+                    >
+                      Удалить (моё)
+                    </button>
+                  </>
+                )}
+
+                <div className="my-1 h-px bg-white/10" />
+
+                <button
+                  type="button"
+                  className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/70"
+                  onClick={() => setMenu({ open: false })}
+                >
+                  Закрыть
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Моки-переключатели для проверки политики и CRDT */}
+        <details className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <summary className="cursor-pointer text-sm text-white/80">Моки (для разработки)</summary>
+          <div className="mt-3 grid sm:grid-cols-2 gap-3 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={e2eReady} onChange={(e) => setE2eReady(e.target.checked)} />
+              <span>E2E готово</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={anonPathReady} onChange={(e) => setAnonPathReady(e.target.checked)} />
+              <span>Anon путь готов (Tor/I2P)</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={hasTurnAllowList} onChange={(e) => setHasTurnAllowList(e.target.checked)} />
+              <span>Есть allow-list TURN</span>
+            </label>
+
+            <div className="sm:col-span-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+              <div className="text-sm text-white/80">
+                Видео в Anon:{" "}
+                <span className="font-semibold text-white">{vv.allowVideoInAnon ? "разрешено" : "выключено"}</span>
+              </div>
+              <div className="mt-0.5 text-xs text-white/60">Меняется в «Голос и видео» (⚙️).</div>
+            </div>
+
+            <div className="sm:col-span-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+              <div className="text-xs text-white/60">Статусы (мок)</div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <label className="text-sm text-white/80">Статус контакта:</label>
+                <select
+                  value={presence}
+                  onChange={(e) => setPresence(e.target.value as Presence)}
+                  className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/90"
+                >
+                  <option value="online">онлайн</option>
+                  <option value="away">AFK</option>
+                  <option value="offline">не в сети</option>
+                </select>
+
+                <label className="flex items-center gap-2 ml-2">
+                  <input type="checkbox" checked={remoteTyping} onChange={(e) => setRemoteTyping(e.target.checked)} />
+                  <span>Печатает…</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="sm:col-span-2 flex flex-wrap gap-2">
               <button
                 type="button"
-                className="w-full text-left rounded-lg px-3 py-2 hover:bg-white/10 text-white/70"
-                onClick={() => setMenu({ open: false })}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 text-white/80"
+                onClick={simulateIncoming}
               >
-                Закрыть
+                + Входящее сообщение
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 text-white/80"
+                onClick={simulateMerge}
+              >
+                Симулировать mergeJournals
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 text-white/80"
+                onClick={() => {
+                  if (!ordered[0]) return;
+                  applyReaction(ordered[0].id, "🔥", remoteActorId);
+                }}
+                title="Добавить реакцию от контакта на первое сообщение"
+              >
+                Реакция от контакта (🔥)
+              </button>
+              <button
+                type="button"
+                className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 hover:bg-red-500/15 text-red-200"
+                onClick={resetChat}
+                title="Удалит журнал текущего диалога из localStorage"
+              >
+                Сбросить журнал
               </button>
             </div>
           </div>
-        );
-      })()}
-
-      {/* Моки-переключатели для проверки политики и CRDT */}
-      <details className="rounded-2xl border border-white/10 bg-white/5 p-4">
-        <summary className="cursor-pointer text-sm text-white/80">Моки (для разработки)</summary>
-        <div className="mt-3 grid sm:grid-cols-2 gap-3 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={e2eReady} onChange={(e) => setE2eReady(e.target.checked)} />
-            <span>E2E готово</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={anonPathReady} onChange={(e) => setAnonPathReady(e.target.checked)} />
-            <span>Anon путь готов (Tor/I2P)</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={hasTurnAllowList} onChange={(e) => setHasTurnAllowList(e.target.checked)} />
-            <span>Есть allow-list TURN</span>
-          </label>
-
-          <div className="sm:col-span-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-            <div className="text-sm text-white/80">
-              Видео в Anon:{" "}
-              <span className="font-semibold text-white">{vv.allowVideoInAnon ? "разрешено" : "выключено"}</span>
-            </div>
-            <div className="mt-0.5 text-xs text-white/60">Меняется в «Голос и видео» (⚙️).</div>
+          <div className="mt-3 text-xs text-white/60">
+            Эти переключатели имитируют сигналы TAL/crypto и сетевые события. В проде их не будет.
           </div>
-
-          <div className="sm:col-span-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-            <div className="text-xs text-white/60">Статусы (мок)</div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label className="text-sm text-white/80">Статус контакта:</label>
-              <select
-                value={presence}
-                onChange={(e) => setPresence(e.target.value as Presence)}
-                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white/90"
-              >
-                <option value="online">онлайн</option>
-                <option value="away">AFK</option>
-                <option value="offline">не в сети</option>
-              </select>
-
-              <label className="flex items-center gap-2 ml-2">
-                <input type="checkbox" checked={remoteTyping} onChange={(e) => setRemoteTyping(e.target.checked)} />
-                <span>Печатает…</span>
-              </label>
-            </div>
-          </div>
-
-          <div className="sm:col-span-2 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 text-white/80"
-              onClick={simulateIncoming}
-            >
-              + Входящее сообщение
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 text-white/80"
-              onClick={simulateMerge}
-            >
-              Симулировать mergeJournals
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 text-white/80"
-              onClick={() => {
-                if (!ordered[0]) return;
-                applyReaction(ordered[0].id, "🔥", remoteActorId);
-              }}
-              title="Добавить реакцию от контакта на первое сообщение"
-            >
-              Реакция от контакта (🔥)
-            </button>
-            <button
-              type="button"
-              className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 hover:bg-red-500/15 text-red-200"
-              onClick={resetChat}
-              title="Удалит журнал текущего диалога из localStorage"
-            >
-              Сбросить журнал
-            </button>
-          </div>
-        </div>
-        <div className="mt-3 text-xs text-white/60">
-          Эти переключатели имитируют сигналы TAL/crypto и сетевые события. В проде их не будет.
-        </div>
-        <div className="mt-1 text-[11px] text-white/50">deviceId: {deviceId}</div>
-      </details>
+          <div className="mt-1 text-[11px] text-white/50">deviceId: {deviceId}</div>
+        </details>
+      </div>
     </div>
   );
 }

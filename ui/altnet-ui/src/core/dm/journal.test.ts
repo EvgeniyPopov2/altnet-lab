@@ -87,8 +87,38 @@ const tests: Array<[string, () => void]> = [
       const b = mkJournal("dm", [bMsg]);
       const m = mergeJournals(a, b);
       assert(m.entries[0]?.delivery === "read", "должен победить read");
-    },
-  ],
+        },
+    ],
+    [
+        "mergeJournals: вложения (attachments) мержатся union-ом",
+        () => {
+            const aMsg = mkMsg({
+                id: "m1",
+                attachments: [
+                    { cid: "cidv1-sha256-aaa", name: "a.png", mime: "image/png", size: 111 },
+                ],
+                updatedAt: 10,
+            });
+            const bMsg = mkMsg({
+                id: "m1",
+                attachments: [
+                    { cid: "cidv1-sha256-bbb", name: "b.png", mime: "image/png", size: 222 },
+                    // дубликат по cid+name
+                    { cid: "cidv1-sha256-aaa", name: "a.png", mime: "image/png", size: 111 },
+                ],
+                updatedAt: 20,
+            });
+            const a = mkJournal("dm", [aMsg]);
+            const b = mkJournal("dm", [bMsg]);
+            const m = mergeJournals(a, b);
+            const atts = m.entries[0]?.attachments ?? [];
+            const keys = atts.map((x) => `${x.cid}|${x.name}`).sort();
+            assert(keys.length === 2, `ожидали 2 вложения, got ${keys.length}`);
+            assert(keys[0] === "cidv1-sha256-aaa|a.png", "должно быть вложение a.png");
+            assert(keys[1] === "cidv1-sha256-bbb|b.png", "должно быть вложение b.png");
+        },
+    ],
+
   [
     "createEmptyJournal: базовые поля",
     () => {
