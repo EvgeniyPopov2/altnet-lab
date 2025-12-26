@@ -975,7 +975,7 @@ export default function Messages({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="shrink-0 inline-flex items-center justify-center h-[42px] w-[42px] rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="h-[42px] w-[42px] shrink-0 inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white/80 hover:bg-white/10 disabled:opacity-60 disabled:cursor-not-allowed"
             disabled={attachBusy}
             title={attachBusy ? "Обработка…" : "Прикрепить файл (MVP: только изображения, CDR → PNG)"}
           >
@@ -987,13 +987,13 @@ export default function Messages({
             onChange={(e) => setDraft(e.target.value)}
             rows={2}
             placeholder="Написать сообщение…"
-            className="flex-1 resize-none rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none placeholder-white/40"
+            className="flex-1 min-w-0 resize-none rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-sm text-white/90 outline-none placeholder-white/40"
           />
 
           <button
             type="button"
             onClick={onSend}
-            className="shrink-0 h-[42px] px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60 whitespace-nowrap"
+            className="h-[42px] shrink-0 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold disabled:opacity-60 whitespace-nowrap"
             disabled={(draft.trim().length === 0 && pendingAttachments.length === 0) || attachBusy}
             title="Отправить"
           >
