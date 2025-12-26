@@ -2,7 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 
-import type { PrivacyProfile } from "../core/policy/types";
+import type { ContactCapabilities, PrivacyProfile } from "../core/policy/types";
+import { checkSendMessage } from "../core/policy/decisions";
+import { SecurityCoach } from "../core/security/coach";
+import { usePanicMode } from "../core/security/usePanicMode";
 import type { MailFolder, MailMessage, MailStoreV1 } from "../core/mail/types";
 import { loadMailStore, saveMailStore, seedMailStore } from "../core/mail/storage";
 
@@ -28,6 +31,21 @@ function fmtTime(ts: number): string {
     });
   } catch {
     return String(ts);
+  }
+}
+
+function deliveryText(d?: MailMessage["delivery"]): string {
+  switch (d) {
+    case "queued":
+      return "⏳ в очереди";
+    case "sent":
+      return "✓ отправлено";
+    case "delivered":
+      return "✓✓ доставлено";
+    case "failed":
+      return "⚠️ ошибка";
+    default:
+      return "";
   }
 }
 
@@ -71,6 +89,18 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
   const [draftTo, setDraftTo] = useState("");
   const [draftSubject, setDraftSubject] = useState("");
   const [draftBody, setDraftBody] = useState("");
+
+  const [panic] = usePanicMode();
+
+  // Моки “готовности” (в реале придут из TAL/crypto)
+  const [e2eReady, setE2eReady] = useState(true);
+  const [anonPathReady, setAnonPathReady] = useState(true);
+
+  // Почтовый “контакт” (MVP): считаем, что почтовый транспорт доступен и в Anon, и в Fast.
+  const mailCaps: ContactCapabilities = useMemo(
+    () => ({ contactId: "mail-relay", supportsAnon: true, supportsFast: true }),
+    []
+  );
 
   // Persist (UI-mok)
   useEffect(() => {
@@ -144,6 +174,91 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
     setSelectedId(msg.id);
   };
 
+  function denyByUi(reason: string) {
+    SecurityCoach.deniedByPolicy({
+      ok: false,
+      code: "PANIC_MODE",
+      title: "Действие заблокировано",
+      message: reason,
+      details: ["Выключите «Панику», чтобы продолжить."],
+    });
+  }
+
+  function canSendOrCoach(): boolean {
+    if (panic) {
+      denyByUi("Паника включена: отправка заблокирована (fail-closed).");
+      return false;
+    }
+
+    const decision = checkSendMessage({
+      localProfile: profile,
+      contact: mailCaps,
+      e2eReady,
+      anonPathReady,
+    });
+
+    if (!decision.ok) {
+      SecurityCoach.deniedByPolicy(decision);
+      return false;
+    }
+
+    return true;
+  }
+
+  function setDelivery(messageId: string, d: NonNullable<MailMessage["delivery"]>) {
+    setStore((prev) => {
+      const rank = (x?: MailMessage["delivery"]) =>
+        x === "delivered" ? 4 : x === "failed" ? 3 : x === "sent" ? 2 : x === "queued" ? 1 : 0;
+      const next = prev.messages.map((m) => {
+        if (m.id !== messageId) return m;
+        if (rank(m.delivery) >= rank(d)) return m;
+        const now = Date.now();
+        return { ...m, delivery: d, updatedAt: now };
+      });
+      return { ...prev, messages: next };
+    });
+  }
+
+  function sendNow() {
+    const to = parseRecipients(draftTo);
+    if (to.length === 0) {
+      SecurityCoach.deniedByPolicy({
+        ok: false,
+        code: "MAIL_TO_REQUIRED",
+        title: "Адресат не указан",
+        message: "Укажите хотя бы одного адресата, чтобы отправить письмо.",
+        details: ["Можно перечислять несколько адресов через запятую или перенос строки."],
+      });
+      return;
+    }
+
+    if (!canSendOrCoach()) return;
+
+    const now = Date.now();
+    const msg: MailMessage = {
+      id: newId(),
+      folder: "sent",
+      createdAt: now,
+      updatedAt: now,
+      from: "you@local",
+      to,
+      subject: draftSubject.trim() ? draftSubject.trim() : "(без темы)",
+      body: draftBody,
+      readAt: now,
+      delivery: "queued",
+    };
+
+    setStore((prev) => ({ ...prev, messages: [msg, ...prev.messages] }));
+    setComposeOpen(false);
+    resetCompose();
+    setFolder("sent");
+    setSelectedId(msg.id);
+
+    // мок: прогресс доставки
+    window.setTimeout(() => setDelivery(msg.id, "sent"), 250);
+    window.setTimeout(() => setDelivery(msg.id, "delivered"), 1100);
+  }
+
   const FolderBtn = ({ f, badge }: { f: MailFolder; badge?: number }) => (
     <button
       type="button"
@@ -194,7 +309,14 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
             <div className="mt-0.5 text-sm text-white/80 truncate">{secondary}</div>
             <div className="mt-0.5 text-xs text-white/50 truncate">{previewText(m.body)}</div>
           </div>
-          <div className="text-[11px] text-white/45 whitespace-nowrap">{time}</div>
+          <div className="shrink-0 text-right">
+            <div className="text-[11px] text-white/45 whitespace-nowrap">{time}</div>
+            {m.folder === "sent" && (
+              <div className="mt-1 text-[11px] text-white/45 whitespace-nowrap" title={m.delivery ?? ""}>
+                {deliveryText(m.delivery ?? "queued")}
+              </div>
+            )}
+          </div>
         </div>
       </button>
     );
@@ -247,8 +369,23 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
           </div>
 
           <div className="mt-3 text-[11px] text-white/45">
-            Примечание: без E2E‑контекста отправка обязана быть заблокирована (fail‑closed). Сейчас — UI‑мок.
+            Примечание: отправка — мок (письмо попадает в «Отправленные», статусы имитируются). Без E2E отправка блокируется (fail‑closed).
           </div>
+
+          {/* Моки-переключатели для проверки политики */}
+          <details className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
+            <summary className="cursor-pointer text-xs text-white/70">Моки (для разработки)</summary>
+            <div className="mt-3 grid gap-2 text-xs text-white/80">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={e2eReady} onChange={(e) => setE2eReady(e.target.checked)} />
+                <span>E2E готово</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={anonPathReady} onChange={(e) => setAnonPathReady(e.target.checked)} />
+                <span>Anon путь готов (Tor/I2P)</span>
+              </label>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -268,6 +405,11 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
                   <span>
                     <span className="text-white/50">Кому:</span> {selected.to?.filter(Boolean).join(", ") || "(не задано)"}
                   </span>
+                  {selected.folder === "sent" && (
+                    <span>
+                      <span className="text-white/50">Доставка:</span> {deliveryText(selected.delivery ?? "queued")}
+                    </span>
+                  )}
                   <span>
                     <span className="text-white/50">Профиль:</span> {profile === "anon" ? "Анонимный" : "Приватный быстрый"}
                   </span>
@@ -323,7 +465,7 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
               transition={{ duration: 0.16 }}
             >
               <div className="flex items-center justify-between gap-3">
-                <div className="text-white/90 font-semibold text-lg">Новое письмо (черновик)</div>
+                <div className="text-white/90 font-semibold text-lg">Новое письмо</div>
                 <button
                   type="button"
                   className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/80"
@@ -368,16 +510,18 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
               </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-                <div className="text-xs text-white/50">Отправка, E2E и вложения‑CID — на следующем шаге.</div>
+                <div className="text-xs text-white/50">
+                  Отправка — мок: письмо появится в «Отправленных» и получит статус. Без E2E отправка блокируется (fail-closed). Вложения‑CID — следующий шаг.
+                </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={saveDraft} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white/90">
                     Сохранить черновик
                   </button>
                   <button
                     type="button"
-                    disabled
-                    className="px-3 py-2 rounded-xl bg-indigo-600/50 text-white/70 cursor-not-allowed"
-                    title="Пока отключено (следующий шаг)"
+                    onClick={sendNow}
+                    className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white"
+                    title="Отправить (мок)"
                   >
                     Отправить
                   </button>
