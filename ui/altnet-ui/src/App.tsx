@@ -9,6 +9,7 @@ import ExploreDiscover from "./screens/ExploreDiscover";
 import Messages, { type DmContact } from "./screens/Messages";
 import Servers, { type ServerItem } from "./screens/Servers";
 import SecurityCenter from "./screens/SecurityCenter";
+import Mail from "./screens/Mail";
 import QuickSwitcher, { type QSItem } from "./components/QuickSwitcher";
 import NetStatus from "./components/NetStatus";
 import { usePrivacyProfile } from "./core/settings/profile";
@@ -19,7 +20,17 @@ import { usePanicMode } from "./core/security/usePanicMode";
 import { SecurityCoachHost } from "./components/security/SecurityCoachHost";
 import CallWindow, { type CallWindowModel } from "./components/rtc/CallWindow";
 import VoiceVideoSettingsModal from "./components/settings/VoiceVideoSettingsModal";
-type Section = "feed" | "messages" | "servers" | "explore" | "browser" | "reputation" | "security" | "profile";
+type Section =
+  | "feed"
+  | "messages"
+  | "servers"
+  | "explore"
+  | "browser"
+  | "mail"
+  | "reputation"
+  | "security"
+  | "profile";
+
 type RailView = "global" | "messages" | "servers";
 
 const RailBtn = ({
@@ -170,6 +181,8 @@ export default function App() {
         return "Путешествия";
       case "browser":
         return builderOpen ? "Конструктор сайта" : "Браузер .alt";
+      case "mail":
+        return "Почта";
       case "reputation":
         return "Репутация";
       case "security":
@@ -203,6 +216,11 @@ export default function App() {
     setRail("global");
     setBuilderOpen(false);
   };
+    const openMail = () => {
+    setSection("mail");
+    setRail("global");
+  };
+
   const openReputation = () => {
     setSection("reputation");
     setRail("global");
@@ -257,6 +275,7 @@ export default function App() {
       { id: "s:servers", kind: "section", label: "Серверы", action: openServers },
       { id: "s:explore", kind: "section", label: "Путешествия", action: openExplore },
       { id: "s:browser", kind: "section", label: "Браузер .alt", action: openBrowser },
+      { id: "s:mail", kind: "section", label: "Почта", action: openMail },
       { id: "s:reputation", kind: "section", label: "Репутация", action: openReputation },
       { id: "s:security", kind: "section", label: "Центр безопасности", action: openSecurityCenter },
       { id: "s:profile", kind: "section", label: "Профиль", action: openProfile },
@@ -453,9 +472,16 @@ export default function App() {
             >
               ⌘K / Ctrl+K
             </button>
-            <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20" type="button">
+            <button
+              className={`px-3 py-1.5 rounded-full text-sm ${section === "mail" ? "bg-indigo-600/30 hover:bg-indigo-600/40" : "bg-white/10 hover:bg-white/20"
+                }`}
+              type="button"
+              onClick={openMail}
+              title="Открыть почту"
+            >
               📥 Почта
             </button>
+
             <button className="px-3 py-1.5 rounded-full text-sm bg-white/10 hover:bg-white/20" type="button">
               ❓ Поддержка
             </button>
@@ -513,7 +539,7 @@ export default function App() {
 
 
               {section === "explore" && <ExploreDiscover />}
-
+              {section === "mail" && <Mail profile={profile} />}
               {section === "reputation" && (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">Публичные метки, жалобы, арбитраж (моки).</div>
               )}
