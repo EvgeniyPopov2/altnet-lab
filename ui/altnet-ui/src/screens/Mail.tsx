@@ -134,6 +134,23 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
   const [folder, setFolder] = useState<MailFolder>("inbox");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+    // Поиск/фильтры списка (Шаг 4)
+  const [listQuery, setListQuery] = useState("");
+  const [filterUnread, setFilterUnread] = useState(false);
+  const [filterHasAttachments, setFilterHasAttachments] = useState(false);
+  const [filterExpiringSoon, setFilterExpiringSoon] = useState(false);
+
+  const filtersActive = useMemo(() => {
+    return listQuery.trim().length > 0 || filterUnread || filterHasAttachments || filterExpiringSoon;
+  }, [listQuery, filterUnread, filterHasAttachments, filterExpiringSoon]);
+
+  const clearListFilters = () => {
+    setListQuery("");
+    setFilterUnread(false);
+    setFilterHasAttachments(false);
+    setFilterExpiringSoon(false);
+  };
+
   const [composeOpen, setComposeOpen] = useState(false);
   const [draftTo, setDraftTo] = useState("");
   const [draftSubject, setDraftSubject] = useState("");
@@ -178,13 +195,55 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
   }, [selectedId, store.messages]);
 
 
+    const totalInFolder = useMemo(() => {
+    return store.messages.filter((m) => m.folder === folder).length;
+  }, [store, folder]);
+
   const messagesInFolder = useMemo(() => {
+    const raw = listQuery.trim().toLowerCase();
+    const tokens = raw ? raw.split(/\s+/g).filter(Boolean) : [];
+    const soonMs = 24 * 60 * 60 * 1000; // "истекают скоро" = TTL <= 24ч
+
     const list = store.messages
       .filter((m) => m.folder === folder)
+      .filter((m) => {
+        // 1) Непрочитанные (имеет смысл только во Входящих)
+        if (filterUnread && folder === "inbox" && typeof m.readAt !== "undefined") return false;
+
+        // 2) С вложениями
+        if (filterHasAttachments && !(Array.isArray(m.attachments) && m.attachments.length > 0)) return false;
+
+        // 3) Истекают скоро (TTL <= 24ч)
+        if (filterExpiringSoon) {
+          const exp = (m as MailMessage).expiresAt;
+          if (typeof exp !== "number" || !Number.isFinite(exp)) return false;
+          const msLeft = exp - now;
+          if (!(msLeft > 0 && msLeft <= soonMs)) return false;
+        }
+
+        // 4) Поиск: subject/from/to/body/+имена вложений
+        if (tokens.length > 0) {
+          const parts: string[] = [];
+          parts.push(String(m.subject ?? ""));
+          parts.push(String(m.from ?? ""));
+          if (Array.isArray(m.to)) parts.push(m.to.join(" "));
+          parts.push(String(m.body ?? ""));
+          if (Array.isArray(m.attachments) && m.attachments.length > 0) {
+            parts.push(m.attachments.map((a) => `${a.name} ${a.cid}`).join(" "));
+          }
+
+          const hay = parts.join(" ").toLowerCase();
+          if (!tokens.every((t) => hay.includes(t))) return false;
+        }
+
+        return true;
+      })
       .slice()
       .sort((a, b) => (b.updatedAt ?? b.createdAt) - (a.updatedAt ?? a.createdAt));
+
     return list;
-  }, [store, folder]);
+  }, [store, folder, listQuery, filterUnread, filterHasAttachments, filterExpiringSoon, now]);
+
 
   const unreadInInbox = useMemo(() => {
     return store.messages.filter((m) => m.folder === "inbox" && typeof m.readAt === "undefined").length;
@@ -537,6 +596,7 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs text-white/60">
               {folderTitle(folder)} • {messagesInFolder.length}
+              {filtersActive ? ` из ${totalInFolder}` : ""}
             </div>
             <button
               type="button"
@@ -548,12 +608,107 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
             </button>
           </div>
 
+          <div className="mt-3 flex items-center gap-2">
+            <input
+              type="search"
+              value={listQuery}
+              onChange={(e) => setListQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  // Esc очищает только строку поиска (фильтры остаются)
+                  setListQuery("");
+                  (e.currentTarget as HTMLInputElement).blur();
+                }
+              }}
+              spellCheck={false}
+              className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-white/90 placeholder-white/40 outline-none focus:border-indigo-500/40 text-sm"
+              placeholder="Поиск по теме, адресам, тексту…"
+              aria-label="Поиск по письмам"
+            />
+            <button
+              type="button"
+              onClick={clearListFilters}
+              disabled={!filtersActive}
+              className={[
+                "shrink-0 px-3 py-2 rounded-xl text-sm border transition",
+                filtersActive
+                  ? "bg-white/10 hover:bg-white/20 border-white/10 text-white/90"
+                  : "bg-white/5 border-white/5 text-white/30 cursor-not-allowed",
+              ].join(" ")}
+              title="Очистить поиск и фильтры"
+            >
+              Очистить
+            </button>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={folder !== "inbox"}
+              onClick={() => setFilterUnread((v) => !v)}
+              className={[
+                "px-2 py-1 rounded-lg text-xs border transition",
+                folder !== "inbox"
+                  ? "bg-white/5 border-white/5 text-white/30 cursor-not-allowed"
+                  : filterUnread
+                    ? "bg-indigo-600/25 border-indigo-500/30 text-white"
+                    : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10",
+              ].join(" ")}
+              title={folder !== "inbox" ? "Фильтр доступен только во «Входящих»" : "Показать только непрочитанные"}
+            >
+              Непрочитанные
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterHasAttachments((v) => !v)}
+              className={[
+                "px-2 py-1 rounded-lg text-xs border transition",
+                filterHasAttachments
+                  ? "bg-indigo-600/25 border-indigo-500/30 text-white"
+                  : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10",
+              ].join(" ")}
+              title="Показать письма с вложениями"
+            >
+              С вложениями
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setFilterExpiringSoon((v) => !v)}
+              className={[
+                "px-2 py-1 rounded-lg text-xs border transition",
+                filterExpiringSoon
+                  ? "bg-indigo-600/25 border-indigo-500/30 text-white"
+                  : "bg-white/5 border-white/10 text-white/80 hover:bg-white/10",
+              ].join(" ")}
+              title="Показать письма, у которых TTL истекает в ближайшие 24 часа"
+            >
+              Истекают скоро
+            </button>
+          </div>
+
+
           <div className="mt-2 flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
-            {messagesInFolder.length === 0 ? (
+            {totalInFolder === 0 ? (
               <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-white/60 text-sm">Тут пока пусто.</div>
+            ) : messagesInFolder.length === 0 ? (
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div className="text-white/70 text-sm">Ничего не найдено.</div>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={clearListFilters}
+                    className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-sm"
+                  >
+                    Очистить фильтры
+                  </button>
+                </div>
+              </div>
             ) : (
               messagesInFolder.map((m) => <MailRow key={m.id} m={m} />)
             )}
+
           </div>
 
           <div className="mt-3 text-[11px] text-white/45">
