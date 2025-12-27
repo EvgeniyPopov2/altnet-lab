@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 
@@ -6,7 +6,11 @@ import type { ContactCapabilities, PrivacyProfile } from "../core/policy/types";
 import { checkSendMessage } from "../core/policy/decisions";
 import { SecurityCoach } from "../core/security/coach";
 import { usePanicMode } from "../core/security/usePanicMode";
-import type { MailFolder, MailMessage, MailStoreV1 } from "../core/mail/types";
+import { fileToCid, shortCid } from "../core/content/cid";
+import { getBlob, putFile } from "../core/content/blobStore";
+import { pushSecurityEvent } from "../core/security/bus";
+import { cdrSanitizeUpload, CdrError } from "../core/security/cdr";
+import type { MailAttachment, MailFolder, MailMessage, MailStoreV1 } from "../core/mail/types";
 import { loadMailStore, saveMailStore, seedMailStore } from "../core/mail/storage";
 
 function folderTitle(f: MailFolder): string {
@@ -67,6 +71,22 @@ function parseRecipients(raw: string): string[] {
     .slice(0, 12);
 }
 
+const MAX_ATTACHMENTS_PER_MAIL = 6;
+
+function fmtBytes(n: number): string {
+  const v = Math.max(0, n || 0);
+  if (v < 1024) return `${v} B`;
+  const kb = v / 1024;
+  if (kb < 1024) return `${kb.toFixed(kb < 10 ? 1 : 0)} KB`;
+  const mb = kb / 1024;
+  return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
+}
+
+function isImageMime(mime: string): boolean {
+  const m = (mime || "").toLowerCase();
+  return m.startsWith("image/") && m !== "image/svg+xml";
+}
+
 function containsId(list: MailMessage[], id: string | null | undefined): boolean {
   if (!id) return false;
   return list.some((m) => m.id === id);
@@ -89,6 +109,10 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
   const [draftTo, setDraftTo] = useState("");
   const [draftSubject, setDraftSubject] = useState("");
   const [draftBody, setDraftBody] = useState("");
+
+  const [pendingAttachments, setPendingAttachments] = useState<MailAttachment[]>([]);
+  const [attachBusy, setAttachBusy] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [panic] = usePanicMode();
 
@@ -151,6 +175,9 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
     setDraftTo("");
     setDraftSubject("");
     setDraftBody("");
+    setPendingAttachments([]);
+    setAttachBusy(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const saveDraft = () => {
@@ -165,6 +192,7 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
       to: to.length ? to : [""],
       subject: draftSubject.trim() ? draftSubject.trim() : "(черновик)",
       body: draftBody,
+      attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
     };
 
     setStore((prev) => ({ ...prev, messages: [msg, ...prev.messages] }));
@@ -219,6 +247,105 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
     });
   }
 
+  async function copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // fallback: старая среда
+      window.prompt("Скопируйте текст:", text);
+    }
+  }
+
+  function notifyAttachmentBlocked(fileName: string, err: unknown) {
+    const title = "Вложение заблокировано";
+
+    if (err instanceof CdrError) {
+      const details = [
+        `Файл: ${fileName}`,
+        err.details ? `Детали: ${err.details}` : undefined,
+        "MVP: CDR поддерживает только изображения (PNG/JPEG/WEBP/GIF) и перекодирует их в PNG.",
+        "По доктрине безопасности неподдерживаемые форматы должны блокироваться (fail-closed).",
+      ].filter(Boolean) as string[];
+
+      pushSecurityEvent({
+        severity: "warning",
+        code: `CDR_${err.code}`,
+        title,
+        message: err.message,
+        details,
+        ttlMs: 12000,
+      });
+      return;
+    }
+
+    const msg = err instanceof Error ? err.message : String(err);
+    pushSecurityEvent({
+      severity: "warning",
+      code: "CDR_UNKNOWN",
+      title,
+      message: "Не удалось обработать файл для безопасного вложения.",
+      details: [`Файл: ${fileName}`, msg],
+      ttlMs: 12000,
+    });
+  }
+
+  async function addAttachments(files: FileList | null) {
+    const list = Array.from(files ?? []);
+    if (list.length === 0) return;
+
+    // Сбрасываем значение input, чтобы повторный выбор того же файла снова триггерил onChange.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    setAttachBusy(true);
+    try {
+      const existing = new Set(pendingAttachments.map((a) => a.cid));
+      const added: MailAttachment[] = [];
+
+      for (const raw of list) {
+        if (pendingAttachments.length + added.length >= MAX_ATTACHMENTS_PER_MAIL) {
+          pushSecurityEvent({
+            severity: "warning",
+            code: "MAIL_ATTACH_LIMIT",
+            title: "Слишком много вложений",
+            message: `MVP лимит: ${MAX_ATTACHMENTS_PER_MAIL} вложений на письмо.`,
+            details: ["Разбейте на несколько писем."],
+            ttlMs: 10000,
+          });
+          break;
+        }
+
+        try {
+          // 1) CDR/очистка
+          const cleaned = await cdrSanitizeUpload(raw);
+
+          // 2) CID считаем от очищенного результата
+          const cid = await fileToCid(cleaned.file);
+
+          if (existing.has(cid) || added.some((a) => a.cid === cid)) continue;
+          existing.add(cid);
+
+          // 3) кладём в локальный blob store для предпросмотра
+          putFile(cid, cleaned.file);
+
+          added.push({
+            cid,
+            name: cleaned.file.name,
+            mime: cleaned.file.type || "application/octet-stream",
+            size: cleaned.file.size,
+          });
+        } catch (e) {
+          notifyAttachmentBlocked(raw.name || "(без имени)", e);
+        }
+      }
+
+      if (added.length > 0) {
+        setPendingAttachments((prev) => [...prev, ...added]);
+      }
+    } finally {
+      setAttachBusy(false);
+    }
+  }
+
   function sendNow() {
     const to = parseRecipients(draftTo);
     if (to.length === 0) {
@@ -244,6 +371,7 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
       to,
       subject: draftSubject.trim() ? draftSubject.trim() : "(без темы)",
       body: draftBody,
+      attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined,
       readAt: now,
       delivery: "queued",
     };
@@ -288,6 +416,7 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
     const primary = m.folder === "sent" ? (m.to?.filter(Boolean).join(", ") || "(нет адресата)") : m.from;
     const secondary = m.subject || "(без темы)";
     const time = fmtTime(m.updatedAt ?? m.createdAt);
+    const attCount = m.attachments?.length ?? 0;
 
     return (
       <button
@@ -307,7 +436,10 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
               </div>
             </div>
             <div className="mt-0.5 text-sm text-white/80 truncate">{secondary}</div>
-            <div className="mt-0.5 text-xs text-white/50 truncate">{previewText(m.body)}</div>
+            <div className="mt-0.5 text-xs text-white/50 truncate">
+              {attCount > 0 ? `📎 ${attCount} • ` : ""}
+              {previewText(m.body)}
+            </div>
           </div>
           <div className="shrink-0 text-right">
             <div className="text-[11px] text-white/45 whitespace-nowrap">{time}</div>
@@ -430,17 +562,75 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
                 {selected.body || ""}
               </div>
 
-              {selected.attachments && selected.attachments.length > 0 && (
+              {(selected.attachments?.length ?? 0) > 0 && (
                 <div className="rounded-xl border border-white/10 bg-white/5 p-4">
                   <div className="text-sm text-white/80 font-semibold">Вложения</div>
-                  <ul className="mt-2 space-y-1 text-sm text-white/70">
-                    {selected.attachments.map((a) => (
-                      <li key={`${a.cid}|${a.name}`} className="flex items-center justify-between gap-2">
-                        <span className="truncate">{a.name}</span>
-                        <span className="text-xs text-white/45">{a.cid}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mt-2 grid gap-2">
+                    {(selected.attachments ?? []).map((att) => {
+                      const blob = getBlob(att.cid);
+                      const url = blob?.url ?? null;
+                      const img = isImageMime(att.mime);
+
+                      return (
+                        <div
+                          key={att.cid}
+                          className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+                        >
+                          <div className="min-w-0 flex items-center gap-3">
+                            {img && url ? (
+                              <button
+                                type="button"
+                                className="h-12 w-12 rounded-lg overflow-hidden border border-white/10 bg-black/20"
+                                title="Открыть"
+                                onClick={() => {
+                                  try {
+                                    window.open(url, "_blank", "noopener,noreferrer");
+                                  } catch {
+                                    // ignore
+                                  }
+                                }}
+                              >
+                                <img src={url} alt={att.name} className="h-full w-full object-cover" />
+                              </button>
+                            ) : (
+                              <div className="h-12 w-12 rounded-lg border border-white/10 bg-black/20 flex items-center justify-center text-white/60">
+                                📎
+                              </div>
+                            )}
+
+                            <div className="min-w-0">
+                              <div className="text-xs text-white/90 truncate">{att.name}</div>
+                              <div className="text-[11px] text-white/50 truncate">
+                                {shortCid(att.cid)} · {fmtBytes(att.size)}
+                                {!url ? " · превью недоступно" : ""}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="h-8 px-2 rounded-lg border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                              title="Скопировать CID"
+                              onClick={() => copyText(att.cid)}
+                            >
+                              CID
+                            </button>
+                            {url && (
+                              <a
+                                href={url}
+                                download={att.name}
+                                className="h-8 px-2 inline-flex items-center rounded-lg border border-white/10 bg-white/5 text-white/80 hover:bg-white/10"
+                                title="Скачать"
+                              >
+                                ⬇
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -479,6 +669,15 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
                 </button>
               </div>
 
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                multiple
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={(e) => addAttachments(e.target.files)}
+              />
+
               <div className="mt-4 grid gap-3">
                 <div>
                   <div className="text-xs text-white/60">Кому</div>
@@ -509,18 +708,83 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-                <div className="text-xs text-white/50">
-                  Отправка — мок: письмо появится в «Отправленных» и получит статус. Без E2E отправка блокируется (fail-closed). Вложения‑CID — следующий шаг.
+              {pendingAttachments.length > 0 && (
+                <div className="mt-3 grid gap-2">
+                  {pendingAttachments.map((att) => {
+                    const blob = getBlob(att.cid);
+                    const url = blob?.url ?? null;
+                    const img = isImageMime(att.mime);
+
+                    return (
+                      <div
+                        key={att.cid}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2"
+                      >
+                        <div className="min-w-0 flex items-center gap-3">
+                          {img && url ? (
+                            <img
+                              src={url}
+                              alt={att.name}
+                              className="h-12 w-12 rounded-lg object-cover border border-white/10 bg-black/20"
+                            />
+                          ) : (
+                            <div className="h-12 w-12 rounded-lg border border-white/10 bg-black/20 flex items-center justify-center text-white/60">
+                              📎
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <div className="text-xs text-white/90 truncate">{att.name}</div>
+                            <div className="text-[11px] text-white/50 truncate">
+                              {shortCid(att.cid)} · {fmtBytes(att.size)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="h-8 w-8 rounded-lg border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                          title="Убрать вложение"
+                          onClick={() => setPendingAttachments((prev) => prev.filter((x) => x.cid !== att.cid))}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
+              )}
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={attachBusy}
+                    title={attachBusy ? "Обработка…" : "Прикрепить файл (MVP: только изображения, CDR → PNG)"}
+                  >
+                    {attachBusy ? "⏳ Обработка" : "📎 Вложение"}
+                  </button>
+                  <div className="text-xs text-white/50">
+                    Отправка — мок: письмо появится в «Отправленных» и получит статус. Без E2E отправка блокируется (fail-closed). Вложения: CDR→PNG, CID считается от очищенного результата.
+                  </div>
+                </div>
+
                 <div className="flex gap-2">
-                  <button type="button" onClick={saveDraft} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white/90">
+                  <button
+                    type="button"
+                    onClick={saveDraft}
+                    disabled={attachBusy}
+                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
                     Сохранить черновик
                   </button>
                   <button
                     type="button"
                     onClick={sendNow}
-                    className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white"
+                    disabled={attachBusy}
+                    className="px-3 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-60 disabled:cursor-not-allowed"
                     title="Отправить (мок)"
                   >
                     Отправить
