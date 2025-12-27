@@ -29,6 +29,8 @@ function isMailMessage(v: unknown): v is MailMessage {
   if (typeof o.subject !== "string") return false;
   if (typeof o.body !== "string") return false;
   if (typeof o.readAt !== "undefined" && (typeof o.readAt !== "number" || !Number.isFinite(o.readAt))) return false;
+  if (typeof o.expiresAt !== "undefined" && (typeof o.expiresAt !== "number" || !Number.isFinite(o.expiresAt))) return false;
+
   return true;
 }
 
@@ -43,6 +45,19 @@ function parseStore(raw: string): MailStoreV1 | null {
     return null;
   }
 }
+
+function isExpired(m: MailMessage, now: number): boolean {
+  return typeof m.expiresAt === "number" && Number.isFinite(m.expiresAt) && m.expiresAt <= now;
+}
+
+/** Удаляет письма, у которых истёк expiresAt (TTL). */
+export function gcMailStoreByTTL(store: MailStoreV1, now = Date.now()): MailStoreV1 {
+  const before = store.messages.length;
+  const messages = store.messages.filter((m) => !isExpired(m, now));
+  if (messages.length === before) return store;
+  return { ...store, messages };
+}
+
 
 export function seedMailStore(now = Date.now()): MailStoreV1 {
   const t = now;
@@ -65,6 +80,7 @@ export function seedMailStore(now = Date.now()): MailStoreV1 {
         folder: "inbox",
         createdAt: t - 1000 * 60 * 45,
         updatedAt: t - 1000 * 60 * 45,
+        expiresAt: t + 1000 * 60 * 60 * 6,
         from: "relay@altnet",
         to: ["you@local"],
         subject: "Ваше письмо будет жить ограниченное время (TTL)",
@@ -97,13 +113,27 @@ export function seedMailStore(now = Date.now()): MailStoreV1 {
   };
 }
 
-export function loadMailStore(): MailStoreV1 | null {
+export function loadMailStore(now = Date.now()): MailStoreV1 | null {
   const ls = getLS();
   if (!ls) return null;
   const raw = ls.getItem(LS_KEY);
   if (!raw) return null;
-  return parseStore(raw);
+
+  const parsed = parseStore(raw);
+  if (!parsed) return null;
+
+  const cleaned = gcMailStoreByTTL(parsed, now);
+  if (cleaned !== parsed) {
+    try {
+      ls.setItem(LS_KEY, JSON.stringify(cleaned));
+    } catch {
+      // ignore
+    }
+  }
+
+  return cleaned;
 }
+
 
 export function saveMailStore(store: MailStoreV1): void {
   const ls = getLS();

@@ -18,6 +18,11 @@ export type MailMessage = {
 
   createdAt: number;
   updatedAt: number;
+    /**
+   * Время истечения письма (unix ms).
+   * Если задано и время прошло — письмо подлежит удалению при загрузке/GC (TTL/retention).
+   */
+  expiresAt?: number;
 
   from: string;
   to: string[];

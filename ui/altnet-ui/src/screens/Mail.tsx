@@ -11,7 +11,8 @@ import { getBlob, putFile } from "../core/content/blobStore";
 import { pushSecurityEvent } from "../core/security/bus";
 import { cdrSanitizeUpload, CdrError } from "../core/security/cdr";
 import type { MailAttachment, MailFolder, MailMessage, MailStoreV1 } from "../core/mail/types";
-import { loadMailStore, saveMailStore, seedMailStore } from "../core/mail/storage";
+import { gcMailStoreByTTL, loadMailStore, saveMailStore, seedMailStore } from "../core/mail/storage";
+
 
 function folderTitle(f: MailFolder): string {
   switch (f) {
@@ -37,6 +38,34 @@ function fmtTime(ts: number): string {
     return String(ts);
   }
 }
+
+function ttlTone(expiresAt: number, now: number): string {
+  const ms = expiresAt - now;
+  if (!Number.isFinite(ms)) return "text-white/50";
+  if (ms <= 0) return "text-rose-300";
+  if (ms <= 60 * 60 * 1000) return "text-rose-300";
+  if (ms <= 24 * 60 * 60 * 1000) return "text-amber-300";
+  return "text-white/55";
+}
+
+function fmtTtlLeft(expiresAt: number, now: number): string {
+  const ms = expiresAt - now;
+  if (!Number.isFinite(ms)) return "";
+  if (ms <= 0) return "истекло";
+
+  const totalMin = Math.floor(ms / 60000);
+  if (totalMin < 1) return "<1м";
+
+  const totalHours = Math.floor(totalMin / 60);
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  const mins = totalMin % 60;
+
+  if (days > 0) return `${days}д ${hours}ч`;
+  if (totalHours > 0) return `${totalHours}ч ${mins}м`;
+  return `${totalMin}м`;
+}
+
 
 function deliveryText(d?: MailMessage["delivery"]): string {
   switch (d) {
@@ -104,7 +133,7 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
   const [store, setStore] = useState<MailStoreV1>(() => loadMailStore() ?? seedMailStore());
   const [folder, setFolder] = useState<MailFolder>("inbox");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-
+  const [now, setNow] = useState(() => Date.now());
   const [composeOpen, setComposeOpen] = useState(false);
   const [draftTo, setDraftTo] = useState("");
   const [draftSubject, setDraftSubject] = useState("");
@@ -130,6 +159,17 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
   useEffect(() => {
     saveMailStore(store);
   }, [store]);
+
+  // TTL: обновляем "текущее время" и чистим истёкшие письма раз в минуту.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      setStore((prev) => gcMailStoreByTTL(prev, t));
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
 
   const messagesInFolder = useMemo(() => {
     const list = store.messages
@@ -443,6 +483,15 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
           </div>
           <div className="shrink-0 text-right">
             <div className="text-[11px] text-white/45 whitespace-nowrap">{time}</div>
+            {typeof m.expiresAt === "number" && Number.isFinite(m.expiresAt) && (
+              <div
+                className={["mt-1 text-[11px] whitespace-nowrap", ttlTone(m.expiresAt, now)].join(" ")}
+                title={`TTL до: ${fmtTime(m.expiresAt)}`}
+              >
+                ⏳ {fmtTtlLeft(m.expiresAt, now)}
+              </div>
+            )}
+
             {m.folder === "sent" && (
               <div className="mt-1 text-[11px] text-white/45 whitespace-nowrap" title={m.delivery ?? ""}>
                 {deliveryText(m.delivery ?? "queued")}
@@ -532,31 +581,37 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
                 <div className="text-white/90 text-xl font-semibold">{selected.subject || "(без темы)"}</div>
                 <div className="mt-1 text-sm text-white/60 flex flex-wrap gap-x-4 gap-y-1">
                   <span>
-                    <span className="text-white/50">От:</span> {selected.from}
-                  </span>
-                  <span>
-                    <span className="text-white/50">Кому:</span> {selected.to?.filter(Boolean).join(", ") || "(не задано)"}
-                  </span>
-                  {selected.folder === "sent" && (
-                    <span>
-                      <span className="text-white/50">Доставка:</span> {deliveryText(selected.delivery ?? "queued")}
+                      <span className="text-white/50">От:</span> {selected.from}
                     </span>
-                  )}
-                  <span>
-                    <span className="text-white/50">Профиль:</span> {profile === "anon" ? "Анонимный" : "Приватный быстрый"}
-                  </span>
-                </div>
-                <div className="mt-1 text-xs text-white/45">{fmtTime(selected.createdAt)}</div>
-              </div>
+                    <span>
+                      <span className="text-white/50">Кому:</span> {selected.to?.filter(Boolean).join(", ") || "(не задано)"}
+                    </span>
+                    {selected.folder === "sent" && (
+                      <span>
+                        <span className="text-white/50">Доставка:</span> {deliveryText(selected.delivery ?? "queued")}
+                      </span>
+                    )}
+                    <span>
+                      <span className="text-white/50">Профиль:</span> {profile === "anon" ? "Анонимный" : "Приватный быстрый"}
+                      {typeof selected.expiresAt === "number" && Number.isFinite(selected.expiresAt) && (
+                        <span title={`TTL до: ${fmtTime(selected.expiresAt)}`}>
+                          <span className="text-white/50">TTL:</span> ⏳ {fmtTtlLeft(selected.expiresAt, now)}
+                        </span>
+                      )}
 
-              <div className="flex flex-wrap gap-2">
-                <button type="button" className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-sm" disabled>
-                  Ответить
-                </button>
-                <button type="button" className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-sm" disabled>
-                  Переслать
-                </button>
-              </div>
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-white/45">{fmtTime(selected.createdAt)}</div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-sm" disabled>
+                    Ответить
+                  </button>
+                  <button type="button" className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 text-sm" disabled>
+                    Переслать
+                  </button>
+                </div>
 
               <div className="rounded-xl border border-white/10 bg-black/20 p-4 whitespace-pre-wrap text-white/85">
                 {selected.body || ""}
