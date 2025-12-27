@@ -170,6 +170,13 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
     return () => window.clearInterval(id);
   }, []);
 
+  // Если выбранное письмо исчезло из стора (TTL GC / удаление / перемещение) — сбрасываем выбор.
+  useEffect(() => {
+    if (!selectedId) return;
+    const exists = store.messages.some((m) => m.id === selectedId);
+    if (!exists) setSelectedId(null);
+  }, [selectedId, store.messages]);
+
 
   const messagesInFolder = useMemo(() => {
     const list = store.messages
@@ -579,6 +586,72 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
             <div className="space-y-4">
               <div>
                 <div className="text-white/90 text-xl font-semibold">{selected.subject || "(без темы)"}</div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded-md text-xs bg-white/10 hover:bg-white/20 text-white/85"
+                    onClick={() => {
+                      const t = Date.now();
+                      setStore((prev) => ({
+                        ...prev,
+                        messages: prev.messages.map((m) => {
+                          if (m.id !== selected.id) return m;
+                          return { ...m, readAt: m.readAt ? undefined : t, updatedAt: t };
+                        }),
+                      }));
+                    }}
+                    title={selected.readAt ? "Пометить как непрочитанное" : "Пометить как прочитанное"}
+                  >
+                    {selected.readAt ? "Непрочит." : "Прочит."}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded-md text-xs bg-white/10 hover:bg-white/20 text-white/85"
+                    onClick={() => {
+                      const dest = window.prompt("Переместить в папку: inbox | sent | drafts", folder);
+                      if (!dest) return;
+                      if (dest !== "inbox" && dest !== "sent" && dest !== "drafts") {
+                        window.alert("Неизвестная папка. Допустимо: inbox | sent | drafts");
+                        return;
+                      }
+                      const t = Date.now();
+                      const nextFolder = dest as MailFolder;
+
+                      setStore((prev) => ({
+                        ...prev,
+                        messages: prev.messages.map((m) => {
+                          if (m.id !== selected.id) return m;
+                          return { ...m, folder: nextFolder, updatedAt: t };
+                        }),
+                      }));
+
+                      // MVP-логика: сразу переключаемся в папку назначения
+                      setFolder(nextFolder);
+                    }}
+                    title="Переместить письмо"
+                  >
+                    Переместить
+                  </button>
+
+                  <button
+                    type="button"
+                    className="px-2 py-1 rounded-md text-xs bg-rose-600/25 hover:bg-rose-600/35 text-rose-200"
+                    onClick={() => {
+                      const ok = window.confirm("Удалить письмо без возможности восстановления?");
+                      if (!ok) return;
+                      setStore((prev) => ({
+                        ...prev,
+                        messages: prev.messages.filter((m) => m.id !== selected.id),
+                      }));
+                      setSelectedId(null);
+                    }}
+                    title="Удалить письмо"
+                  >
+                    Удалить
+                  </button>
+                </div>
+
                 <div className="mt-1 text-sm text-white/60 flex flex-wrap gap-x-4 gap-y-1">
                   <span>
                       <span className="text-white/50">От:</span> {selected.from}
