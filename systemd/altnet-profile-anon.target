@@ -1,0 +1,5 @@
+[Unit]
+Description=AltNet ANON profile (Tor)
+Conflicts=altnet-profile-fast.target
+AllowIsolate=yes
+Wants=discovery@anon.service onion-fwd@5002.service onion-fwd@5003.service

@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Altnet Apply periodically
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=30s
+Unit=altnet-apply.service
+
+[Install]
+WantedBy=timers.target

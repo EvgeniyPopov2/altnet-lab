@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch fetched Altnet modules and trigger apply
+
+[Path]
+Unit=altnet-apply.service
+PathExistsGlob=/opt/altnet/modules/*/*/.fetched
+
+[Install]
+WantedBy=multi-user.target

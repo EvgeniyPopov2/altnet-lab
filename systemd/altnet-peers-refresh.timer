@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic AltNet peers refresh
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Unit=altnet-peers-refresh.service
+
+[Install]
+WantedBy=timers.target
