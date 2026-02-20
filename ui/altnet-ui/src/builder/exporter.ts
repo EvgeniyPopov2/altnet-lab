@@ -463,6 +463,15 @@ export async function exportSingleHtml(modelIn: SiteModel, options?: ExportOptio
   // Инлайн картинок http(s) → data:
   const model = JSON.parse(JSON.stringify(sanitized)) as SiteModel;
   if (opts.bundleAssets) {
+    const imageBlocks = model.blocks.filter((b) => {
+      if (b.type !== "image") return false;
+      const src = String(b.props?.src || "");
+      return isHttpUrl(src);
+    });
+    const total = imageBlocks.length;
+    let done = 0;
+    opts.onProgress?.(done, total);
+
     for (const b of model.blocks) {
       if (b.type === "image") {
         const src = String(b.props?.src || "");
@@ -473,6 +482,9 @@ export async function exportSingleHtml(modelIn: SiteModel, options?: ExportOptio
             b.props = { ...(b.props || {}), src: dataUrl };
           } catch {
             b.props = { ...(b.props || {}), src: placeholderDataUrl() };
+          } finally {
+            done++;
+            opts.onProgress?.(done, total);
           }
         }
       }

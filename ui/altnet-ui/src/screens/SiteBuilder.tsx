@@ -429,6 +429,15 @@ export default function SiteBuilder({
   // Мини-предпросмотр (встроенный iframe) — чтобы не было «не прочитан» у переменных
   const [autoPreview, setAutoPreview] = useState<boolean>(true);
 
+  type ExportPhase = "cdr" | "build";
+  const [exportState, setExportState] = useState<{
+    format: "html" | "zip";
+    phase: ExportPhase;
+    done: number;
+    total: number;
+  } | null>(null);
+  const isExporting = exportState !== null;
+
   // Для live-preview (отдельная вкладка)
   const importJsonInputRef = useRef<HTMLInputElement>(null);
   const livePreviewWindowRef = useRef<Window | null>(null);
@@ -694,19 +703,70 @@ export default function SiteBuilder({
 
   // ── Экспорт / импорт / live-preview ────────────────────────────────────────
   const onExportZip = useCallback(async () => {
+    if (isExporting) return;
+
     const model = adaptFromSiteBuilderDoc(docForBuild);
-    const blob = await exportSiteZip(model, { bundleAssets: true });
-    const fname = prettyFileName(doc.title || "site", "zip");
-    downloadBlob(blob, fname);
-  }, [docForBuild, doc.title]);
+    setExportState({ format: "zip", phase: "cdr", done: 0, total: 0 });
+
+    try {
+      const blob = await exportSiteZip(model, {
+        bundleAssets: true,
+        onProgress: (done, total) => setExportState({ format: "zip", phase: "cdr", done, total }),
+      });
+      setExportState((prev) => (prev ? { ...prev, phase: "build" } : prev));
+      const fname = prettyFileName(doc.title || "site", "zip");
+      downloadBlob(blob, fname);
+      pushSecurityEvent({
+        severity: "info",
+        code: "SITE_EXPORT_DONE",
+        title: "Экспорт ZIP завершён",
+        message: "Файл сохранён на устройство.",
+      });
+    } catch {
+      pushSecurityEvent({
+        severity: "warning",
+        code: "SITE_EXPORT_FAILED",
+        title: "Экспорт ZIP не выполнен",
+        message: "Попробуйте ещё раз. Если ошибка повторяется — проверьте входные данные блоков.",
+      });
+    } finally {
+      setExportState(null);
+    }
+  }, [docForBuild, doc.title, isExporting]);
 
   const onExportSingle = useCallback(async () => {
+    if (isExporting) return;
+
     const model = adaptFromSiteBuilderDoc(docForBuild);
-    const blob = await exportSingleHtml(model, { bundleAssets: true });
-    downloadBlob(blob, prettyFileName(doc.title || "site", "html"));
-  }, [docForBuild, doc.title]);
+    setExportState({ format: "html", phase: "cdr", done: 0, total: 0 });
+
+    try {
+      const blob = await exportSingleHtml(model, {
+        bundleAssets: true,
+        onProgress: (done, total) => setExportState({ format: "html", phase: "cdr", done, total }),
+      });
+      setExportState((prev) => (prev ? { ...prev, phase: "build" } : prev));
+      downloadBlob(blob, prettyFileName(doc.title || "site", "html"));
+      pushSecurityEvent({
+        severity: "info",
+        code: "SITE_EXPORT_DONE",
+        title: "Экспорт HTML завершён",
+        message: "Файл сохранён на устройство.",
+      });
+    } catch {
+      pushSecurityEvent({
+        severity: "warning",
+        code: "SITE_EXPORT_FAILED",
+        title: "Экспорт HTML не выполнен",
+        message: "Попробуйте ещё раз. Если ошибка повторяется — проверьте входные данные блоков.",
+      });
+    } finally {
+      setExportState(null);
+    }
+  }, [docForBuild, doc.title, isExporting]);
 
   const onPublishAlt = useCallback(async () => {
+    if (isExporting) return;
     try {
       const model = adaptFromSiteBuilderDoc(docForBuild);
       const blob = await exportSingleHtml(model, { bundleAssets: true });
@@ -753,8 +813,16 @@ export default function SiteBuilder({
         message: "Проверьте, что хранилище браузера доступно (localStorage), и повторите попытку.",
       });
     }
-  }, [docForBuild, doc.title, onPublished]);
+  }, [docForBuild, doc.title, isExporting, onPublished]);
 
+
+  const exportPhaseLabel = exportState?.phase === "cdr"
+    ? `CDR: ${exportState.done}/${exportState.total}`
+    : exportState?.phase === "build"
+      ? "Сборка файла…"
+      : "";
+
+  const exportFormatLabel = exportState?.format === "zip" ? "ZIP" : "HTML";
 
   const buildLiveShellHtml = (id: string) => `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"/>
@@ -1267,26 +1335,39 @@ export default function SiteBuilder({
               )}
 
               <button
-                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#22c55e]"
+                className={
+                  "px-3 py-1.5 rounded-md border " +
+                  (isExporting
+                    ? "border-[#2a2f45] bg-[#0a0e1a] text-[#76809a] cursor-not-allowed"
+                    : "border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#22c55e]")
+                }
                 onClick={onPublishAlt}
                 title="Сохранить на этом устройстве и открыть в .alt-браузере"
+                disabled={isExporting}
               >
                 Публиковать
               </button>
 
-
-              <button
-                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
-                onClick={onExportSingle}
-              >
-                Экспорт HTML
-              </button>
-              <button
-                className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
-                onClick={onExportZip}
-              >
-                Экспорт ZIP
-              </button>
+              {isExporting ? (
+                <div className="px-3 py-1.5 rounded-md border border-[#6E59F2] bg-[#15192c] text-[#e6e9f4] text-xs">
+                  Экспорт {exportFormatLabel} · {exportPhaseLabel}
+                </div>
+              ) : (
+                <>
+                  <button
+                    className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
+                    onClick={onExportSingle}
+                  >
+                    Экспорт HTML
+                  </button>
+                  <button
+                    className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]"
+                    onClick={onExportZip}
+                  >
+                    Экспорт ZIP
+                  </button>
+                </>
+              )}
               <label className="ml-2 inline-flex items-center gap-2 text-xs text-[#cfd5e6]">
                 <input
                   type="checkbox"
