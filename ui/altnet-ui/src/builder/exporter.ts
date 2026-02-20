@@ -122,7 +122,8 @@ p{margin:8px 0;font-size:16px;color:var(--fg)}
 .btn.secondary{background:#2a2e45}
 
 /* Карточки/изображения */
-img.responsive{border-radius:var(--radius);box-shadow:var(--shadow-soft)}
+img.responsive, video.responsive{border-radius:var(--radius);box-shadow:var(--shadow-soft)}
+video.responsive{display:block;width:100%;max-width:100%;height:auto}
 .card{
   background:var(--card);
   border:1px solid rgba(255,255,255,0.06);

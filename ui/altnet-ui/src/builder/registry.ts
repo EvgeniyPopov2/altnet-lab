@@ -165,6 +165,56 @@ const Image: BlockSpec = {
   },
 };
 
+const Video: BlockSpec = {
+  id: "video",
+  name: "Видео (HTML5)",
+  defaults: {
+    src: "",
+    poster: "",
+    loop: false,
+    muted: false,
+    controls: true,
+  },
+  render: ({ props }) => {
+    const p = { ...Video.defaults, ...(props || {}) };
+    return React.createElement(
+      "section",
+      { className: "section" },
+      React.createElement("video", {
+        className: "responsive",
+        src: String(p.src || ""),
+        poster: String(p.poster || ""),
+        controls: !!p.controls,
+        loop: !!p.loop,
+        muted: !!p.muted,
+        playsInline: true,
+        preload: "metadata",
+      })
+    );
+  },
+  serialize: (props) => {
+    const p = { ...Video.defaults, ...(props || {}) };
+    const src = esc(String(p.src || ""));
+    const poster = String(p.poster || "").trim();
+
+    const attrs = [
+      `src="${src}"`,
+      `class="responsive"`,
+      p.controls ? `controls` : "",
+      `preload="metadata"`,
+      `playsinline`,
+      p.loop ? `loop` : "",
+      p.muted ? `muted` : "",
+      poster ? `poster="${esc(poster)}"` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return `<section class="section"><video ${attrs}></video></section>`;
+  },
+};
+
+
 const Button: BlockSpec = {
   id: "button",
   name: "Кнопка",
@@ -356,6 +406,7 @@ const BLOCKS: Record<string, BlockSpec> = {
   [Heading.id]: Heading,
   [Text.id]: Text,
   [Image.id]: Image,
+  [Video.id]: Video,
   [Button.id]: Button,
   [Cols2.id]: Cols2,
   [Spacer.id]: Spacer,
