@@ -1,0 +1,671 @@
+import React, { useState, type ReactNode } from "react";
+
+// ✅ AltNet — кликабельный вайрфрейм (v2.1)
+// Исправлено: синтаксическая ошибка на конце файла (лишняя закрывающая скобка)
+// Улучшено: лёгкие типы для TSX, мелкие правки верстки
+// Добавлено: мини-smoke тест для util cls (в dev)
+
+// ===== УТИЛИТЫ =====
+type ClassValue = string | false | null | undefined;
+const cls = (...arr: ClassValue[]): string => arr.filter(Boolean).join(" ");
+
+if (typeof window !== "undefined") {
+  // простейший smoke-тест (не ломает UI)
+  try {
+    console.assert(cls("a", false && "b", "c") === "a c", "cls() join failed");
+  } catch {}
+}
+
+// ===== МАЛЕНЬКИЕ КОМПОНЕНТЫ =====
+const Badge: React.FC<{ children: ReactNode }> = ({ children }) => (
+  <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium bg-white/5 border-white/10">
+    {children}
+  </span>
+);
+
+const Pill: React.FC<{ active?: boolean; onClick?: () => void; children: ReactNode }> = ({ active, children, onClick }) => (
+  <button
+    onClick={onClick}
+    className={cls(
+      "px-3 py-1.5 rounded-full text-sm transition",
+      active ? "bg-indigo-500/90 text-white" : "bg-white/5 text-white/80 hover:bg-white/10"
+    )}
+  >
+    {children}
+  </button>
+);
+
+const IconButton: React.FC<{ title?: string; onClick?: () => void; children: ReactNode }> = ({ title, children, onClick }) => (
+  <button
+    title={title}
+    onClick={onClick}
+    className="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 flex items-center justify-center border border-white/10"
+  >
+    {children}
+  </button>
+);
+
+const Card: React.FC<{ title: ReactNode; right?: ReactNode; children: ReactNode }> = ({ title, right, children }) => (
+  <div className="rounded-2xl bg-white/5 border border-white/10 p-4 md:p-6 shadow-xl">
+    <div className="flex items-center justify-between mb-3">
+      <h3 className="text-white/90 font-semibold tracking-tight">{title}</h3>
+      {right}
+    </div>
+    {children}
+  </div>
+);
+
+const SectionTitle: React.FC<{ children: ReactNode }> = ({ children }) => (
+  <h2 className="text-white/90 font-semibold tracking-tight text-lg mb-2 mt-4">{children}</h2>
+);
+
+const ReactionBar: React.FC = () => (
+  <div className="flex items-center gap-2 text-white/80 text-sm mt-2">
+    <button className="px-2 py-1 rounded-md bg-white/5 hover:bg-white/10">👍 24</button>
+    <button className="px-2 py-1 rounded-md bg-white/5 hover:bg-white/10">💬 6</button>
+    <button className="px-2 py-1 rounded-md bg-white/5 hover:bg-white/10">🔁 3</button>
+    <button className="px-2 py-1 rounded-md bg-white/5 hover:bg-white/10">⭐ 5</button>
+  </div>
+);
+
+const Step: React.FC<{ n: number; label: string; active?: boolean; done?: boolean }> = ({ n, label, active, done }) => (
+  <div className={cls("flex items-center gap-2", active && "text-white", done && "opacity-80")}> 
+    <div
+      className={cls(
+        "w-6 h-6 rounded-full flex items-center justify-center text-sm",
+        active ? "bg-indigo-500/90" : "bg-white/10 border border-white/10"
+      )}
+    >
+      {done ? "✓" : n}
+    </div>
+    <div className="text-white/80 text-sm">{label}</div>
+  </div>
+);
+
+// ===== ЭКРАНЫ =====
+function FeedScreen() {
+  return (
+    <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
+      <div className="lg:col-span-2 grid md:grid-cols-2 gap-4 md:gap-6">
+        <Card title="Лента: популярное рядом">
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex gap-3 items-start bg-white/5 rounded-xl p-3">
+                <div className="w-28 h-16 bg-white/10 rounded-lg flex items-center justify-center text-white/60">превью</div>
+                <div className="flex-1">
+                  <div className="text-white/90 font-medium">Видеопост #{i} · 1080p</div>
+                  <div className="text-white/60 text-sm">надёжность: 🟢 высокая · зеркал: 12</div>
+                  <ReactionBar />
+                </div>
+                <Badge>🔥 тренд</Badge>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card title="Статусы друзей">
+          <div className="space-y-3 text-sm text-white/80">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-white/10" />
+              <div className="flex-1">
+                <div className="text-white/90">Анна</div>
+                <div className="text-white/60">🟢 онлайн · читает ленту</div>
+              </div>
+              <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm">Написать</button>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-white/10" />
+              <div className="flex-1">
+                <div className="text-white/90">Майк</div>
+                <div className="text-white/60">🟡 отошёл · г. Самара</div>
+              </div>
+              <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm">Позвонить</button>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <Card title="Состояние сети">
+        <ul className="text-white/80 text-sm space-y-1">
+          <li>Пиров рядом: 6 · по миру: 1.2k</li>
+          <li>Транспорты: Yggdrasil 🟢 · QUIC 🟢 · Tor ⚪</li>
+          <li>Кеш: 3.1 ГБ / 10 ГБ · Пины: 18</li>
+          <li>Доставка: локально 120 Мбит/с · глобально 2–8 Мбит/с</li>
+          <li>Репутация сети: 98/100 (низкий спам)</li>
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function MessagesScreen() {
+  const [active, setActive] = useState("mike");
+  const [pinMine, setPinMine] = useState(false);
+  const chats = [
+    { id: "anna", name: "Анна (Екатеринбург)", last: "Как дорога?", unread: 2 },
+    { id: "mike", name: "Майк (Самара)", last: "Кидаю видео!", unread: 0 },
+    { id: "trip", name: "Группа · Поездка в Сочи", last: "Берём дом у моря", unread: 5 },
+  ];
+  return (
+    <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
+      <Card title="Сообщения">
+        <div className="space-y-2">
+          {chats.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setActive(c.id)}
+              className={cls(
+                "w-full text-left p-3 rounded-xl transition",
+                active === c.id ? "bg-indigo-500/20 border border-indigo-500/30" : "bg-white/5 border border-white/10 hover:bg-white/10"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-white/90 font-medium">{c.name}</div>
+                {c.unread > 0 && <Badge>{c.unread}</Badge>}
+              </div>
+              <div className="text-white/60 text-sm">{c.last}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <Card title={`Чат: ${chats.find((c) => c.id === active)?.name || "—"}`} right={<Badge>🔐 E2E</Badge>}>
+        <div className="space-y-3">
+          <div className="text-white/70 text-sm">Сегодня, 12:41</div>
+          <div className="bg-white/5 rounded-xl p-3 flex gap-3 items-start">
+            <div className="w-36 h-20 bg-white/10 rounded-lg flex items-center justify-center text-white/60">превью видео</div>
+            <div className="flex-1">
+              <div className="text-white/90 font-medium">«Уникальный клип с телефона» · 1080p</div>
+              <div className="text-white/60 text-sm">24 сегм. × 4с · адаптивный битрейт</div>
+              <div className="flex gap-2 mt-2">
+                <button className="px-3 py-1.5 rounded-lg bg-indigo-500/90 text-white text-sm">▶️ Воспроизвести</button>
+                <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm">⬇️ Сохранить</button>
+              </div>
+              <ReactionBar />
+            </div>
+          </div>
+          <div className="text-white/70 text-sm">Ты: «🔥 Круто! Кидай ещё»</div>
+        </div>
+        <SectionTitle>Сохранение</SectionTitle>
+        <div className="flex items-center justify-between text-sm text-white/80">
+          <span>📌 Сохранить у меня (не пропадёт)</span>
+          <input type="checkbox" checked={pinMine} onChange={() => setPinMine(!pinMine)} />
+        </div>
+      </Card>
+
+      <Card title="Подсказки для тебя">
+        <ul className="text-white/80 text-sm list-disc ml-5 space-y-1">
+          <li>Редкий уникальный контент лучше закрепить — «Сохранить у меня».</li>
+          <li>Группы работают как в Telegram: общие чаты, медиа, реакции, стикеры.</li>
+          <li>Видеосообщения открываются сразу, популярное кэшируется рядом.</li>
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function ServersScreen({ openWizard }: { openWizard: () => void }) {
+  const servers = [
+    { id: "altnet", name: "AltNet / Россия", online: 1243 },
+    { id: "games", name: "Игры и Стримы", online: 842 },
+    { id: "music", name: "Музыка 24/7", online: 410 },
+  ];
+  const [active, setActive] = useState("altnet");
+  return (
+    <div className="grid lg:grid-cols-4 gap-4 md:gap-6">
+      <Card
+        title="Серверы (сообщества)"
+        right={
+          <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm" onClick={openWizard}>➕ Создать</button>
+        }
+      >
+        <div className="space-y-2">
+          {servers.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setActive(s.id)}
+              className={cls(
+                "w-full text-left p-3 rounded-xl transition",
+                active === s.id ? "bg-indigo-500/20 border border-indigo-500/30" : "bg-white/5 border border-white/10 hover:bg-white/10"
+              )}
+            >
+              <div className="text-white/90 font-medium">{s.name}</div>
+              <div className="text-white/60 text-xs">онлайн: {s.online}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      <div className="lg:col-span-2 space-y-4">
+        <Card title={`Каналы · ${servers.find((s) => s.id === active)?.name || "—"}`}>
+          <div className="grid md:grid-cols-3 gap-3 text-sm">
+            <div className="bg-white/5 rounded-xl p-3">
+              <div className="font-medium text-white/90 mb-1">Текстовые</div>
+              <ul className="text-white/70 space-y-1">
+                <li>#новости</li>
+                <li>#мемы</li>
+                <li>#видео</li>
+                <li>#вопросы</li>
+              </ul>
+            </div>
+            <div className="bg-white/5 rounded-xl p-3">
+              <div className="font-medium text-white/90 mb-1">Голосовые</div>
+              <ul className="text-white/70 space-y-1">
+                <li>🎙️ Голос‑1</li>
+                <li>🎙️ Голос‑2</li>
+                <li>📺 Стрим‑зал</li>
+              </ul>
+              <button className="mt-2 px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm">Подключиться</button>
+            </div>
+            <div className="bg-white/5 rounded-xl p-3">
+              <div className="font-medium text-white/90 mb-1">Участники</div>
+              <div className="text-white/70">🟢 312 онлайн • ⚪ 2.1k всего</div>
+              <div className="text-white/60 mt-1">Роли, статусы, аватарки, стикеры.</div>
+            </div>
+          </div>
+          <SectionTitle>Лента сервера</SectionTitle>
+          <div className="space-y-3 mt-2">
+            {[1, 2].map((i) => (
+              <div key={i} className="p-3 bg-white/5 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div className="text-white/90 font-medium">Пост #{i}: «Обновление .alt‑браузера»</div>
+                  <Badge>📌 закреплён</Badge>
+                </div>
+                <div className="text-white/70 text-sm">Комментарии в реальном времени, реакции и репосты.</div>
+                <ReactionBar />
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <Card title="Надёжность хранения">
+        <ul className="text-white/80 text-sm list-disc ml-5 space-y-1">
+          <li>Популярное держат кеши и зеркала сервера.</li>
+          <li>Важное — закрепляют хранители (NAS/роутеры).</li>
+          <li>Личные файлы не пропадут, если нажать «Сохранить у меня».</li>
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function ExploreScreen() {
+  return (
+    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+      {["Путешествия по России", "Городские события", "Музыка 24/7", "Игровые вечера", "Фото и Видео", "Наука и Тех"]
+        .map((name, i) => (
+          <Card key={i} title={name} right={<Badge>🟢 открытый</Badge>}>
+            <div className="text-white/70 text-sm">Найдёшь новые серверы, ботов и мини‑приложения. Подписки в один клик.</div>
+            <div className="mt-3 flex gap-2">
+              <button className="px-3 py-1.5 rounded-lg bg-indigo-500/90 text-white text-sm">Подключиться</button>
+              <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm">Посмотреть</button>
+            </div>
+          </Card>
+        ))}
+    </div>
+  );
+}
+
+function BrowserScreen() {
+  const [nameTaken, setNameTaken] = useState(true);
+  const [mode, setMode] = useState<"templates" | "editor">("templates");
+  const [pages, setPages] = useState<string[]>(["index", "about"]);
+  const addPage = () => setPages([...pages, `page-${pages.length + 1}`]);
+  return (
+    <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
+      <Card title="Браузер .alt">
+        <div className="flex gap-2 mb-3">
+          <input className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white/90 placeholder-white/40" placeholder="alt://@evgeniy/blog" />
+          <button className="px-3 py-2 rounded-lg bg-indigo-500/90 text-white">Перейти</button>
+        </div>
+        <div className="rounded-lg bg-white/5 border border-white/10 p-4">
+          <div className="text-white/90 font-medium mb-1">My Alt Blog</div>
+          <div className="text-white/70 text-sm">Современный SPA: анимации, 3D, комментарии без сервера.</div>
+          <ReactionBar />
+        </div>
+      </Card>
+
+      <Card title="Конструктор сайта (WYSIWYG)">
+        <div className="flex gap-2 mb-2">
+          <Pill active={mode === "templates"} onClick={() => setMode("templates")}>Шаблоны</Pill>
+          <Pill active={mode === "editor"} onClick={() => setMode("editor")}>Редактор</Pill>
+        </div>
+        {mode === "templates" && (
+          <div className="space-y-2 text-sm text-white/80">
+            <div className="grid grid-cols-2 gap-2">
+              <button className="bg-white/5 rounded-lg p-2 text-left">Сайт‑визитка</button>
+              <button className="bg-white/5 rounded-lg p-2 text-left">Блог</button>
+              <button className="bg-white/5 rounded-lg p-2 text-left">Галерея</button>
+              <button className="bg-white/5 rounded-lg p-2 text-left">Каталог/доки</button>
+            </div>
+            <div className="text-white/70">Публикация в 1 клик: собрать → выложить → получить адрес alt://…</div>
+          </div>
+        )}
+        {mode === "editor" && (
+          <div className="space-y-3 text-sm text-white/80">
+            <div className="flex items-center justify-between">
+              <div>
+                Страницы: {pages.map((p) => <Badge key={p}>{p}</Badge>)}
+              </div>
+              <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90" onClick={addPage}>➕ Новая страница</button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button className="bg-white/5 rounded-lg p-2 text-left">Добавить: Заголовок</button>
+              <button className="bg-white/5 rounded-lg p-2 text-left">Добавить: Текст</button>
+              <button className="bg-white/5 rounded-lg p-2 text-left">Добавить: Галерея</button>
+              <button className="bg-white/5 rounded-lg p-2 text-left">Добавить: Видео</button>
+            </div>
+            <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+              <div className="text-white/90 font-medium">Превью страницы</div>
+              <div className="text-white/60">WYSIWYG‑полотно с перетаскиванием блоков (демо).</div>
+            </div>
+            <div className="flex gap-2">
+              <button className="px-3 py-1.5 rounded-lg bg-indigo-500/90 text-white">Публиковать</button>
+              <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90">Сохранить локально</button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Имя и выход в интернет">
+        <div className="text-sm text-white/80 space-y-2">
+          <div className="flex items-center justify-between">
+            <span>Имя: <span className="text-white/90">alt://coolname</span></span>
+            <Badge>{nameTaken ? "занято" : "свободно"}</Badge>
+          </div>
+          <ul className="list-disc ml-5 space-y-1 text-white/80">
+            <li>Если занято — используй пространство владельца: <span className="text-white/90">alt://@evgeniy/coolname</span></li>
+            <li>Всегда доступен сырой адрес (уникальный, но нечитабельный).</li>
+            <li>Нужен обычный сайт? Включи «Интернет‑мост» в настройках.</li>
+          </ul>
+          <button className="mt-2 px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm">⚙️ Открыть настройки моста</button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function MailScreen() {
+  const letters = [
+    { id: 1, from: "@system", subj: "Добро пожаловать в AltNet", preview: "Ваш почтовый ящик активирован…", unread: true },
+    { id: 2, from: "Анна", subj: "Фото с концерта", preview: "Лови кадры, как обещала…", unread: false },
+  ];
+  const [sel, setSel] = useState(letters[0]);
+  return (
+    <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
+      <Card title="Почта (E2E)">
+        <div className="space-y-2">
+          {letters.map((l) => (
+            <button key={l.id} onClick={() => setSel(l)} className={cls("w-full text-left p-3 rounded-xl", sel.id===l.id?"bg-indigo-500/20 border border-indigo-500/30":"bg-white/5 border border-white/10 hover:bg-white/10") }>
+              <div className="flex items-center justify-between">
+                <div className="text-white/90 font-medium">{l.subj}</div>
+                {l.unread && <Badge>новое</Badge>}
+              </div>
+              <div className="text-white/60 text-sm">От: {l.from}</div>
+              <div className="text-white/50 text-xs">{l.preview}</div>
+            </button>
+          ))}
+        </div>
+        <button className="mt-3 w-full px-3 py-2 rounded-lg bg-white/10 text-white/90 text-sm">✉️ Написать</button>
+      </Card>
+      <Card title={sel.subj} right={<Badge>🔐</Badge>}>
+        <div className="text-white/60 text-sm mb-2">От: {sel.from}</div>
+        <div className="rounded-xl bg-white/5 p-3 text-white/80 text-sm min-h-[140px]">
+          Привет! Это пример E2E‑письма. Вложения хранятся как файлы в сети (CID), а сам текст — шифрованный конверт.
+        </div>
+        <div className="mt-3 flex gap-2">
+          <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm">Ответить</button>
+          <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm">Переслать</button>
+          <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90 text-sm">⬇️ Сохранить вложения</button>
+        </div>
+      </Card>
+      <Card title="Как это работает?">
+        <ul className="text-white/80 text-sm list-disc ml-5 space-y-1">
+          <li>Адрес = публичный ключ / алиас.</li>
+          <li>Письма — зашифрованы E2E и лежат в очереди до доставки.</li>
+          <li>Вложения публикуются как файлы (CID), доступные только по ключам.</li>
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function ProfileScreen({ theme, setTheme }: { theme: "dark" | "light"; setTheme: (t: "dark" | "light") => void }) {
+  const [status, setStatus] = useState("🍵 Чиллю и читаю ленту");
+  return (
+    <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
+      <Card title="Мой профиль">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-14 h-14 rounded-2xl bg-white/10" />
+          <div>
+            <div className="text-white/90 font-semibold">@evgeniy</div>
+            <div className="text-white/60 text-sm">Роли: 🛠️ инженер, 🎮 gamer</div>
+          </div>
+        </div>
+        <SectionTitle>Статус</SectionTitle>
+        <input className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white/90" value={status} onChange={(e)=>setStatus(e.target.value)} />
+        <SectionTitle>Био</SectionTitle>
+        <textarea className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white/80" rows={3} placeholder="Пара строк о себе…" />
+        <SectionTitle>Стикеры</SectionTitle>
+        <div className="flex gap-2 text-xl"><button>🔥</button><button>🚀</button><button>🎧</button><button>🐱</button></div>
+      </Card>
+      <Card title="Темы и акцент">
+        <div className="text-white/80 text-sm space-y-2">
+          <div className="flex items-center gap-2">
+            <button className={cls("px-3 py-1.5 rounded-lg", theme==='dark'?"bg-indigo-500/90":"bg-white/10 text-white/90")} onClick={()=>setTheme('dark')}>🌙 Тёмная</button>
+            <button className={cls("px-3 py-1.5 rounded-lg", theme==='light'?"bg-indigo-500/90":"bg-white/10 text-white/90")} onClick={()=>setTheme('light')}>☀️ Светлая</button>
+          </div>
+          <div className="text-white/60">Акцент: индиго (демо)</div>
+          <div className="flex gap-2">
+            <div className="w-6 h-6 rounded-full bg-indigo-500" />
+            <div className="w-6 h-6 rounded-full bg-emerald-500 opacity-60" />
+            <div className="w-6 h-6 rounded-full bg-rose-500 opacity-60" />
+          </div>
+        </div>
+      </Card>
+      <Card title="Права и безопасность">
+        <ul className="text-white/80 text-sm list-disc ml-5 space-y-1">
+          <li>Двухфакторная защита ключа.</li>
+          <li>Резерв фразы восстановления.</li>
+          <li>Экспорт / импорт профиля и пинов.</li>
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function HelpScreen() {
+  return (
+    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+      {[
+        { t: "Что такое AltNet?", d: "Распределённая сеть без единого сервера. Хранение через кеши/пины/зеркала, связь — P2P, анонимность — Tor/I2P по желанию." },
+        { t: "Почему контент может пропасть?", d: "Если никто не держит пин и не запрашивает — кеши очищаются. Важное закрепляй у себя или на зеркалах сообщества." },
+        { t: "Чем мы отличаемся от Discord/Telegram?", d: "Нет центральных ЦОД, нет единой БД. Всё локально у людей и в добровольных зеркалах." },
+        { t: "Как ускорить?", d: "Включи профиль ‘Сбалансированный’, зайди на локальные зеркала, подключи NAS‑зеркало в сервере." },
+        { t: "Безопасность", d: "Чаты/почта — E2E, транспорт — шифрован. Профиль ‘Строгий’ выключает ‘болтливые’ анонсы." }
+      ].map((x, i) => (
+        <Card key={i} title={x.t}><div className="text-white/70 text-sm">{x.d}</div></Card>
+      ))}
+    </div>
+  );
+}
+
+function WizardScreen() {
+  const [step, setStep] = useState(1);
+  return (
+    <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
+      <Card title="Мастер создания сервера">
+        <div className="space-y-3">
+          <Step n={1} label="Имя" active={step===1} done={step>1} />
+          <Step n={2} label="Каналы" active={step===2} done={step>2} />
+          <Step n={3} label="Роли" active={step===3} done={step>3} />
+          <Step n={4} label="Зеркала" active={step===4} done={step>4} />
+        </div>
+      </Card>
+      <Card title={step===1?"Шаг 1: Имя" : step===2?"Шаг 2: Каналы" : step===3?"Шаг 3: Роли" : "Шаг 4: Зеркала"}>
+        {step===1 && (
+          <div className="space-y-3">
+            <input className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white/90" placeholder="Название сервера" />
+            <div className="text-white/60 text-sm">Например: «Город Екатеринбург / AltNet»</div>
+          </div>
+        )}
+        {step===2 && (
+          <div className="space-y-2 text-sm text-white/80">
+            <label className="flex items-center gap-2"><input type="checkbox" defaultChecked/> #новости</label>
+            <label className="flex items-center gap-2"><input type="checkbox" defaultChecked/> #мемы</label>
+            <label className="flex items-center gap-2"><input type="checkbox"/> #вопросы</label>
+          </div>
+        )}
+        {step===3 && (
+          <div className="space-y-2 text-sm text-white/80">
+            <label className="flex items-center gap-2"><input type="checkbox" defaultChecked/> админы</label>
+            <label className="flex items-center gap-2"><input type="checkbox" defaultChecked/> модераторы</label>
+            <label className="flex items-center gap-2"><input type="checkbox" defaultChecked/> хранители (зеркала)</label>
+          </div>
+        )}
+        {step===4 && (
+          <div className="space-y-2 text-sm text-white/80">
+            <div className="text-white/70">Подключи NAS/роутеры как зеркала (пины сервера):</div>
+            <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90">➕ Добавить зеркало</button>
+          </div>
+        )}
+        <div className="mt-4 flex gap-2">
+          <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90" onClick={()=>setStep(Math.max(1, step-1))}>Назад</button>
+          {step<4 ? (
+            <button className="px-3 py-1.5 rounded-lg bg-indigo-500/90 text-white" onClick={()=>setStep(step+1)}>Далее</button>
+          ) : (
+            <button className="px-3 py-1.5 rounded-lg bg-indigo-500/90 text-white">Создать сервер</button>
+          )}
+        </div>
+      </Card>
+      <Card title="Подсказки">
+        <ul className="text-white/80 text-sm list-disc ml-5 space-y-1">
+          <li>«Хранители» — добровольцы с NAS/роутерами.</li>
+          <li>Открытые серверы видны в «Путешествиях».</li>
+          <li>Роли управляют доступом к каналам и зеркалам.</li>
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+function ReputationScreen() {
+  const items = [
+    { id: "cid:video123", title: "Видео: Ралли‑Екб", score: 96, flags: 1 },
+    { id: "cid:post777", title: "Пост: Мемы недели", score: 82, flags: 0 },
+    { id: "cid:site42", title: "Сайт: @art/galery", score: 61, flags: 4 },
+  ];
+  return (
+    <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
+      <Card title="Репутация контента (общественная)">
+        <div className="space-y-2">
+          {items.map((x)=> (
+            <div key={x.id} className="p-3 rounded-xl bg-white/5">
+              <div className="flex items-center justify-between">
+                <div className="text-white/90 font-medium">{x.title}</div>
+                <Badge>рейтинг: {x.score}</Badge>
+              </div>
+              <div className="text-white/60 text-sm">Жалобы: {x.flags}</div>
+              <div className="mt-2 flex gap-2 text-sm">
+                <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90">👍 Полезно</button>
+                <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90">👎 Спам/вред</button>
+                <button className="px-3 py-1.5 rounded-lg bg-white/10 text-white/90">🧑‍⚖️ Отдать модераторам</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card title="Как работает">
+        <ul className="text-white/80 text-sm list-disc ml-5 space-y-1">
+          <li>Каждый объект имеет публичный счёт доверия (0–100).</li>
+          <li>Голоса и жалобы подписаны ключами и учитывают репутацию голосующего.</li>
+          <li>Отсев: спорное скрывается по умолчанию, доступно «Показать».</li>
+        </ul>
+      </Card>
+      <Card title="Апелляции и прозрачность">
+        <div className="text-white/70 text-sm">История решений хранится в подписанном журнале сервера. Можно открыть спор, представить доказательства, пригласить арбитров сообщества.</div>
+      </Card>
+    </div>
+  );
+}
+
+// ===== ГЛАВНЫЙ КОМПОНЕНТ =====
+export default function AltNetWireframes() {
+  const [tab, setTab] = useState(
+    // стартовая вкладка для наглядности
+    "feed"
+  );
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  return (
+    <div
+      className={cls(
+        "min-h-screen",
+        theme === "dark"
+          ? "bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 text-white"
+          : "bg-gradient-to-b from-slate-50 via-white to-slate-100 text-slate-900"
+      )}
+    >
+      <div className="max-w-7xl mx-auto px-4 py-6 md:py-10">
+        {/* Header */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-6">
+          <div>
+            <div className="text-2xl font-bold tracking-tight">AltNet — вайрфреймы (v2)</div>
+            <div className={cls("text-sm", theme === "dark" ? "text-white/60" : "text-slate-600")}>
+              «Как Discord+Telegram, только распределённо». Кликайте вкладки ниже.
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill active={tab === "feed"} onClick={() => setTab("feed")}>
+              🏠 Лента
+            </Pill>
+            <Pill active={tab === "messages"} onClick={() => setTab("messages")}>
+              💬 Сообщения
+            </Pill>
+            <Pill active={tab === "servers"} onClick={() => setTab("servers")}>
+              🧩 Серверы
+            </Pill>
+            <Pill active={tab === "explore"} onClick={() => setTab("explore")}>
+              🧭 Путешествия
+            </Pill>
+            <Pill active={tab === "browser"} onClick={() => setTab("browser")}>
+              🌐 Браузер .alt
+            </Pill>
+            <Pill active={tab === "mail"} onClick={() => setTab("mail")}>
+              📥 Почта
+            </Pill>
+            <Pill active={tab === "wizard"} onClick={() => setTab("wizard")}>
+              🛠️ Создать сервер
+            </Pill>
+            <Pill active={tab === "reputation"} onClick={() => setTab("reputation")}>
+              🛡️ Репутация
+            </Pill>
+            <Pill active={tab === "help"} onClick={() => setTab("help")}>
+              ❓ Помощь
+            </Pill>
+            <Pill active={tab === "profile"} onClick={() => setTab("profile")}>
+              👤 Профиль
+            </Pill>
+          </div>
+        </div>
+
+        {/* Screens */}
+        {tab === "feed" && <FeedScreen />}
+        {tab === "messages" && <MessagesScreen />}
+        {tab === "servers" && <ServersScreen openWizard={() => setTab("wizard")} />}
+        {tab === "explore" && <ExploreScreen />}
+        {tab === "browser" && <BrowserScreen />}
+        {tab === "mail" && <MailScreen />}
+        {tab === "help" && <HelpScreen />}
+        {tab === "wizard" && <WizardScreen />}
+        {tab === "reputation" && <ReputationScreen />}
+        {tab === "profile" && <ProfileScreen theme={theme} setTheme={setTheme} />}
+
+        {/* Footer explainer */}
+        <div className={cls("mt-8 text-xs", theme === "dark" ? "text-white/60" : "text-slate-600")}>
+          Визуальный прототип. Сеть добровольная и распределённая. Хранение — через кеши, пины и зеркала сообществ. Для пользователя — просто «поставь галочку сохранить», остальное сеть сделает сама.
+        </div>
+      </div>
+    </div>
+  );
+}
