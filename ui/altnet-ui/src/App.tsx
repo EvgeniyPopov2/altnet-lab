@@ -168,6 +168,17 @@ export default function App() {
     [serverList, selectedServerId]
   );
 
+
+  const dashboardStats = useMemo(
+    () => ({
+      directMessages: dmList.length,
+      servers: serverList.length,
+      alerts: panic ? 3 : 1,
+      activeProfileLabel: profile === "anon" ? "Анонимный" : "Быстрый",
+    }),
+    [dmList.length, serverList.length, panic, profile]
+  );
+
   // Заголовок шапки
   const headerTitle = useMemo(() => {
     switch (section) {
@@ -513,6 +524,41 @@ export default function App() {
 
               {section === "feed" && (
                 <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs uppercase tracking-wide text-white/50">Профиль</div>
+                      <div className="mt-2 text-lg font-semibold text-white/90">{dashboardStats.activeProfileLabel}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs uppercase tracking-wide text-white/50">DM</div>
+                      <div className="mt-2 text-lg font-semibold text-white/90">{dashboardStats.directMessages}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs uppercase tracking-wide text-white/50">Серверы</div>
+                      <div className="mt-2 text-lg font-semibold text-white/90">{dashboardStats.servers}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs uppercase tracking-wide text-white/50">Сигналы безопасности</div>
+                      <div className="mt-2 text-lg font-semibold text-white/90">{dashboardStats.alerts}</div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-indigo-400/30 bg-indigo-500/10 p-5 text-white/90">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm text-indigo-100/80">AltNet Control Center</div>
+                        <div className="text-lg font-semibold">Быстрый запуск и проверка контуров приватности</div>
+                      </div>
+                      <div className="text-xs text-indigo-100/70">Новый блок демо-интерфейса</div>
+                    </div>
+                    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <button type="button" onClick={openMessages} className="rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2 text-sm text-left">💬 Открыть DM</button>
+                      <button type="button" onClick={openServers} className="rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2 text-sm text-left">🧩 Открыть серверы</button>
+                      <button type="button" onClick={openSecurityCenter} className="rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2 text-sm text-left">🛡️ Security Center</button>
+                      <button type="button" onClick={() => setProfile(profile === "anon" ? "fast" : "anon")} className="rounded-xl bg-white/10 hover:bg-white/20 px-3 py-2 text-sm text-left">🔁 Переключить профиль</button>
+                    </div>
+                  </div>
+
                   <NetStatus profile={profile} onChangeProfile={setProfile} />
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">Популярное рядом (моки) — позже.</div>
                 </div>
