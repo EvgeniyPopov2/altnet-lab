@@ -1,0 +1,370 @@
+AltNet UI & Visual Design Doctrine
+(Discord + Telegram + Elementor: high-fidelity reference synthesis)
+Version 1.0 — 11 December 2025
+
+1. Purpose and scope
+This document defines the UI and visual design doctrine for the AltNet product. It is intentionally prescriptive: the goal is to enable pixel-close replication of reference UI fragments from Discord, Telegram, and Elementor while keeping AltNet brand-distinct. It includes design tokens, component specs, layout grids, iconography rules, and motion guidelines.
+In-scope: desktop app UI (primary), responsive web UI, and mobile-aligned patterns.
+Out of scope: copying third-party brand assets (logos, wordmarks) or protected trade dress.
+Reference products: Discord, Telegram, Elementor.
+2. Design principles
+Principle
+Meaning in AltNet
+Modern density control
+Discord-style adjustable density: compact navigation + readable chat; no 90s “flat blocks”.
+Layered surfaces
+Dark UI with distinct elevation layers; subtle borders; careful contrast management.
+Frictionless navigation
+Telegram-like speed and clarity: minimal chrome, fast scan, strong hierarchy.
+Builder ergonomics
+Elementor-like left panel, predictable controls, consistent icon buttons, and live preview canvas.
+Motion as feedback, not decoration
+Short, consistent transitions; no long/flashy animations.
+Accessibility by default
+Keyboardable UI, focus rings, readable typography, contrast-aware color usage.
+
+3. Visual language overview
+AltNet UI combines three reference archetypes:
+• Discord: multi-pane information architecture, “dark with depth”, compact icon navigation.
+• Telegram: message list clarity, bubble rhythm, minimal visual noise.
+• Elementor: builder panel patterns, control grouping, and design-token mindset.
+4. Design tokens
+Tokens are the single source of truth. Implement them as CSS variables / theme JSON and use them everywhere (no hard-coded colors or ad-hoc font sizes).
+4.1 Color system
+AltNet must support Light and Dark themes, plus a “Builder mode” accent variant (Elementor-inspired). The palette below is a recommended baseline; when matching a screenshot, you may derive adjusted neutrals by sampling the reference and mapping them onto the token ladder.
+Token
+Hex
+Swatch
+Usage
+--brand-primary
+#4C6FFF
+ 
+Primary accent (distinct from Discord Blurple)
+--brand-secondary
+#2AABEE
+ 
+Secondary accent (Telegram-like cyan, but not identical branding)
+--brand-builder
+#FF7BE5
+ 
+Builder accent (Elementor sweet pink)
+--status-success
+#57F287
+ 
+Success / online
+--status-warning
+#FEE75C
+ 
+Warning
+--status-danger
+#ED4245
+ 
+Danger / destructive
+--bg-0
+#0F1115
+ 
+App background (dark)
+--bg-1
+#151823
+ 
+Sidebar background (dark)
+--surface-0
+#1B1F2A
+ 
+Base surface (dark)
+--surface-1
+#232837
+ 
+Elevated surface (dark)
+--surface-2
+#2C3346
+ 
+Higher elevation (dark)
+--border-subtle
+#2B3245
+ 
+Hairline borders
+--text-0
+#F2F4F8
+ 
+Primary text
+--text-1
+#C9D1E0
+ 
+Secondary text
+--text-2
+#9AA7BD
+ 
+Tertiary / muted
+
+4.2 Typography system
+Discord uses a custom font (gg sans) that is not freely usable; Telegram typically uses platform system fonts; Elementor’s editor UI is web-based and commonly rendered in system/standard sans-serif fonts. AltNet should use a modern, legible sans-serif with variable font support, plus platform fallbacks.
+Context
+Font
+Weights
+Notes
+UI Primary (Desktop/Web)
+Inter Variable
+400 / 500 / 600 / 700
+Inter is neutral and modern; close to Discord’s contemporary feel.
+UI Primary (iOS)
+SF Pro (system)
+Dynamic Type weights
+Use system font via platform API; do not ship SF Pro as a standalone webfont.
+UI Primary (Android)
+Roboto (system)
+400 / 500 / 700
+Native Android/Material typography alignment.
+Monospace
+JetBrains Mono
+400 / 500 / 700
+Code blocks, logs, advanced settings.
+Type scale (desktop):
+Style
+Size (px)
+Line height (px)
+Weight
+Use
+Display
+32
+40
+700
+Page title / empty states
+H1
+24
+32
+700
+Section heading
+H2
+18
+24
+600
+Subheading
+Body
+14
+20
+400
+Default UI text
+Body Strong
+14
+20
+600
+Emphasis
+Small
+12
+16
+400
+Metadata, timestamps
+Micro
+11
+14
+500
+Badges, chips
+
+4.3 Spacing, radius, elevation
+Use an 8-pt base grid with a 4-pt micro-grid.
+Token
+px
+Typical use
+--space-1
+4
+Icon padding, tight gaps
+--space-2
+8
+Default small gaps
+--space-3
+12
+Dense paddings (Discord-like)
+--space-4
+16
+Standard paddings
+--space-5
+24
+Section separation
+--space-6
+32
+Large separation
+Corner radius ladder:
+Radius
+px
+Use
+xs
+6
+Icon buttons, small chips
+sm
+8
+Inputs, small cards
+md
+12
+Panels, modals
+lg
+16
+Large cards, popovers
+pill
+999
+Pills, segmented controls
+Elevation: prefer subtle shadows + borders (Discord-like). In dark UI, rely more on borders and slight value shifts than on large shadows.
+5. Layout patterns
+AltNet uses a multi-pane layout by default:
+• Primary nav rail (servers/workspaces) — icon-only.
+• Secondary sidebar (channels/lists/panels).
+• Main content (chat, canvas, settings).
+• Optional right sidebar (members/inspector).
+Recommended widths (desktop):
+Region
+Size
+Notes
+Nav rail
+72 px
+Discord-like icon rail; 48 px icons inside 56 px buttons
+Sidebar
+280–320 px
+Channels/chat list/builder widgets
+Right sidebar
+280–360 px
+Member list or Inspector
+Top bar height
+48–56 px
+Context actions and breadcrumbs
+6. Component specifications
+This section is intentionally concrete. If you build components differently, AltNet will look inconsistent and dated.
+6.1 Buttons
+Button anatomy: label (14 px / 600), optional left icon (16–18 px), height 36 or 40, horizontal padding 12–16, radius 8.
+States: default, hover, pressed, disabled, loading. All transitions 120–180 ms.
+6.2 Inputs and search
+Inputs use a filled dark surface with subtle border. Search is a key visual element in Discord/Telegram: compact height, strong placeholder color, and clear focus ring.
+6.3 Lists
+Lists are the dominant pattern in Discord (channels) and Telegram (chats). Use consistent row heights and strong hover/active states. Row: 40–44 px height, left padding 12–16, icon 16–18, title 14/600, meta 12/400.
+6.4 Chat message layout
+Adopt Telegram clarity and Discord threading cues:
+• Timestamp and author are visually secondary, but scannable.
+• Message text line height 20 px (for 14 px size).
+• Reactions are compact chips with subtle border; hover reveals add-reaction.
+• Attachments are cards: image/video preview + metadata; radius 12.
+6.5 Panels and modals
+Panels: radius 12, border 1 px subtle, background --surface-1.
+Modals: max width 560–720 px, padding 24, header with title + close icon, backdrop 40–60% opacity.
+6.6 Builder mode (Elementor-inspired)
+Builder mode is a distinct workflow with strong affordances:
+• Left panel: tabs, searchable widget library, collapsible sections.
+• Canvas: clean background, selection outlines, inline controls.
+• Inspector: typography/color controls using design tokens; every control shows the token name when applicable.
+• Accent: --brand-builder used for selection outlines, active tool, and key CTAs (sparingly).
+7. Iconography
+Pick ONE icon family and stick to it. Mixing styles is the fastest way to make the UI look cheap. Preferred: modern rounded outline icon set (e.g., Lucide, Phosphor, Remix) with consistent stroke.
+Rule
+Spec
+Grid
+24 px base grid; export 16/20/24 variants.
+Stroke
+1.75 px (20/24 icons), round caps and joins.
+Corner style
+Rounded corners to match radius ladder.
+Filled vs outline
+Outline by default; use filled only for selected state in nav rail.
+Semantic colors
+Icons inherit text color; only status icons use success/warning/danger.
+8. Motion and interaction
+Motion must feel crisp and modern. The easiest way to get a “90s” feeling is: no hover transitions, no easing, and abrupt panel changes.
+Global timing and easing:
+Interaction
+Duration
+Easing
+Hover/press
+120 ms
+cubic-bezier(0.2, 0, 0, 1)
+Small state change (toggle, chip)
+150 ms
+cubic-bezier(0.2, 0, 0, 1)
+Panel open/close (sidebar, inspector)
+180–220 ms
+cubic-bezier(0.2, 0, 0, 1)
+Modal enter/exit
+220–260 ms
+cubic-bezier(0.2, 0, 0, 1)
+Reorder / drag preview
+spring
+stiffness 500–700, damping 35–45 (or platform equivalent)
+Micro-interactions:
+• Nav rail: hover background + subtle scale (1.00 → 1.02) on icon container.
+• Buttons: press down (scale 0.98) + shadow reduction.
+• Toasts: slide up 12 px + fade.
+• Tooltips: fade + 4 px translate.
+9. Backgrounds and visual polish
+A modern UI is not only colors. Add controlled texture and depth:
+• Subtle noise overlay (2–4% opacity) on dark backgrounds to avoid banding.
+• Very soft gradient in the app background (value shift 2–4%).
+• Blurred “glass” surfaces only in limited contexts (popovers, top bars) to avoid performance issues.
+10. Screenshot-to-spec workflow (pixel-close matching)
+When you provide a screenshot fragment (Discord/Telegram/Elementor), we will convert it into a replication spec using this template.
+Identify platform and context (desktop/mobile, theme, density).
+Measure key dimensions: row heights, paddings, radii, font sizes (use a ruler tool).
+Sample 8–12 colors: backgrounds, surfaces, borders, text, accents; map onto token ladder.
+Extract typography: size/weight/line height; identify if system font or custom.
+Decompose into components: list row, button, input, chip, avatar, etc.
+Specify motion: what transitions occur on hover/open/close and approximate timing.
+Produce a “Replica Card” with: tokens + component overrides + implementation notes.
+10.1 Replica Card template
+Use this exact structure for every screenshot request:
+Field
+What to capture
+Reference
+App / screen / date, plus screenshot filename
+Target component
+e.g., “Elementor left panel: widget list row”
+Layout
+Widths, heights, padding, grid
+Colors
+Token mapping + any overrides
+Typography
+Font stack, sizes, weights, line heights
+States
+Default/hover/active/disabled
+Motion
+Transition properties, duration, easing
+Icons
+Icon family, sizes, stroke/fill rules
+Accessibility
+Contrast, focus, keyboard, hit targets
+Implementation notes
+Edge cases + test scenarios
+Appendix A. Token snippet (CSS variables example)
+:root[data-theme="dark"]{
+  --brand-primary: #4C6FFF;
+  --brand-secondary: #2AABEE;
+  --brand-builder: #FF7BE5;
+
+  --bg-0: #0F1115;
+  --bg-1: #151823;
+
+  --surface-0: #1B1F2A;
+  --surface-1: #232837;
+  --surface-2: #2C3346;
+
+  --border-subtle: #2B3245;
+
+  --text-0: #F2F4F8;
+  --text-1: #C9D1E0;
+  --text-2: #9AA7BD;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+}
+
+
+
+References
+Discord — Brand Guidelines (colors). https://discord.com/branding (accessed 2025-12-11).
+Discord Support — gg sans Font Update FAQ. https://support.discord.com/hc/en-us/articles/9507780972951-gg-sans-Font-Update-FAQ (accessed 2025-12-11).
+Discord Support — Appearance / Themes. https://support.discord.com/hc/en-us/articles/207260127-How-to-Change-Discord-Color-Themes-and-Customize-Appearance-Settings (accessed 2025-12-11).
+Apple Developer — Fonts (SF Pro system font). https://developer.apple.com/fonts/ (accessed 2025-12-11).
+Material Design 3 — Typography fonts (Roboto default on Android). https://m3.material.io/styles/typography/fonts (accessed 2025-12-11).
+Elementor — Logo Guidelines (Sweet Pink). https://elementor.com/logos/ (accessed 2025-12-11).
+Elementor Developers — Global Style / Design system. https://developers.elementor.com/docs/editor-controls/global-style/ (accessed 2025-12-11).
+Elementor — Custom Icons (Font Awesome library). https://elementor.com/features/custom-icons/ (accessed 2025-12-11).
+Telegram brand colors (compiled): Brandfetch listing for telegram.org. https://brandfetch.com/telegram.org (accessed 2025-12-11).
