@@ -108,10 +108,6 @@ export function renderBlockView(b: Block) {
     case "container":     return <ContainerView block={b} />;
     case "sidebar":       return <SidebarView block={b} />;
     case "offcanvas":     return <OffcanvasView block={b} />;
-    case "breadcrumbs":   return <BreadcrumbsView block={b} />;
-    case "pagination":    return <PaginationView block={b} />;
-    case "menu":         return <MenuView block={b} />;
-    case "contentnav":   return <ContentNavView block={b} />;
     case "shortcode":      return <ShortcodeView block={b as any} />;
     case "pricetable":     return <PriceTableView block={b as any} />;
     default:
