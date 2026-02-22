@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
+﻿import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
 import { upsertPublishedSite } from "../core/sites/published";
 import { pushSecurityEvent } from "../core/security/bus";
@@ -702,68 +702,57 @@ export default function SiteBuilder({
   );
 
   // ── Экспорт / импорт / live-preview ────────────────────────────────────────
+  const runExport = useCallback(
+    async (format: "zip" | "html") => {
+      if (isExporting) return;
+
+      const model = adaptFromSiteBuilderDoc(docForBuild);
+      setExportState({ format, phase: "cdr", done: 0, total: 0 });
+
+      try {
+        const blob =
+          format === "zip"
+            ? await exportSiteZip(model, {
+                bundleAssets: true,
+                onProgress: (done, total) => setExportState({ format: "zip", phase: "cdr", done, total }),
+              })
+            : await exportSingleHtml(model, {
+                bundleAssets: true,
+                onProgress: (done, total) => setExportState({ format: "html", phase: "cdr", done, total }),
+              });
+
+        setExportState((prev) => (prev ? { ...prev, phase: "build" } : prev));
+
+        const ext = format === "zip" ? "zip" : "html";
+        downloadBlob(blob, prettyFileName(doc.title || "site", ext));
+
+        pushSecurityEvent({
+          severity: "info",
+          code: "SITE_EXPORT_DONE",
+          title: `Экспорт ${format === "zip" ? "ZIP" : "HTML"} завершён`,
+          message: "Файл сохранён на устройство.",
+        });
+      } catch {
+        pushSecurityEvent({
+          severity: "warning",
+          code: "SITE_EXPORT_FAILED",
+          title: `Экспорт ${format === "zip" ? "ZIP" : "HTML"} не выполнен`,
+          message: "Попробуйте ещё раз. Если ошибка повторяется — проверьте входные данные блоков.",
+        });
+      } finally {
+        setExportState(null);
+      }
+    },
+    [docForBuild, doc.title, isExporting]
+  );
+
   const onExportZip = useCallback(async () => {
-    if (isExporting) return;
-
-    const model = adaptFromSiteBuilderDoc(docForBuild);
-    setExportState({ format: "zip", phase: "cdr", done: 0, total: 0 });
-
-    try {
-      const blob = await exportSiteZip(model, {
-        bundleAssets: true,
-        onProgress: (done, total) => setExportState({ format: "zip", phase: "cdr", done, total }),
-      });
-      setExportState((prev) => (prev ? { ...prev, phase: "build" } : prev));
-      const fname = prettyFileName(doc.title || "site", "zip");
-      downloadBlob(blob, fname);
-      pushSecurityEvent({
-        severity: "info",
-        code: "SITE_EXPORT_DONE",
-        title: "Экспорт ZIP завершён",
-        message: "Файл сохранён на устройство.",
-      });
-    } catch {
-      pushSecurityEvent({
-        severity: "warning",
-        code: "SITE_EXPORT_FAILED",
-        title: "Экспорт ZIP не выполнен",
-        message: "Попробуйте ещё раз. Если ошибка повторяется — проверьте входные данные блоков.",
-      });
-    } finally {
-      setExportState(null);
-    }
-  }, [docForBuild, doc.title, isExporting]);
+    await runExport("zip");
+  }, [runExport]);
 
   const onExportSingle = useCallback(async () => {
-    if (isExporting) return;
-
-    const model = adaptFromSiteBuilderDoc(docForBuild);
-    setExportState({ format: "html", phase: "cdr", done: 0, total: 0 });
-
-    try {
-      const blob = await exportSingleHtml(model, {
-        bundleAssets: true,
-        onProgress: (done, total) => setExportState({ format: "html", phase: "cdr", done, total }),
-      });
-      setExportState((prev) => (prev ? { ...prev, phase: "build" } : prev));
-      downloadBlob(blob, prettyFileName(doc.title || "site", "html"));
-      pushSecurityEvent({
-        severity: "info",
-        code: "SITE_EXPORT_DONE",
-        title: "Экспорт HTML завершён",
-        message: "Файл сохранён на устройство.",
-      });
-    } catch {
-      pushSecurityEvent({
-        severity: "warning",
-        code: "SITE_EXPORT_FAILED",
-        title: "Экспорт HTML не выполнен",
-        message: "Попробуйте ещё раз. Если ошибка повторяется — проверьте входные данные блоков.",
-      });
-    } finally {
-      setExportState(null);
-    }
-  }, [docForBuild, doc.title, isExporting]);
+    await runExport("html");
+  }, [runExport]);
 
   const onPublishAlt = useCallback(async () => {
     if (isExporting) return;
@@ -1622,3 +1611,4 @@ export default function SiteBuilder({
     </div>
   );
 }
+
