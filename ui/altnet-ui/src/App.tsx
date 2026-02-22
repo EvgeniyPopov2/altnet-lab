@@ -168,6 +168,17 @@ export default function App() {
     [serverList, selectedServerId]
   );
 
+
+  const dashboardStats = useMemo(
+    () => ({
+      directMessages: dmList.length,
+      servers: serverList.length,
+      panicActive: panic,
+      activeProfileLabel: profile === "anon" ? "Анонимный" : "Быстрый",
+    }),
+    [dmList.length, serverList.length, panic, profile]
+  );
+
   // Заголовок шапки
   const headerTitle = useMemo(() => {
     switch (section) {
@@ -513,6 +524,28 @@ export default function App() {
 
               {section === "feed" && (
                 <div className="space-y-4">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs uppercase tracking-wide text-white/50">Профиль</div>
+                      <div className="mt-2 text-lg font-semibold text-white/90">{dashboardStats.activeProfileLabel}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs uppercase tracking-wide text-white/50">DM</div>
+                      <div className="mt-2 text-lg font-semibold text-white/90">{dashboardStats.directMessages}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs uppercase tracking-wide text-white/50">Серверы</div>
+                      <div className="mt-2 text-lg font-semibold text-white/90">{dashboardStats.servers}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                      <div className="text-xs uppercase tracking-wide text-white/50">Fail-closed (Паника)</div>
+                      <div className={`mt-2 text-lg font-semibold ${dashboardStats.panicActive ? "text-red-300" : "text-emerald-300"}`}>
+                        {dashboardStats.panicActive ? "Активна" : "Отключена"}
+                      </div>
+                      <div className="mt-1 text-xs text-white/60">Явный статус, а не абстрактные «сигналы».</div>
+                    </div>
+                  </div>
+
                   <NetStatus profile={profile} onChangeProfile={setProfile} />
                   <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">Популярное рядом (моки) — позже.</div>
                 </div>
