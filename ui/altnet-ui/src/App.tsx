@@ -12,6 +12,7 @@ import SecurityCenter from "./screens/SecurityCenter";
 import Mail from "./screens/Mail";
 import QuickSwitcher, { type QSItem } from "./components/QuickSwitcher";
 import NetStatus from "./components/NetStatus";
+import MobileNavigation from "./components/MobileNavigation";
 import { usePrivacyProfile } from "./core/settings/profile";
 import { SecurityCoach } from "./core/security/coach";
 import { pushSecurityEvent } from "./core/security/bus";
@@ -47,6 +48,8 @@ const RailBtn = ({
 }) => (
   <button
     title={label}
+    aria-label={label}
+    aria-current={active ? "page" : undefined}
     onClick={onClick}
     className={`w-12 h-12 rounded-2xl flex items-center justify-center transition
       ${
@@ -89,6 +92,9 @@ export default function App() {
   const [browserNav, setBrowserNav] = useState<{ url: string; token: number } | null>(null);
   const [qsOpen, setQsOpen] = useState(false);
   const [voiceVideoOpen, setVoiceVideoOpen] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
+  const [dmSearch, setDmSearch] = useState("");
+  const [serverSearch, setServerSearch] = useState("");
 
   // === Профиль сети (глобальный, хранится в localStorage) ===
   const [profile, setProfile] = usePrivacyProfile();
@@ -244,47 +250,56 @@ export default function App() {
   const openFeed = () => {
     setSection("feed");
     setRail("global");
+    setMobilePanelOpen(false);
   };
 
   const openMessages = () => {
     setSection("messages");
     setRail("messages");
+    setMobilePanelOpen(true);
   };
 
   const openServers = () => {
     setSection("servers");
     setRail("servers");
+    setMobilePanelOpen(true);
   };
 
   const openExplore = () => {
     setSection("explore");
     setRail("global");
+    setMobilePanelOpen(false);
   };
 
   const openBrowser = () => {
     setSection("browser");
     setRail("global");
+    setMobilePanelOpen(false);
     setBuilderOpen(false);
   };
 
   const openMail = () => {
     setSection("mail");
     setRail("global");
+    setMobilePanelOpen(false);
   };
 
   const openReputation = () => {
     setSection("reputation");
     setRail("global");
+    setMobilePanelOpen(false);
   };
 
   const openProfile = () => {
     setSection("profile");
     setRail("global");
+    setMobilePanelOpen(false);
   };
 
   const openSecurityCenter = () => {
     setSection("security");
     setRail("global");
+    setMobilePanelOpen(false);
   };
 
   // Если пользователь включил "Панику" — мягко направляем в Security Center
@@ -398,10 +413,13 @@ export default function App() {
   );
 
   return (
-    <div className="h-screen flex overflow-hidden">
+    <div className="altnet-shell h-screen flex overflow-hidden">
+      {mobilePanelOpen && (
+        <button type="button" className="altnet-mobile-backdrop" aria-label="Закрыть меню" onClick={() => setMobilePanelOpen(false)} />
+      )}
       {/* ЛЕВЫЙ БАР */}
       <motion.aside
-        className="transition-all duration-200 bg-white/5 border-r border-white/10 flex flex-col gap-3 py-3"
+        className={`altnet-sidebar ${mobilePanelOpen ? "altnet-sidebar--open" : ""} transition-all duration-200 bg-white/5 border-r border-white/10 flex flex-col gap-3 py-3`}
         initial={false}
         animate={{ width: railWidthPx }}
         transition={{ type: "spring", stiffness: 260, damping: 30 }}
@@ -413,6 +431,7 @@ export default function App() {
             <RailBtn icon="🧩" label="Серверы" active={section === "servers"} onClick={openServers} />
             <RailBtn icon="🧭" label="Путешествия" active={section === "explore"} onClick={openExplore} />
             <RailBtn icon="🌐" label="Браузер .alt" active={section === "browser"} onClick={openBrowser} />
+            <RailBtn icon="📥" label="Почта" active={section === "mail"} onClick={openMail} />
             <RailBtn icon="⭐" label="Репутация" active={section === "reputation"} onClick={openReputation} />
             <RailBtn icon="🛡️" label="Безопасность" active={section === "security"} onClick={openSecurityCenter} />
             <RailBtn icon="👤" label="Профиль" active={section === "profile"} onClick={openProfile} />
@@ -427,11 +446,14 @@ export default function App() {
             <div className="rounded-xl bg-white/5 border border-white/10 p-2 mb-2">
               <input
                 placeholder="Поиск"
+                aria-label="Поиск сообщений"
+                value={dmSearch}
+                onChange={(event) => setDmSearch(event.target.value)}
                 className="w-full bg-transparent outline-none text-sm text-white/90 placeholder-white/40"
               />
             </div>
             <div className="flex-1 overflow-y-auto space-y-1 pr-1">
-              {dmList.map((d) => (
+              {dmList.filter((d) => d.title.toLocaleLowerCase("ru-RU").includes(dmSearch.trim().toLocaleLowerCase("ru-RU"))).map((d) => (
                 <ListItem
                   key={d.id}
                   title={d.title}
@@ -440,6 +462,7 @@ export default function App() {
                   onClick={() => {
                     setSelectedDmId(d.id);
                     setSection("messages");
+                    setMobilePanelOpen(false);
                   }}
                 />
               ))}
@@ -453,11 +476,14 @@ export default function App() {
             <div className="rounded-xl bg-white/5 border border-white/10 p-2 mb-2">
               <input
                 placeholder="Поиск серверов"
+                aria-label="Поиск серверов"
+                value={serverSearch}
+                onChange={(event) => setServerSearch(event.target.value)}
                 className="w-full bg-transparent outline-none text-sm text-white/90 placeholder-white/40"
               />
             </div>
             <div className="flex-1 overflow-y-auto space-y-1 pr-1">
-              {serverList.map((s) => (
+              {serverList.filter((s) => s.title.toLocaleLowerCase("ru-RU").includes(serverSearch.trim().toLocaleLowerCase("ru-RU"))).map((s) => (
                 <ListItem
                   key={s.id}
                   title={s.title}
@@ -466,6 +492,7 @@ export default function App() {
                   onClick={() => {
                     setSelectedServerId(s.id);
                     setSection("servers");
+                    setMobilePanelOpen(false);
                   }}
                 />
               ))}
@@ -505,13 +532,18 @@ export default function App() {
       </motion.aside>
 
       {/* ПРАВО — КОНТЕНТ */}
-      <div className="flex-1 flex flex-col">
-        <header className="px-4 py-3 border-b border-white/10 bg-white/5 flex items-center justify-between">
+      <div className="altnet-content flex-1 min-w-0 flex flex-col">
+        <header className="altnet-header px-4 py-3 border-b border-white/10 bg-white/5 flex items-center justify-between">
           <div className="flex items-center gap-2">
+            {rail !== "global" && (
+              <button type="button" className="altnet-mobile-list-button" aria-expanded={mobilePanelOpen} onClick={() => setMobilePanelOpen(true)}>
+                {rail === "messages" ? "Чаты" : "Серверы"}
+              </button>
+            )}
             {rail !== "global" && (
               <button
                 type="button"
-                className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80"
+                className="altnet-desktop-back px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/80"
                 title="Назад к разделам"
                 onClick={() => setRail("global")}
               >
@@ -530,7 +562,7 @@ export default function App() {
             </motion.div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="altnet-header-actions flex items-center gap-2">
             <PanicPill />
             <ProfileSwitch />
 
@@ -560,7 +592,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 p-4 overflow-hidden">
+        <div className="altnet-main flex-1 p-4 overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.main
               key={section + (builderOpen ? "-builder" : "")}
@@ -743,6 +775,17 @@ export default function App() {
           </AnimatePresence>
         </div>
       </div>
+
+      <MobileNavigation
+        active={["feed", "messages", "servers", "security"].includes(section) ? section : "more"}
+        onNavigate={(target) => {
+          if (target === "feed") openFeed();
+          if (target === "messages") openMessages();
+          if (target === "servers") openServers();
+          if (target === "security") openSecurityCenter();
+          if (target === "more") { setRail("global"); setMobilePanelOpen(true); }
+        }}
+      />
 
       {/* Quick Switcher */}
       <QuickSwitcher open={qsOpen} onClose={() => setQsOpen(false)} items={qsItems} />

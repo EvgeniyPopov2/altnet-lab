@@ -22,7 +22,7 @@ export function computeEsm(localProfile: PrivacyProfile, contact: ContactCapabil
       family: "anon",
       compat: false,
       commonPath: true,
-      reason: "Вы в анонимном профиле: соединение будет установлено через анонимный оверлей.",
+      reason: "По настройкам прототипа выбран анонимный маршрут. Реальное соединение и маршрут не подтверждены.",
     };
   }
 
@@ -32,7 +32,7 @@ export function computeEsm(localProfile: PrivacyProfile, contact: ContactCapabil
       family: "fast",
       compat: false,
       commonPath: true,
-      reason: "Быстрая сессия: доступен быстрый оверлей у обеих сторон.",
+      reason: "По настройкам прототипа выбран быстрый маршрут. Его фактическая доступность не подтверждена.",
     };
   }
 
@@ -41,7 +41,7 @@ export function computeEsm(localProfile: PrivacyProfile, contact: ContactCapabil
       family: "anon",
       compat: true,
       commonPath: true,
-      reason: "Совместимость: собеседник доступен только через анонимный оверлей, поэтому сессия понизится до Anon.",
+      reason: "По правилам совместимости прототип выбрал анонимный маршрут. Реальное соединение не подтверждено.",
     };
   }
 

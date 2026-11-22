@@ -11,6 +11,104 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Noto Sans", "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
 }
 
+/* Навигация для небольших экранов; на компьютере остаётся боковая панель. */
+.altnet-mobile-nav,
+.altnet-mobile-backdrop,
+.altnet-mobile-list-button {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .altnet-shell {
+    height: 100dvh;
+    background: #0d0f16;
+  }
+
+  .altnet-content {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+
+  .altnet-sidebar {
+    display: none;
+  }
+
+  .altnet-sidebar--open {
+    display: flex;
+    position: fixed;
+    z-index: 40;
+    inset: 0 auto calc(64px + env(safe-area-inset-bottom)) 0;
+    width: min(288px, 85vw) !important;
+    overflow-y: auto;
+    background: #151927;
+    box-shadow: 12px 0 32px rgb(0 0 0 / 35%);
+  }
+
+  .altnet-mobile-backdrop {
+    display: block;
+    position: fixed;
+    z-index: 30;
+    inset: 0 0 calc(64px + env(safe-area-inset-bottom));
+    background: rgb(0 0 0 / 55%);
+  }
+
+  .altnet-mobile-nav {
+    position: fixed;
+    z-index: 50;
+    inset: auto 0 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    padding: 5px 4px calc(5px + env(safe-area-inset-bottom));
+    border-top: 1px solid rgb(255 255 255 / 9%);
+    background: #111522;
+  }
+
+  .altnet-mobile-nav__item {
+    min-width: 0;
+    min-height: 52px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border-radius: 12px;
+    color: #a6adc0;
+    font-size: 11px;
+  }
+
+  .altnet-mobile-nav__item[aria-current="page"] {
+    color: #b8a8ff;
+    background: rgb(110 86 245 / 13%);
+  }
+
+  .altnet-mobile-nav__item:focus-visible,
+  .altnet-mobile-list-button:focus-visible {
+    outline: 2px solid #b8a8ff;
+    outline-offset: -2px;
+  }
+
+  .altnet-mobile-list-button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 0 10px;
+    border-radius: 10px;
+    background: rgb(255 255 255 / 10%);
+    color: #eee;
+    font-size: 13px;
+  }
+
+  .altnet-desktop-back { display: none; }
+  .altnet-header { flex-wrap: wrap; gap: 8px; }
+  .altnet-header-actions { width: 100%; overflow-x: auto; padding-bottom: 2px; }
+  .altnet-header-actions > * { flex-shrink: 0; }
+  .altnet-main { overflow-y: auto; padding: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .altnet-sidebar,
+  .altnet-mobile-nav__item { transition: none !important; }
+}
+
 /* =========================
    Range (sliders)
    =========================

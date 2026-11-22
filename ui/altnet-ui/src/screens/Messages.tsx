@@ -321,7 +321,7 @@ export default function Messages({
 
   const sessionBadge = esm.commonPath ? (
     <Badge kind={esm.family === "anon" ? "warn" : "ok"} title={esm.reason}>
-      {esm.family === "anon" ? "🕶️" : "⚡"} Сессия: {esm.family.toUpperCase()}
+      {esm.family === "anon" ? "🕶️" : "⚡"} Маршрут (мок): {esm.family.toUpperCase()}
       {esm.compat ? " (compat)" : ""}
     </Badge>
   ) : (
