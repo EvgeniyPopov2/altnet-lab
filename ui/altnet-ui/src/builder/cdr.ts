@@ -11,6 +11,8 @@ export const ALLOWED_LINK_SCHEMES = [
 export function sanitizeHref(raw: string): string {
   const v = (raw ?? "").trim();
   if (!v) return "#";
+  // Обратная косая черта и управляющие символы меняют трактовку URL браузером.
+  if (/[\\\x00-\x1f\x7f]/.test(v) || v.startsWith("//")) return "#";
   const lower = v.toLowerCase();
 
   // Якоря: запрещаем конструкции вида "#javascript:...", "#https://..." и прочие схемы после '#'
@@ -23,7 +25,7 @@ export function sanitizeHref(raw: string): string {
     ];
     if (bannedAfterHash.some(p => rest.startsWith(p))) return "#";
     // обычный якорь типа "#section-1" оставляем как есть
-    return "#"+rest;
+    return v;
   }
 
   // относительные пути считаем безопасными

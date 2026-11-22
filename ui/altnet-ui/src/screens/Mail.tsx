@@ -162,9 +162,9 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
 
   const [panic] = usePanicMode();
 
-  // Моки “готовности” (в реале придут из TAL/crypto)
-  const [e2eReady, setE2eReady] = useState(true);
-  const [anonPathReady, setAnonPathReady] = useState(true);
+  // Пока реальные состояния безопасности не подключены, отправка закрыта.
+  const e2eReady = false;
+  const anonPathReady = false;
 
   // Почтовый “контакт” (MVP): считаем, что почтовый транспорт доступен и в Anon, и в Fast.
   const mailCaps: ContactCapabilities = useMemo(
@@ -719,14 +719,7 @@ export default function Mail({ profile }: { profile: PrivacyProfile }) {
           <details className="mt-3 rounded-xl border border-white/10 bg-white/5 p-3">
             <summary className="cursor-pointer text-xs text-white/70">Моки (для разработки)</summary>
             <div className="mt-3 grid gap-2 text-xs text-white/80">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={e2eReady} onChange={(e) => setE2eReady(e.target.checked)} />
-                <span>E2E готово</span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={anonPathReady} onChange={(e) => setAnonPathReady(e.target.checked)} />
-                <span>Anon путь готов (Tor/I2P)</span>
-              </label>
+              <p>Защищённая сессия и сетевой путь ещё не подключены. Отправка заблокирована.</p>
             </div>
           </details>
         </div>

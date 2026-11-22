@@ -275,10 +275,10 @@ export default function Servers({
 }) {
   const [panic, setPanic] = usePanicMode();
 
-  // Моки “готовности” (в реале придут из TAL/crypto)
-  const [e2eReady, setE2eReady] = useState(true);
-  const [anonPathReady, setAnonPathReady] = useState(true);
-  const [hasTurnAllowList, setHasTurnAllowList] = useState(true);
+  // Пока реальные состояния безопасности не подключены, действия закрыты.
+  const e2eReady = false;
+  const anonPathReady = false;
+  const hasTurnAllowList = false;
   const [vv] = useVoiceVideoSettings(profile);
   // Вложения в текстовый канал (CID, через CDR)
   const [pendingAttachments, setPendingAttachments] = useState<ServerAttachment[]>([]);
@@ -1280,18 +1280,9 @@ export default function Servers({
       <details className="rounded-2xl border border-white/10 bg-white/5 p-4">
         <summary className="cursor-pointer text-sm text-white/80">Моки (для разработки)</summary>
         <div className="mt-3 grid sm:grid-cols-2 gap-3 text-sm">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={e2eReady} onChange={(e) => setE2eReady(e.target.checked)} />
-            <span>E2E готово</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={anonPathReady} onChange={(e) => setAnonPathReady(e.target.checked)} />
-            <span>Anon путь готов (Tor/I2P)</span>
-          </label>
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={hasTurnAllowList} onChange={(e) => setHasTurnAllowList(e.target.checked)} />
-            <span>Есть allow-list TURN</span>
-          </label>
+          <p className="sm:col-span-2 text-white/70">
+            Защищённая сессия и сетевой путь ещё не подключены. Отправка и звонки заблокированы.
+          </p>
           <div className="sm:col-span-2 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2">
             <div className="text-sm text-white/80">
               Видео в Anon: <span className="font-semibold text-white">{vv.allowVideoInAnon ? "разрешено" : "выключено"}</span>
