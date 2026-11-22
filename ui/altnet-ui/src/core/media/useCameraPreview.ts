@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MediaRequestGate } from "./mediaRequestGate";
 
 export type CameraPreviewOptions = {
   active: boolean;
@@ -29,8 +30,10 @@ export function useCameraPreview(opts: CameraPreviewOptions): CameraPreviewState
   optsRef.current = opts;
 
   const streamRef = useRef<MediaStream | null>(null);
+  const requestGate = useRef(new MediaRequestGate());
 
   const stop = useCallback(() => {
+    requestGate.current.cancel();
     const stream = streamRef.current;
     if (stream) {
       for (const t of stream.getTracks()) {
@@ -51,7 +54,7 @@ export function useCameraPreview(opts: CameraPreviewOptions): CameraPreviewState
         // ignore
       }
       try {
-        (videoEl as any).srcObject = null;
+        videoEl.srcObject = null;
       } catch {
         // ignore
       }
@@ -67,6 +70,7 @@ export function useCameraPreview(opts: CameraPreviewOptions): CameraPreviewState
     if (!isBrowser()) return;
 
     stop();
+    const generation = requestGate.current.begin();
 
     const { deviceId, videoElRef } = optsRef.current;
 
@@ -90,14 +94,16 @@ export function useCameraPreview(opts: CameraPreviewOptions): CameraPreviewState
         audio: false,
       });
 
+      if (!requestGate.current.accept(stream, generation)) return;
+
       streamRef.current = stream;
 
       const videoEl = videoElRef.current;
       if (videoEl) {
-        (videoEl as any).srcObject = stream;
+        videoEl.srcObject = stream;
         videoEl.muted = true;
         videoEl.autoplay = true;
-        (videoEl as any).playsInline = true;
+        videoEl.playsInline = true;
 
         try {
           await videoEl.play();
@@ -106,8 +112,10 @@ export function useCameraPreview(opts: CameraPreviewOptions): CameraPreviewState
         }
       }
 
+      if (!requestGate.current.isCurrent(generation)) return;
       setState({ running: true, error: null });
     } catch (e) {
+      if (!requestGate.current.isCurrent(generation)) return;
       const msg = e instanceof Error ? e.message : String(e);
       stop();
       setState({ running: false, error: msg });

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MediaRequestGate } from "./mediaRequestGate";
+import { normalizeKey, releasesHotkey, type ParsedHotkey } from "./pttHotkey";
 
 export type MicInputMode = "vad" | "ptt";
 
@@ -72,21 +74,6 @@ function vadPctToRms(pct: number): number {
   return min * Math.pow(max / min, t);
 }
 
-type ParsedHotkey = {
-  ctrl: boolean;
-  alt: boolean;
-  shift: boolean;
-  meta: boolean;
-  key: string | null;
-};
-
-function normalizeKey(k: string): string {
-  if (!k) return "";
-  if (k === " ") return "Space";
-  if (k.length === 1) return k.toUpperCase();
-  return k;
-}
-
 function parseHotkey(hk: string): ParsedHotkey {
   const clean = (hk || "").trim();
   if (!clean || clean === "Не назначено") {
@@ -128,7 +115,7 @@ function matchesHotkey(parsed: ParsedHotkey, e: KeyboardEvent): boolean {
 }
 
 function supportsSetSinkId(el: HTMLMediaElement): el is HTMLMediaElement & { setSinkId: (id: string) => Promise<void> } {
-  return typeof (el as any).setSinkId === "function";
+  return "setSinkId" in el && typeof el.setSinkId === "function";
 }
 
 export function useMicTest(opts: MicTestOptions): MicTestState {
@@ -147,6 +134,7 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
   optsRef.current = opts;
 
   const streamRef = useRef<MediaStream | null>(null);
+  const requestGate = useRef(new MediaRequestGate());
   const ctxRef = useRef<AudioContext | null>(null);
 
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -166,6 +154,7 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
   parsedHotkeyRef.current = parsedHotkey;
 
   const stop = useCallback(() => {
+    requestGate.current.cancel();
     pttDownRef.current = false;
 
     if (rafRef.current) {
@@ -199,7 +188,7 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
         // ignore
       }
       try {
-        (el as any).srcObject = null;
+        el.srcObject = null;
       } catch {
         // ignore
       }
@@ -243,6 +232,7 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
     if (!isBrowser()) return;
 
     stop();
+    const generation = requestGate.current.begin();
 
     const { inputDeviceId, micVolumePct, monitor, constraints, audioElRef } = optsRef.current;
     const audioEl = audioElRef.current;
@@ -272,9 +262,12 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
         video: false,
       });
 
+      if (!requestGate.current.accept(stream, generation)) return;
+
       streamRef.current = stream;
 
-      const CtxCtor = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext | undefined;
+      const audioWindow = window as Window & { webkitAudioContext?: typeof AudioContext };
+      const CtxCtor = window.AudioContext || audioWindow.webkitAudioContext;
       if (!CtxCtor) {
         throw new Error("AudioContext недоступен в этом браузере.");
       }
@@ -313,12 +306,12 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
 
         gateGain.connect(dest);
 
-        // srcObject может быть “не типизирован” в некоторых ts/dom версиях
-        (audioEl as any).srcObject = dest.stream;
+        audioEl.srcObject = dest.stream;
         audioEl.loop = true;
         audioEl.muted = false;
 
         await applySinkAndVolume();
+        if (!requestGate.current.isCurrent(generation)) return;
 
         try {
           await audioEl.play();
@@ -327,6 +320,7 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
         }
       }
 
+      if (!requestGate.current.isCurrent(generation)) return;
       setState((prev) => ({
         ...prev,
         running: true,
@@ -395,6 +389,7 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
 
       rafRef.current = requestAnimationFrame(tick);
     } catch (e) {
+      if (!requestGate.current.isCurrent(generation)) return;
       const msg = e instanceof Error ? e.message : String(e);
       stop();
       setState((prev) => ({
@@ -462,7 +457,7 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
 
     const onUp = (e: KeyboardEvent) => {
       const parsed = parsedHotkeyRef.current;
-      if (!matchesHotkey(parsed, e)) return;
+      if (!pttDownRef.current || !releasesHotkey(parsed, e.key)) return;
       e.preventDefault();
       e.stopPropagation();
       pttDownRef.current = false;
@@ -482,6 +477,7 @@ export function useMicTest(opts: MicTestOptions): MicTestState {
       window.removeEventListener("keydown", onDown, true);
       window.removeEventListener("keyup", onUp, true);
       window.removeEventListener("blur", onBlur);
+      pttDownRef.current = false;
     };
   }, [opts.active, opts.inputMode, parsedHotkey]);
 
