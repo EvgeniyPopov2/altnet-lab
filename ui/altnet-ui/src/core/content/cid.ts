@@ -14,8 +14,8 @@ function bufToHex(buf: ArrayBuffer): string {
 export async function fileToCid(file: Blob): Promise<CID> {
   const c = globalThis.crypto;
   if (!c?.subtle) {
-    // Без WebCrypto не можем честно посчитать хэш. Для MVP делаем псевдо-CID.
-    return `cidv1-mock-${Date.now().toString(16)}`;
+    // Без WebCrypto нельзя надёжно идентифицировать содержимое.
+    throw new Error("Хеширование недоступно: файл не может быть добавлен.");
   }
 
   const ab = await file.arrayBuffer();
