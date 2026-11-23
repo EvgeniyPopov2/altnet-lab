@@ -51,6 +51,8 @@ export default function ContentNavView({ block }: { block: ContentNavBlock }) {
             <li key={it.id}>
               <a
                 href={href}
+                onClick={event => event.preventDefault()}
+                aria-current={isActive ? "location" : undefined}
                 className={`px-2 py-1 rounded-lg border ${isActive ? "border-[#5865F2] bg-[#121b3f] text-white" : "border-[#1f2751] bg-[#101735] text-[#e6e9f4] hover:bg-[#121b3f]"}`}
               >
                 {it.label}

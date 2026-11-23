@@ -1,4 +1,5 @@
 # === не коммитим живые списки пиров и чувствительное ===
+__pycache__/
 etc-default/discovery
 !etc-default/discovery.example
 etc-default/discovery.peers

@@ -49,6 +49,16 @@ export function externalLinkRels(href: string): string | undefined {
   return undefined;
 }
 
+/** Настройки ссылки кнопки; неизвестные значения сохраняют прежнее поведение. */
+export function buttonLinkOptions(href: string, open: unknown, indexing: unknown): { target: "_self" | "_blank"; rel?: string } {
+  const external = /^https?:/i.test(href);
+  const target = open === "new" ? "_blank" : open === "same" ? "_self" : external ? "_blank" : "_self";
+  const rel: string[] = [];
+  if (external || target === "_blank" || indexing === "follow") rel.push("noopener", "noreferrer");
+  if (indexing === "nofollow" || (indexing !== "follow" && external)) rel.push("nofollow");
+  return { target, ...(rel.length ? { rel: rel.join(" ") } : {}) };
+}
+
 // ---------- Хэширование и работа с картинками ----------
 
 export async function sha256Hex(buf: ArrayBuffer): Promise<string> {
@@ -62,55 +72,71 @@ export function makeNameFromHash(hashHex: string, prefix: string, ext: string) {
   return `${prefix}-${hashHex.slice(0, 8)}.${ext}`;
 }
 
-/** Перекодировать Blob->PNG через canvas, срезая EXIF (если возможно). */
+/** Перекодировать Blob в PNG перед включением в экспорт. */
 export async function tryReencodeToPng(blob: Blob): Promise<Blob> {
+  if (blob.size > 10 * 1024 * 1024) throw new Error("Изображение превышает лимит 10 МиБ.");
+  const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+  if (!allowedTypes.has(blob.type.toLowerCase())) throw new Error("Формат изображения не поддерживается.");
+  const bmp = await createImageBitmap(blob);
   try {
-    const bmp = await createImageBitmap(blob);
+    if (!bmp.width || !bmp.height || bmp.width * bmp.height > 16_000_000) {
+      throw new Error("Изображение превышает допустимые размеры.");
+    }
     const canvas = document.createElement("canvas");
     canvas.width = bmp.width;
     canvas.height = bmp.height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return blob;
+    if (!ctx) throw new Error("Не удалось подготовить изображение.");
     ctx.drawImage(bmp, 0, 0);
-    const out = await new Promise<Blob>((resolve) => canvas.toBlob(b => resolve(b || blob), "image/png", 0.92));
-    return out || blob;
-  } catch {
-    return blob; // CORS/другие ошибки — вернём как есть
+    const out = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!out || out.type !== "image/png" || out.size === 0) throw new Error("Не удалось перекодировать изображение.");
+    return out;
+  } finally {
+    bmp.close();
   }
 }
 
 type FetchOpts = { timeoutMs?: number; toPng?: boolean; preferredExt?: string };
 const DEFAULT_FETCH_OPTS: FetchOpts = { timeoutMs: 10000, toPng: true, preferredExt: "png" };
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 /**
  * Скачивает картинку, по возможности перекодирует в PNG, считает SHA-256 и возвращает {name, blob}.
  * Дедуп делается на уровне вызывающего кода по хэшам.
  */
 export async function fetchAndCleanImage(url: string, opts: FetchOpts = DEFAULT_FETCH_OPTS): Promise<{ name: string; blob: Blob; hash: string; }> {
+  if (opts.toPng === false) throw new Error("Экспорт изображения требует очистки.");
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_FETCH_OPTS.timeoutMs!);
-  let resp: Response;
-
   try {
-    resp = await fetch(url, { signal: controller.signal, mode: "cors" as RequestMode });
+    const resp = await fetch(url, { signal: controller.signal, mode: "cors" as RequestMode });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const reader = resp.body?.getReader();
+    if (!reader) throw new Error("Не удалось прочитать изображение.");
+    const parts: Uint8Array<ArrayBuffer>[] = [];
+    let size = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > MAX_IMAGE_BYTES) {
+          controller.abort();
+          throw new Error("Изображение превышает лимит 10 МиБ.");
+        }
+        parts.push(new Uint8Array(value));
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    const blob = await tryReencodeToPng(new Blob(parts, { type: resp.headers.get("content-type")?.split(";")[0] || "" }));
+    const buf = await blob.arrayBuffer();
+    const hash = await sha256Hex(buf);
+    const name = makeNameFromHash(hash, "img", "png");
+    return { name, blob, hash };
   } finally {
     clearTimeout(t);
   }
-
-  if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
-  let blob = await resp.blob();
-
-  if (opts.toPng) {
-    blob = await tryReencodeToPng(blob);
-  }
-
-  const buf = await blob.arrayBuffer();
-  const hash = await sha256Hex(buf);
-
-  // Определяем расширение
-  const ext = (opts.preferredExt || guessExtFromType(blob.type) || "bin");
-  const name = makeNameFromHash(hash, "img", ext);
-  return { name, blob, hash };
 }
 
 export function guessExtFromType(mime: string | undefined | null): string | null {

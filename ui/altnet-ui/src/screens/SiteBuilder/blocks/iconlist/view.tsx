@@ -34,13 +34,13 @@ export default function IconListView({ block }: { block: IconListBlock }) {
             : <Marker variant={v} />}
         </div>
         <div>
-          <div className={`${sz} text-[#e6e9f4]`}>{it.label}</div>
-          {it.description && <div className="text-xs text-[#9aa3b2]">{it.description}</div>}
+          <div className={`${sz} text-[#1d2440]`}>{it.label}</div>
+          {it.description && <div className="text-xs text-[#535d75]">{it.description}</div>}
         </div>
       </div>
     );
     return href ? (
-      <a href={href} className="block hover:bg-[#121b3f] rounded-lg px-2 py-1" rel="noopener noreferrer nofollow">
+      <a href={href} className="block hover:bg-[#eef1ff] rounded-lg px-2 py-1" rel="noopener noreferrer nofollow" onClick={event => event.preventDefault()}>
         {content}
       </a>
     ) : (

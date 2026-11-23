@@ -6,7 +6,7 @@ export default function PView({ block }: { block: PBlock }) {
     block.align === "center" ? "text-center" : block.align === "right" ? "text-right" : "text-left";
 
   return (
-    <p className={`text-base leading-6 text-[#2b3050] ${align}`}>
+    <p className={`whitespace-pre-wrap text-base leading-6 text-[#2b3050] ${align}`}>
       {block.text || "Текст абзаца. Нажмите, чтобы отредактировать."}
     </p>
   );

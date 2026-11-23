@@ -27,9 +27,9 @@ export default function BreadcrumbsView({ block }: { block: BreadcrumbsBlock }) 
           return (
             <li key={it.id} className="flex items-center gap-1 text-[#9aa3b2]">
               {href && !last ? (
-                <a href={href} className="hover:underline text-[#9bb1ff]" rel="noopener noreferrer nofollow">{it.label}</a>
+                <a href={href} className="hover:underline text-[#34499c]" rel="noopener noreferrer nofollow" onClick={event => event.preventDefault()}>{it.label}</a>
               ) : (
-                <span aria-current="page" className="text-[#e6e9f4]">{it.label}</span>
+                <span aria-current={last ? "page" : undefined} className="text-[#1d2440]">{it.label}</span>
               )}
               {!last && <span aria-hidden className="px-1 opacity-60">{sep}</span>}
             </li>

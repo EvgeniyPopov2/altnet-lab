@@ -10,8 +10,9 @@ function Star({ filled }: { filled: boolean }) {
 }
 
 export default function RatingView({ block }: { block: RatingBlock }) {
-  const max = Math.max(1, block.max ?? 5);
+  const max = Math.max(1, Math.min(100, Math.floor(block.max ?? 5)));
   const [val, setVal] = React.useState(Math.max(0, Math.min(block.value, max)));
+  React.useEffect(() => { setVal(Math.max(0, Math.min(block.value, max))); }, [block.value, max]);
   function onKey(e: React.KeyboardEvent) {
     if (block.readonly) return;
     if (e.key === "ArrowLeft") { e.preventDefault(); setVal((v) => Math.max(0, v - 1)); }

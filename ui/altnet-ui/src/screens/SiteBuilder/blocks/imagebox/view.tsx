@@ -18,16 +18,11 @@ function safeSrc(s?: string) {
 export default function ImageBoxView({ block }: { block: any }) {
   const bx = (block as Partial<ImageBoxLike>) || {};
 
-  const cols = bx.columns ?? 3;
+  const cols = bx.columns ?? (Array.isArray(bx.items) ? 3 : 1);
   const grid =
-    cols === 4 ? "md:grid-cols-4" : cols === 2 ? "md:grid-cols-2" : "md:grid-cols-3";
+    cols === 4 ? "md:grid-cols-4" : cols === 2 ? "md:grid-cols-2" : cols === 1 ? "grid-cols-1" : "md:grid-cols-3";
 
-  const items: ImageBoxItem[] =
-    (Array.isArray(bx.items) && (bx.items as ImageBoxItem[])) || [
-      { id: "p1", title: "Карта 1", text: "Описание", src: "https://picsum.photos/600/360?1" },
-      { id: "p2", title: "Карта 2", text: "Описание", src: "https://picsum.photos/600/360?2" },
-      { id: "p3", title: "Карта 3", text: "Описание", src: "https://picsum.photos/600/360?3" },
-    ];
+  const items: ImageBoxItem[] = Array.isArray(bx.items) ? bx.items : [{ id: block.id, title: block.title, text: block.text, src: block.src, alt: block.alt }];
 
   return (
     <div className={`grid gap-3 ${grid}`}>
@@ -36,11 +31,12 @@ export default function ImageBoxView({ block }: { block: any }) {
           key={it.id}
           className="rounded-2xl border border-[#1f2751] bg-[#0b1022] overflow-hidden"
         >
-          {safeSrc(it.src || it.cid) && (
+          {safeSrc(it.src ?? it.cid) && (
             <img
               className="w-full h-auto object-cover"
-              src={safeSrc(it.src || it.cid)}
+              src={safeSrc(it.src ?? it.cid)}
               alt={it.alt || ""}
+              referrerPolicy="no-referrer"
             />
           )}
           <div className="p-4">

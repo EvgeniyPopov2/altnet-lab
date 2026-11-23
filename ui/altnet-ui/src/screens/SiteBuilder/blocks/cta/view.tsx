@@ -29,11 +29,11 @@ export default function CtaView({ block }: { block: CtaBlock }) {
 
   return (
     <section className={clsWrap(emphasis, align)}>
-      {block.title && <h3 className="text-xl font-extrabold text-[#e6e9f4]">{block.title}</h3>}
-      {block.text &&  <p className="mt-2 text-sm text-[#c9d0e9]">{block.text}</p>}
+      {block.title && <h3 className={`text-xl font-extrabold ${emphasis === "none" ? "text-[#1d2440]" : "text-[#e6e9f4]"}`}>{block.title}</h3>}
+      {block.text &&  <p className={`mt-2 text-sm ${emphasis === "none" ? "text-[#535d75]" : "text-[#c9d0e9]"}`}>{block.text}</p>}
       {block.btnLabel && href && (
         <div className={align === "center" ? "mt-3 grid place-items-center" : align === "end" ? "mt-3 flex justify-end" : "mt-3"}>
-          <a href={href} className={clsBtn(variant)} rel="noopener noreferrer nofollow">
+          <a href={href} className={clsBtn(variant)} rel="noopener noreferrer nofollow" onClick={event => event.preventDefault()}>
             {block.btnLabel}
           </a>
         </div>

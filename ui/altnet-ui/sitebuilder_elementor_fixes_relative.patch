@@ -1,0 +1,3700 @@
+diff -ruN ui/altnet-ui/src/builder/SortableCanvas.tsx ui/altnet-ui/src/builder/SortableCanvas.tsx
+--- ui/altnet-ui/src/builder/SortableCanvas.tsx	2026-02-22 17:17:40.000000000 +0000
++++ ui/altnet-ui/src/builder/SortableCanvas.tsx	2026-02-23 00:32:57.639133064 +0000
+@@ -1,362 +1,392 @@
+-import React, { useMemo, useState } from "react";
+-import { DndContext, PointerSensor, useSensor, useSensors, useDroppable } from "@dnd-kit/core";
+-import type { DragEndEvent } from "@dnd-kit/core";
+-import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable";
+-import { CSS } from "@dnd-kit/utilities";
+-
+-type SortableLike = { id: string };
+-
+-export type InsertChoice =
+-  | "h1" | "heading" | "p" | "btn" | "img"
+-  | "divider" | "spacer"
+-  | "hero" | "cols2" | "section" | "grid"
+-  | "icon" | "iconlist" | "alert" | "html" | "code"
+-  | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
+-  | "counter" | "progress" | "breadcrumbs" | "pagination" | "social" | "iconbox" | "imagebox"
+-  | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
+-  | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
+-  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
+-  | "container" | "sidebar" | "offcanvas"| "shortcode" | "pricetable";
+-
+-type Props<T extends SortableLike> = {
+-  cols?: 1 | 2 | 3 | 4;
+-  gapX?: number;
+-  gapY?: number;
+-  blocks: T[];
+-  renderBlock: (b: T) => React.ReactNode;
+-  onReorder: (next: T[]) => void;
+-  /** Вставка нового блока в индекс (0..N). Вызывается при клике «+» и выборе типа. */
+-  onInsertAt?: (index: number, type: InsertChoice, preset?: any) => void;
+-};
+-
+-type InsertSlotVariant = "default" | "section";
+-
+-type InsertSlotProps = {
+-  id: string;
+-  variant?: InsertSlotVariant;
+-  onInsert?: (type: InsertChoice, preset?: any) => void;
+-};
+-
+-function DragHandle(props: React.HTMLAttributes<HTMLDivElement>) {
+-  return (
+-    <div
+-      {...props}
+-      className="absolute -left-2 -top-2 opacity-0 group-hover:opacity-100 transition
+-                 text-xs px-1.5 py-0.5 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4] cursor-grab"
+-    >
+-      ⠿
+-    </div>
+-  );
+-}
+-
+-function SortableItem({
+-  id,
+-  children,
+-}: {
+-  id: string;
+-  children: React.ReactNode;
+-}) {
+-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+-
+-  const style: React.CSSProperties = {
+-    transform: CSS.Transform.toString(transform),
+-    transition,
+-    zIndex: isDragging ? 20 : "auto",
+-  };
+-
+-  return (
+-    <div ref={setNodeRef} style={style} className="group relative">
+-      <DragHandle {...attributes} {...listeners} />
+-      {children}
+-    </div>
+-  );
+-}
+-
+-function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
+-  const { setNodeRef, isOver } = useDroppable({ id });
+-  
+-
+-  // Состояние мастера для слота секции
+-  const [stage, setStage] = useState<"root" | "layout" | "flex" | "grid">("root");
+-
+-  const isSectionMaster = variant === "section";
+-
+-  return (
+-    <div className="col-span-full">
+-      <div
+-        ref={setNodeRef}
+-        className={[
+-          "my-6 rounded-lg border border-dashed border-[#d4d4d8] shadow-sm",
+-          isOver ? "border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.4)]" : "",
+-        ].join(" ")}
+-        style={{ backgroundColor: "#ffffff" }}
+-      >
+-        <div className="p-2 flex items-center justify-center">
+-          {isSectionMaster ? (
+-            // ─────────────────────────────────────
+-            // Мастер Flex/Grid для пустого канваса
+-            // ─────────────────────────────────────
+-            <div className="flex w-full flex-col items-center gap-4 py-6">
+-              {/* ROOT: основной плейсхолдер с плюсиком и папкой */}
+-              {stage === "root" && (
+-                <>
+-                  <div className="flex items-center gap-3">
+-                    <button
+-                      type="button"
+-                      onClick={() => setStage("layout")}
+-                      className="h-10 w-10 rounded-full bg-[#111827] border border-[#2a2f45] flex items-center justify-center text-lg text-[#e6e9f4] hover:bg-[#151a2e] transition"
+-                      title="Добавить секцию"
+-                    >
+-                      +
+-                    </button>
+-
+-                    <button
+-                      type="button"
+-                      className="h-10 w-10 rounded-full bg-[#111827] border border-[#2a2f45] flex items-center justify-center text-base text-[#e6e9f4] hover:bg-[#151a2e] transition"
+-                      title="Библиотека (скоро)"
+-                    >
+-                      📁
+-                    </button>
+-                  </div>
+-
+-                  <div className="text-xs text-[#9aa3b2] text-center">
+-                    Добавьте секцию, библиотеку (скоро) или выберите структуру колонок
+-                  </div>
+-                </>
+-              )}
+-
+-              {/* LAYOUT: выбор между Flexbox и Grid */}
+-              {stage === "layout" && (
+-                <div className="relative w-full max-w-5xl rounded-xl border border-dashed border-[#d4d4d8] bg-white px-10 py-10 shadow-sm">
+-                  {/* Крестик справа сверху — выход обратно в root */}
+-                  <button
+-                    type="button"
+-                    onClick={() => setStage("root")}
+-                    className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#e5e7eb] bg-white text-sm text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827] transition"
+-                    aria-label="Закрыть"
+-                  >
+-                    ✕
+-                  </button>
+-
+-                  {/* Заголовок */}
+-                  <div className="mb-2 text-center text-base font-semibold text-[#111827]">
+-                    Какой макет вы хотите использовать?
+-                  </div>
+-
+-                  {/* Подпояснение под заголовком */}
+-                  <div className="mb-8 text-center text-xs text-[#6b7280]">
+-                    <span className="font-semibold text-[#6E59F2]">Flexbox</span> — одна строка колонок;&nbsp;
+-                    <span className="font-semibold text-[#6E59F2]">CSS Grid</span> — полноценная сетка из строк и колонок.
+-                  </div>
+-
+-                  {/* Две большие карточки Flexbox / Grid */}
+-                  <div className="flex flex-wrap justify-center gap-6">
+-                    {/* Flexbox карточка */}
+-                    <button
+-                      type="button"
+-                      onClick={() => setStage("flex")}
+-                      className="group flex w-64 flex-col items-center gap-3 rounded-2xl border-2 border-[#E5D9FF] bg-[#fdf2ff] px-6 py-5 text-[#111827] hover:border-[#6E59F2] hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6E59F2] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+-                    >
+-                      {/* Псевдо-иконка Flex (3 колонки) */}
+-                      <div className="flex h-20 w-full items-center justify-center rounded-lg bg-white">
+-                        <div className="flex h-10 w-28 gap-1">
+-                          <div className="flex-1 bg-[#e5e7eb]" />
+-                          <div className="flex-1 bg-[#d1d5db]" />
+-                          <div className="flex-1 bg-[#e5e7eb]" />
+-                        </div>
+-                      </div>
+-                      <div className="text-sm font-semibold">Flexbox</div>
+-                      <div className="text-[11px] leading-snug text-center text-[#6b7280]">
+-                        Колонки в одну строку, поведение задаёт flex-контейнер.
+-                      </div>
+-                    </button>
+-
+-                    {/* Grid карточка */}
+-                    <button
+-                      type="button"
+-                      onClick={() => setStage("grid")}
+-                      className="group flex w-64 flex-col items-center gap-3 rounded-2xl border-2 border-[#E5D9FF] bg-[#fdf2ff] px-6 py-5 text-[#111827] hover:border-[#6E59F2] hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6E59F2] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+-                    >
+-                      {/* Псевдо-иконка Grid 2×2 */}
+-                      <div className="flex h-20 w-full items-center justify-center rounded-lg bg-white">
+-                        <div className="grid h-10 w-20 grid-cols-2 grid-rows-2 gap-[3px]">
+-                          {Array.from({ length: 4 }).map((_, i) => (
+-                            <div key={i} className="bg-[#e5e7eb]" />
+-                          ))}
+-                        </div>
+-                      </div>
+-                      <div className="text-sm font-semibold">CSS Grid</div>
+-                      <div className="text-[11px] leading-snug text-center text-[#6b7280]">
+-                        Полноценная сетка: строки и колонки, гибкая компоновка.
+-                      </div>
+-                    </button>
+-                  </div>
+-                </div>
+-              )}
+-
+-
+-              {/* FLEX / GRID: выбор конкретной структуры */}
+-              {(stage === "flex" || stage === "grid") && (
+-                <div className="relative w-full max-w-5xl rounded-lg border border-dashed border-[#d4d4d8] bg-white px-8 py-8 shadow-sm">
+-                 <div className="mb-4 flex items-center justify-between">
+-                    <button
+-                      type="button"
+-                      onClick={() => setStage("layout")}
+-                      className="text-sm text-[#6b7280] hover:text-[#111827]"
+-                    >
+-                      ←
+-                    </button>
+-
+-                    <div className="flex flex-col items-center gap-1">
+-                      <div className="text-sm font-medium text-[#111827]">
+-                        {stage === "flex"
+-                          ? "Flexbox — выберите структуру колонок"
+-                          : "CSS Grid — выберите структуру сетки"}
+-                      </div>
+-                      <div className="text-[11px] text-[#6b7280]">
+-                        {stage === "flex"
+-                          ? "Колонки в одну строку, поведение задаётся flex-контейнером"
+-                          : "Двумерная сетка: строки и колонки, больше контроля по вертикали"}
+-                      </div>
+-                    </div>
+-
+-                    <button
+-                      type="button"
+-                      onClick={() => setStage("root")}
+-                      className="text-base text-[#6b7280] hover:text-[#111827]"
+-                      aria-label="Закрыть"
+-                    >
+-                      ✕
+-                    </button>
+-                  </div>
+-
+-                  <div
+-                    className={
+-                      stage === "flex"
+-                        ? "grid grid-cols-4 gap-4"
+-                        : "grid grid-cols-3 gap-4"
+-                    }
+-                  >
+-                    {(
+-                      stage === "flex"
+-                        ? [
+-                            [1],
+-                            [1, 1],
+-                            [2, 1],
+-                            [1, 2],
+-                            [1, 1, 1],
+-                            [2, 1, 1],
+-                            [1, 2, 1],
+-                            [1, 1, 2],
+-                            [3, 1],
+-                            [1, 3],
+-                            [2, 2],
+-                            [1, 1, 1, 1],
+-                          ]
+-                        : [
+-                            [1, 1],
+-                            [1, 1, 1],
+-                            [2, 1, 1],
+-                            [1, 2],
+-                            [1, 1, 2],
+-                            [1, 1, 1, 1],
+-                          ]
+-                    ).map((cols, idx) => (
+-                      <button
+-                        key={idx}
+-                        type="button"
+-                        onClick={() => {
+-                          // Передаём выбранную структуру колонок как preset (пока без жёсткого типа)
+-                          onInsert?.(
+-                            stage === "flex"
+-                              ? ("section" as InsertChoice)
+-                              : ("grid" as InsertChoice),
+-                            cols
+-                          );
+-                          setStage("root");
+-                        }}
+-                        className="flex flex-col items-center gap-2 rounded-lg border border-transparent bg-transparent p-1 hover:border-[#6E59F2] hover:bg-[#0b1020] transition"
+-                      >
+-                        <div className="h-16 w-full max-w-[120px] rounded-md border border-dashed border-[#2a2f45] bg-[#020617] flex overflow-hidden">
+-                          {cols.map((flexValue, i) => (
+-                            <div
+-                              key={i}
+-                              className="border-r border-[#111827] last:border-r-0 bg-[#111827]"
+-                              style={{ flex: flexValue }}
+-                            />
+-                          ))}
+-                        </div>
+-                      </button>
+-                    ))}
+-                  </div>
+-                </div>
+-              )}
+-            </div>
+-          ) : (
+-           // ─────────────────────────────────────
+-            // Обычный слот — только зона дропа без мини-палитры
+-            // ─────────────────────────────────────
+-            <div className="py-3 text-xs text-center text-[#9aa3b2]">
+-              Перетащите виджет из левой панели сюда
+-            </div>
+-          )}
+-        </div>
+-      </div>
+-    </div>
+-  );
+-}
+-
+-
+-export default function SortableCanvas<T extends SortableLike>({
+-  cols = 3,
+-  gapX = 16,
+-  gapY = 16,
+-  blocks,
+-  renderBlock,
+-  onReorder,
+-  onInsertAt,
+-}: Props<T>) {
+-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+-  const ids = useMemo(() => blocks.map((b) => b.id), [blocks]);
+-
+-  const onDragEnd = (e: DragEndEvent) => {
+-    const { active, over } = e;
+-    if (!over) return;
+-    // Перестановка блоков по карточкам
+-    if (!String(over.id).startsWith("slot-") && active.id !== over.id) {
+-      const oldIndex = ids.indexOf(String(active.id));
+-      const newIndex = ids.indexOf(String(over.id));
+-      if (oldIndex !== -1 && newIndex !== -1) onReorder(arrayMove(blocks, oldIndex, newIndex));
+-    }
+-    // Перетаскивание внешних блоков (если нужно) добавим позже во внешнем DndContext.
+-  };
+-
+-  return (
+-    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+-      <SortableContext items={ids} strategy={rectSortingStrategy}>
+-        <div
+-          className="grid"
+-          style={{
+-            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+-            columnGap: gapX,
+-            rowGap: gapY,
+-            alignItems: "start",
+-          }}
+-        >
+-          {/* Начальный слот: всегда мастер Flex/Grid, даже когда уже есть секции */}
+-          <InsertSlot
+-            id="slot-0"
+-            variant="section"
+-            onInsert={(t, preset) => onInsertAt?.(0, t, preset)}
+-          />
+-          {blocks.map((b, i) => (
+-            <React.Fragment key={b.id}>
+-              <SortableItem id={b.id}>{renderBlock(b)}</SortableItem>
+-              <InsertSlot id={`slot-${i + 1}`} onInsert={(t, preset) => onInsertAt?.(i + 1, t, preset)} />
+-            </React.Fragment>
+-          ))}
+-        </div>
+-      </SortableContext>
+-    </DndContext>
+-  );
+-}
++import React, { useMemo, useState } from "react";
++import { DndContext, PointerSensor, useSensor, useSensors, useDroppable } from "@dnd-kit/core";
++import type { DragEndEvent } from "@dnd-kit/core";
++import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable";
++import { CSS } from "@dnd-kit/utilities";
++
++type SortableLike = { id: string };
++
++export type InsertChoice =
++  | "h1" | "heading" | "p" | "btn" | "img"
++  | "divider" | "spacer"
++  | "hero" | "cols2" | "section" | "grid"
++  | "icon" | "iconlist" | "alert" | "html" | "code"
++  | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
++  | "counter" | "progress" | "breadcrumbs" | "pagination" | "social" | "iconbox" | "imagebox"
++  | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
++  | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
++  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
++  | "container" | "sidebar" | "offcanvas" | "shortcode" | "pricetable";
++
++const DND_MIME = "application/x-altnet-block";
++
++type Props<T extends SortableLike> = {
++  cols?: 1 | 2 | 3 | 4;
++  gapX?: number;
++  gapY?: number;
++  blocks: T[];
++  renderBlock: (b: T) => React.ReactNode;
++  onReorder: (next: T[]) => void;
++  /** Вставка нового блока в индекс (0..N). Вызывается при клике «+» и выборе типа. */
++  onInsertAt?: (index: number, type: InsertChoice, preset?: any) => void;
++  /** Открыть библиотеку шаблонов (кнопка 📁 в мастере). */
++  onOpenLibrary?: () => void;
++};
++
++type InsertSlotVariant = "default" | "section";
++
++type InsertSlotProps = {
++  id: string;
++  variant?: InsertSlotVariant;
++  onInsert?: (type: InsertChoice, preset?: any) => void;
++  onOpenLibrary?: () => void;
++};
++
++function DragHandle(props: React.HTMLAttributes<HTMLDivElement>) {
++  return (
++    <div
++      {...props}
++      className="absolute -left-2 -top-2 opacity-0 group-hover:opacity-100 transition
++                 text-xs px-1.5 py-0.5 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4] cursor-grab"
++    >
++      ⠿
++    </div>
++  );
++}
++
++function SortableItem({
++  id,
++  children,
++}: {
++  id: string;
++  children: React.ReactNode;
++}) {
++  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
++
++  const style: React.CSSProperties = {
++    transform: CSS.Transform.toString(transform),
++    transition,
++    zIndex: isDragging ? 20 : "auto",
++  };
++
++  return (
++    <div ref={setNodeRef} style={style} className="group relative">
++      <DragHandle {...attributes} {...listeners} />
++      {children}
++    </div>
++  );
++}
++
++function InsertSlot({ id, onInsert, variant, onOpenLibrary }: InsertSlotProps) {
++  const { setNodeRef, isOver } = useDroppable({ id });
++
++  const [stage, setStage] = useState<"root" | "layout" | "flex" | "grid">("root");
++  const [htmlOver, setHtmlOver] = useState(false);
++
++  const isSectionMaster = variant === "section";
++  const highlight = isOver || htmlOver;
++
++  const handleDragOver = (e: React.DragEvent) => {
++    // Принимаем только наш MIME
++    const types = Array.from(e.dataTransfer.types || []);
++    if (!types.includes(DND_MIME)) return;
++    e.preventDefault();
++    e.dataTransfer.dropEffect = "copy";
++    if (!htmlOver) setHtmlOver(true);
++  };
++
++  const handleDrop = (e: React.DragEvent) => {
++    const raw = e.dataTransfer.getData(DND_MIME);
++    if (!raw) return;
++    e.preventDefault();
++    setHtmlOver(false);
++    try {
++      const data = JSON.parse(raw);
++      const type = data?.type as InsertChoice | undefined;
++      if (type) onInsert?.(type);
++    } catch {
++      // ignore
++    }
++  };
++
++  return (
++    <div className="col-span-full">
++      <div
++        ref={setNodeRef}
++        onDragOver={handleDragOver}
++        onDragLeave={() => setHtmlOver(false)}
++        onDrop={handleDrop}
++        className={[
++          "my-6 rounded-lg border border-dashed border-[#d4d4d8] shadow-sm",
++          highlight ? "border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.35)]" : "",
++        ].join(" ")}
++        style={{ backgroundColor: "#ffffff" }}
++      >
++        <div className="p-2 flex items-center justify-center">
++          {isSectionMaster ? (
++            // ─────────────────────────────────────
++            // Мастер Flex/Grid для пустого канваса
++            // ─────────────────────────────────────
++            <div className="flex w-full flex-col items-center gap-4 py-6">
++              {/* ROOT: основной плейсхолдер с плюсиком и папкой */}
++              {stage === "root" && (
++                <>
++                  <div className="flex items-center gap-3">
++                    <button
++                      type="button"
++                      onClick={() => setStage("layout")}
++                      className="h-10 w-10 rounded-full bg-[#6E59F2] border border-[#6E59F2] flex items-center justify-center text-lg text-white hover:brightness-110 transition"
++                      title="Добавить секцию"
++                    >
++                      +
++                    </button>
++
++                    <button
++                      type="button"
++                      onClick={onOpenLibrary}
++                      className="h-10 w-10 rounded-full bg-white border border-[#e5e7eb] flex items-center justify-center text-base text-[#111827] hover:bg-[#f3f4f6] transition"
++                      title="Библиотека"
++                    >
++                      📁
++                    </button>
++                  </div>
++
++                  <div className="text-xs text-[#9aa3b2] text-center">
++                    Добавьте секцию или перетащите виджет на канвас / в секцию
++                  </div>
++                </>
++              )}
++
++              {/* LAYOUT: выбор между Flexbox и Grid */}
++              {stage === "layout" && (
++                <div className="relative w-full max-w-5xl rounded-xl border border-dashed border-[#d4d4d8] bg-white px-10 py-10 shadow-sm">
++                  {/* Крестик справа сверху — выход обратно в root */}
++                  <button
++                    type="button"
++                    onClick={() => setStage("root")}
++                    className="absolute right-4 top-4 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#e5e7eb] bg-white text-sm text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#111827] transition"
++                    aria-label="Закрыть"
++                  >
++                    ✕
++                  </button>
++
++                  {/* Заголовок */}
++                  <div className="mb-2 text-center text-base font-semibold text-[#111827]">
++                    Какой макет вы хотите использовать?
++                  </div>
++
++                  {/* Подпояснение под заголовком */}
++                  <div className="mb-8 text-center text-xs text-[#6b7280]">
++                    <span className="font-semibold text-[#6E59F2]">Flexbox</span> — одна строка колонок;&nbsp;
++                    <span className="font-semibold text-[#6E59F2]">CSS Grid</span> — полноценная сетка из строк и колонок.
++                  </div>
++
++                  {/* Две большие карточки Flexbox / Grid */}
++                  <div className="flex flex-wrap justify-center gap-6">
++                    {/* Flexbox карточка */}
++                    <button
++                      type="button"
++                      onClick={() => setStage("flex")}
++                      className="group flex w-64 flex-col items-center gap-3 rounded-2xl border-2 border-[#E5D9FF] bg-[#fdf2ff] px-6 py-5 text-[#111827] hover:border-[#6E59F2] hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6E59F2] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
++                    >
++                      {/* Псевдо-иконка Flex (3 колонки) */}
++                      <div className="flex h-20 w-full items-center justify-center rounded-lg bg-white">
++                        <div className="flex h-10 w-28 gap-1">
++                          <div className="flex-1 bg-[#e5e7eb]" />
++                          <div className="flex-1 bg-[#d1d5db]" />
++                          <div className="flex-1 bg-[#e5e7eb]" />
++                        </div>
++                      </div>
++                      <div className="text-sm font-semibold">Flexbox</div>
++                      <div className="text-[11px] leading-snug text-center text-[#6b7280]">
++                        Колонки в одну строку, поведение задаёт flex-контейнер.
++                      </div>
++                    </button>
++
++                    {/* Grid карточка */}
++                    <button
++                      type="button"
++                      onClick={() => setStage("grid")}
++                      className="group flex w-64 flex-col items-center gap-3 rounded-2xl border-2 border-[#E5D9FF] bg-[#fdf2ff] px-6 py-5 text-[#111827] hover:border-[#6E59F2] hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6E59F2] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
++                    >
++                      {/* Псевдо-иконка Grid 2×2 */}
++                      <div className="flex h-20 w-full items-center justify-center rounded-lg bg-white">
++                        <div className="grid h-10 w-20 grid-cols-2 grid-rows-2 gap-[3px]">
++                          {Array.from({ length: 4 }).map((_, i) => (
++                            <div key={i} className="bg-[#e5e7eb]" />
++                          ))}
++                        </div>
++                      </div>
++                      <div className="text-sm font-semibold">CSS Grid</div>
++                      <div className="text-[11px] leading-snug text-center text-[#6b7280]">
++                        Полноценная сетка: строки и колонки, гибкая компоновка.
++                      </div>
++                    </button>
++                  </div>
++                </div>
++              )}
++
++              {/* FLEX / GRID: выбор конкретной структуры */}
++              {(stage === "flex" || stage === "grid") && (
++                <div className="relative w-full max-w-5xl rounded-lg border border-dashed border-[#d4d4d8] bg-white px-8 py-8 shadow-sm">
++                  <div className="mb-4 flex items-center justify-between">
++                    <button
++                      type="button"
++                      onClick={() => setStage("layout")}
++                      className="text-sm text-[#6b7280] hover:text-[#111827]"
++                    >
++                      ←
++                    </button>
++
++                    <div className="flex flex-col items-center gap-1">
++                      <div className="text-sm font-medium text-[#111827]">
++                        {stage === "flex"
++                          ? "Flexbox — выберите структуру колонок"
++                          : "CSS Grid — выберите структуру сетки"}
++                      </div>
++                      <div className="text-[11px] text-[#6b7280]">
++                        {stage === "flex"
++                          ? "Колонки в одну строку, поведение задаётся flex-контейнером"
++                          : "Двумерная сетка: строки и колонки, больше контроля по вертикали"}
++                      </div>
++                    </div>
++
++                    <button
++                      type="button"
++                      onClick={() => setStage("root")}
++                      className="text-base text-[#6b7280] hover:text-[#111827]"
++                      aria-label="Закрыть"
++                    >
++                      ✕
++                    </button>
++                  </div>
++
++                  <div
++                    className={
++                      stage === "flex"
++                        ? "grid grid-cols-4 gap-4"
++                        : "grid grid-cols-3 gap-4"
++                    }
++                  >
++                    {(
++                      stage === "flex"
++                        ? [
++                            [1],
++                            [1, 1],
++                            [2, 1],
++                            [1, 2],
++                            [1, 1, 1],
++                            [2, 1, 1],
++                            [1, 2, 1],
++                            [1, 1, 2],
++                            [3, 1],
++                            [1, 3],
++                            [2, 2],
++                            [1, 1, 1, 1],
++                          ]
++                        : [
++                            [1, 1],
++                            [1, 1, 1],
++                            [2, 1, 1],
++                            [1, 2],
++                            [1, 1, 2],
++                            [1, 1, 1, 1],
++                          ]
++                    ).map((cols, idx) => (
++                      <button
++                        key={idx}
++                        type="button"
++                        onClick={() => {
++                          onInsert?.(
++                            stage === "flex" ? ("section" as InsertChoice) : ("grid" as InsertChoice),
++                            cols
++                          );
++                          setStage("root");
++                        }}
++                        className="flex flex-col items-center gap-2 rounded-xl border border-transparent bg-transparent p-2 hover:border-[#6E59F2] hover:bg-[#fdf2ff] transition"
++                      >
++                        <div className="h-16 w-full max-w-[140px] rounded-lg border border-[#e5e7eb] bg-[#f3f4f6] flex overflow-hidden">
++                          {cols.map((flexValue, i) => (
++                            <div
++                              key={i}
++                              className="border-r border-[#e5e7eb] last:border-r-0 bg-[#d1d5db]"
++                              style={{ flex: flexValue }}
++                            />
++                          ))}
++                        </div>
++                      </button>
++                    ))}
++                  </div>
++                </div>
++              )}
++            </div>
++          ) : (
++            // ─────────────────────────────────────
++            // Обычный слот — зона дропа
++            // ─────────────────────────────────────
++            <div className="py-3 text-xs text-center text-[#9aa3b2]">
++              Перетащите виджет из левой панели сюда
++            </div>
++          )}
++        </div>
++      </div>
++    </div>
++  );
++}
++
++export default function SortableCanvas<T extends SortableLike>({
++  cols = 3,
++  gapX = 16,
++  gapY = 16,
++  blocks,
++  renderBlock,
++  onReorder,
++  onInsertAt,
++  onOpenLibrary,
++}: Props<T>) {
++  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
++  const ids = useMemo(() => blocks.map((b) => b.id), [blocks]);
++
++  const onDragEnd = (e: DragEndEvent) => {
++    const { active, over } = e;
++    if (!over) return;
++    // Перестановка блоков по карточкам
++    if (!String(over.id).startsWith("slot-") && active.id !== over.id) {
++      const oldIndex = ids.indexOf(String(active.id));
++      const newIndex = ids.indexOf(String(over.id));
++      if (oldIndex !== -1 && newIndex !== -1) onReorder(arrayMove(blocks, oldIndex, newIndex));
++    }
++    // Перетаскивание внешних блоков (палитра) реализовано через HTML5 DnD в InsertSlot.
++  };
++
++  return (
++    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
++      <SortableContext items={ids} strategy={rectSortingStrategy}>
++        <div
++          className="grid"
++          style={{
++            gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
++            columnGap: gapX,
++            rowGap: gapY,
++            alignItems: "start",
++          }}
++        >
++          {/* Начальный слот: мастер Flex/Grid (и шаблоны) */}
++          <InsertSlot
++            id="slot-0"
++            variant="section"
++            onInsert={(t, preset) => onInsertAt?.(0, t, preset)}
++            onOpenLibrary={onOpenLibrary}
++          />
++
++          {blocks.map((b, i) => (
++            <React.Fragment key={b.id}>
++              <SortableItem id={b.id}>{renderBlock(b)}</SortableItem>
++              <InsertSlot id={`slot-${i + 1}`} onInsert={(t, preset) => onInsertAt?.(i + 1, t, preset)} />
++            </React.Fragment>
++          ))}
++        </div>
++      </SortableContext>
++    </DndContext>
++  );
++}
+diff -ruN ui/altnet-ui/src/screens/SiteBuilder/canvas/Canvas.tsx ui/altnet-ui/src/screens/SiteBuilder/canvas/Canvas.tsx
+--- ui/altnet-ui/src/screens/SiteBuilder/canvas/Canvas.tsx	2026-02-22 17:17:40.000000000 +0000
++++ ui/altnet-ui/src/screens/SiteBuilder/canvas/Canvas.tsx	2026-02-23 00:34:03.969924156 +0000
+@@ -1,44 +1,48 @@
+-// src/screens/SiteBuilder/canvas/Canvas.tsx
+-import React from "react";
+-import SortableCanvas from "../../../builder/SortableCanvas";
+-import type { Block } from "../types";
+-
+-// Забираем точный тип onInsertAt у нативного компонента, чтобы совпал InsertChoice.
+-type NativeProps = React.ComponentProps<typeof SortableCanvas>;
+-type NativeOnInsertAt = NativeProps["onInsertAt"];
+-
+-export type CanvasProps = {
+-  cols?: 1 | 2 | 3 | 4;
+-  gapX?: number;
+-  gapY?: number;
+-  blocks: Block[];
+-  /** Рендер блока нашего типа Block */
+-  renderBlock: (b: Block) => React.ReactNode;
+-  /** Обязателен, как и у SortableCanvas */
+-  onReorder: (next: Block[]) => void;
+-  /** Совместим с нативным InsertChoice */
+-  onInsertAt?: NativeOnInsertAt;
+-};
+-
+-/**
+- * Canvas — тонкая обёртка над SortableCanvas с адаптацией типов:
+- * - renderBlock: (SortableLike) → (Block)
+- * - onReorder: (SortableLike[]) → (Block[])
+- * - onInsertAt: берём родной тип из SortableCanvas
+- */
+-export default function Canvas(props: CanvasProps) {
+-  const { cols, gapX, gapY, blocks, renderBlock, onReorder, onInsertAt } = props;
+-
+-  return (
+-    <SortableCanvas
+-      cols={cols}
+-      gapX={gapX}
+-      gapY={gapY}
+-      // Block гарантированно имеет id, значит совместим с SortableLike
+-      blocks={blocks as unknown as any[]}
+-      renderBlock={(b) => renderBlock(b as Block)}
+-      onReorder={(next) => onReorder(next as Block[])}
+-      onInsertAt={onInsertAt as NativeOnInsertAt}
+-    />
+-  );
+-}
++// src/screens/SiteBuilder/canvas/Canvas.tsx
++import React from "react";
++import SortableCanvas from "../../../builder/SortableCanvas";
++import type { Block } from "../types";
++
++// Забираем точные типы из нативного компонента, чтобы совпали InsertChoice / onOpenLibrary.
++type NativeProps = React.ComponentProps<typeof SortableCanvas>;
++type NativeOnInsertAt = NativeProps["onInsertAt"];
++type NativeOnOpenLibrary = NativeProps["onOpenLibrary"];
++
++export type CanvasProps = {
++  cols?: 1 | 2 | 3 | 4;
++  gapX?: number;
++  gapY?: number;
++  blocks: Block[];
++  /** Рендер блока нашего типа Block */
++  renderBlock: (b: Block) => React.ReactNode;
++  /** Обязателен, как и у SortableCanvas */
++  onReorder: (next: Block[]) => void;
++  /** Совместим с нативным InsertChoice */
++  onInsertAt?: NativeOnInsertAt;
++  /** Открыть библиотеку шаблонов */
++  onOpenLibrary?: NativeOnOpenLibrary;
++};
++
++/**
++ * Canvas — тонкая обёртка над SortableCanvas с адаптацией типов:
++ * - renderBlock: (SortableLike) → (Block)
++ * - onReorder: (SortableLike[]) → (Block[])
++ * - onInsertAt: берём родной тип из SortableCanvas
++ */
++export default function Canvas(props: CanvasProps) {
++  const { cols, gapX, gapY, blocks, renderBlock, onReorder, onInsertAt, onOpenLibrary } = props;
++
++  return (
++    <SortableCanvas
++      cols={cols}
++      gapX={gapX}
++      gapY={gapY}
++      // Block гарантированно имеет id, значит совместим с SortableLike
++      blocks={blocks as unknown as any[]}
++      renderBlock={(b) => renderBlock(b as Block)}
++      onReorder={(next) => onReorder(next as Block[])}
++      onInsertAt={onInsertAt as NativeOnInsertAt}
++      onOpenLibrary={onOpenLibrary as NativeOnOpenLibrary}
++    />
++  );
++}
+diff -ruN ui/altnet-ui/src/screens/SiteBuilder/inspector/tabs/ContentTab.tsx ui/altnet-ui/src/screens/SiteBuilder/inspector/tabs/ContentTab.tsx
+--- ui/altnet-ui/src/screens/SiteBuilder/inspector/tabs/ContentTab.tsx	2026-02-22 20:22:27.000000000 +0000
++++ ui/altnet-ui/src/screens/SiteBuilder/inspector/tabs/ContentTab.tsx	2026-02-23 01:06:06.288330058 +0000
+@@ -8,9 +8,11 @@
+   BtnBlock,
+   CodeBlock,
+   CountdownBlock,
++  CounterBlock,
+   HeadingBlock,
+   HeroBlock,
+   HtmlBlock,
++  H1Block,
+   ImgBlock,
+   MapBlock,
+   PBlock,
+@@ -26,7 +28,7 @@
+ };
+ 
+ const inputBase =
+-  "rounded-lg border border-[#2a2f45] bg-[#0c0f1a] px-3 py-2 text-white outline-none placeholder:text-white/30";
++  "rounded-lg border border-[#2a2f45] bg-[#0c0f1a] px-3 py-2 text-white outline-none placeholder:text-white/30 disabled:opacity-60";
+ 
+ function toNum(v: string): number | undefined {
+   if (v.trim() === "") return undefined;
+@@ -34,15 +36,69 @@
+   return Number.isFinite(n) ? n : undefined;
+ }
+ 
++function Toggle({
++  value,
++  onChange,
++  disabled,
++}: {
++  value: boolean;
++  onChange: (v: boolean) => void;
++  disabled?: boolean;
++}) {
++  return (
++    <button
++      type="button"
++      disabled={disabled}
++      onClick={() => onChange(!value)}
++      className={
++        "px-3 py-2 rounded-lg border text-sm transition disabled:opacity-60 " +
++        (value
++          ? "bg-[#6E59F2]/20 border-[#6E59F2] text-white"
++          : "bg-[#0c0f1a] border-[#2a2f45] text-white/70 hover:bg-[#11162b]")
++      }
++    >
++      {value ? "Вкл" : "Выкл"}
++    </button>
++  );
++}
++
++function Select({
++  value,
++  onChange,
++  options,
++  disabled,
++}: {
++  value: string;
++  onChange: (v: string) => void;
++  options: { value: string; label: string }[];
++  disabled?: boolean;
++}) {
++  return (
++    <select
++      className={inputBase}
++      value={value}
++      onChange={(e) => onChange(e.target.value)}
++      disabled={disabled}
++    >
++      {options.map((o) => (
++        <option key={o.value} value={o.value}>
++          {o.label}
++        </option>
++      ))}
++    </select>
++  );
++}
++
+ function JsonEditor({
+   block,
+   onPatch,
++  disabled,
+ }: {
+   block: Block;
+   onPatch: (patch: Record<string, any>) => void;
++  disabled?: boolean;
+ }) {
+   const stripped = useMemo(() => {
+-    // Редактируем только «поля блока», без id/type.
+     const { id: _id, type: _type, ...rest } = block as any;
+     return rest;
+   }, [block]);
+@@ -57,6 +113,7 @@
+   }, [stripped]);
+ 
+   const apply = () => {
++    if (disabled) return;
+     try {
+       const parsed = JSON.parse(text);
+       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+@@ -72,35 +129,33 @@
+ 
+   return (
+     <div className="rounded-xl border border-[#2a2f45] bg-[#0c0f1a] p-3">
+-      <button
+-        type="button"
+-        onClick={() => setOpen(!open)}
+-        className="text-left w-full"
+-      >
++      <button type="button" onClick={() => setOpen(!open)} className="text-left w-full">
+         <div className="flex items-center justify-between">
+-          <div>
+-            <div className="text-xs uppercase tracking-wide text-[#9aa3b2]">JSON</div>
+-            <div className="text-xs text-white/60">Для сложных блоков — быстрый способ правки</div>
+-          </div>
+-          <div className="text-xs text-white/60">{open ? "▲" : "▼"}</div>
++          <div className="text-sm font-medium text-white/90">JSON (экспертно)</div>
++          <div className="text-xs text-white/60">{open ? "Свернуть" : "Развернуть"}</div>
+         </div>
++        <div className="mt-1 text-xs text-white/50">Редактирование полей блока без id/type.</div>
+       </button>
+ 
+       {open && (
+-        <div className="mt-3 grid gap-2">
++        <div className="mt-3 space-y-2">
+           <textarea
+-            className={`${inputBase} font-mono text-xs min-h-[220px]`}
++            className={
++              "w-full min-h-[200px] font-mono text-xs rounded-lg border border-[#2a2f45] bg-black/30 px-3 py-2 text-white outline-none disabled:opacity-60"
++            }
+             value={text}
+             onChange={(e) => setText(e.target.value)}
++            disabled={disabled}
+           />
+           {err && <div className="text-xs text-red-300">{err}</div>}
+           <div className="flex gap-2">
+             <button
+               type="button"
+               onClick={apply}
+-              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm"
++              disabled={disabled}
++              className="px-3 py-1.5 rounded-lg bg-[#6E59F2] hover:brightness-110 disabled:opacity-60 text-white text-sm"
+             >
+-              Применить
++              Применить JSON
+             </button>
+             <button
+               type="button"
+@@ -108,9 +163,10 @@
+                 setText(JSON.stringify(stripped, null, 2));
+                 setErr(null);
+               }}
+-              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white/90 text-sm"
++              disabled={disabled}
++              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 disabled:opacity-60 text-white text-sm"
+             >
+-              Сбросить
++              Сброс
+             </button>
+           </div>
+         </div>
+@@ -120,532 +176,490 @@
+ }
+ 
+ export default function ContentTab({ block, onPatch }: Props) {
+-  // Если блок «залочен» — показываем только JSON в read-only.
+   const locked = Boolean((block as any).locked);
+-
+-  const patchIfAllowed = (patch: Record<string, any>) => {
++  const patch = (p: any) => {
+     if (locked) return;
+-    onPatch(patch);
++    onPatch(p);
+   };
+ 
++  const type = block.type;
++
++  let ui: React.ReactNode = null;
++
+   // ─────────────────────────────────────────────────────────────
+-  // Специализированные формы (ключевые блоки)
++  // Основные виджеты
+   // ─────────────────────────────────────────────────────────────
++  if (type === "hero") {
++    const b = block as HeroBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Заголовок">
++          <input className={inputBase} value={b.title ?? ""} onChange={(e) => patch({ title: e.target.value })} disabled={locked} />
++        </Field>
++        <Field label="Подзаголовок">
++          <textarea className={inputBase + " min-h-[80px]"} value={b.subtitle ?? ""} onChange={(e) => patch({ subtitle: e.target.value })} disabled={locked} />
++        </Field>
++        <div className="grid grid-cols-2 gap-2">
++          <Field label="Текст кнопки">
++            <input className={inputBase} value={b.ctaText ?? ""} onChange={(e) => patch({ ctaText: e.target.value })} disabled={locked} />
++          </Field>
++          <Field label="Ссылка кнопки">
++            <input className={inputBase} value={b.ctaLink ?? ""} onChange={(e) => patch({ ctaLink: e.target.value })} disabled={locked} placeholder="/" />
++          </Field>
++        </div>
++      </div>
++    );
++  }
+ 
+-  const content = (() => {
+-    switch (block.type) {
+-      case "hero": {
+-        const b = block as HeroBlock;
+-        return (
+-          <>
+-            <Field label="Заголовок">
+-              <input
+-                className={inputBase}
+-                value={b.title}
+-                onChange={(e) => patchIfAllowed({ title: e.target.value })}
+-              />
+-            </Field>
+-            <Field label="Подзаголовок">
+-              <textarea
+-                className={inputBase}
+-                value={b.subtitle}
+-                onChange={(e) => patchIfAllowed({ subtitle: e.target.value })}
+-              />
+-            </Field>
+-            <div className="grid grid-cols-2 gap-2">
+-              <Field label="CTA текст">
+-                <input
+-                  className={inputBase}
+-                  value={b.ctaText ?? ""}
+-                  onChange={(e) => patchIfAllowed({ ctaText: e.target.value })}
+-                  placeholder="Напр. Открыть"
+-                />
+-              </Field>
+-              <Field label="CTA ссылка">
+-                <input
+-                  className={inputBase}
+-                  value={b.ctaLink ?? ""}
+-                  onChange={(e) => patchIfAllowed({ ctaLink: e.target.value })}
+-                  placeholder="#section или https://..."
+-                />
+-              </Field>
+-            </div>
+-          </>
+-        );
+-      }
++  if (type === "h1") {
++    const b = block as H1Block;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Текст">
++          <textarea className={inputBase + " min-h-[100px]"} value={b.text ?? ""} onChange={(e) => patch({ text: e.target.value })} disabled={locked} />
++        </Field>
++        <Field label="Выравнивание">
++          <Select
++            value={b.align ?? "left"}
++            onChange={(v) => patch({ align: v })}
++            disabled={locked}
++            options={[
++              { value: "left", label: "Слева" },
++              { value: "center", label: "Центр" },
++              { value: "right", label: "Справа" },
++            ]}
++          />
++        </Field>
++      </div>
++    );
++  }
+ 
+-      case "h1":
+-      case "p": {
+-        const b = block as PBlock;
+-        return (
+-          <>
+-            <Field label={block.type === "h1" ? "Текст H1" : "Текст"}>
+-              <textarea
+-                className={inputBase}
+-                value={(b as any).text ?? ""}
+-                onChange={(e) => patchIfAllowed({ text: e.target.value })}
+-              />
+-            </Field>
+-            <Field label="Выравнивание">
+-              <select
+-                className={inputBase}
+-                value={(b as any).align ?? "left"}
+-                onChange={(e) => patchIfAllowed({ align: e.target.value })}
+-              >
+-                <option value="left">left</option>
+-                <option value="center">center</option>
+-                <option value="right">right</option>
+-              </select>
+-            </Field>
+-          </>
+-        );
+-      }
++  if (type === "heading") {
++    const b = block as HeadingBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Текст">
++          <input className={inputBase} value={b.text ?? ""} onChange={(e) => patch({ text: e.target.value })} disabled={locked} />
++        </Field>
++        <div className="grid grid-cols-2 gap-2">
++          <Field label="Уровень">
++            <Select
++              value={(b.level ?? "h2") as any}
++              onChange={(v) => patch({ level: v })}
++              disabled={locked}
++              options={[
++                { value: "h2", label: "H2" },
++                { value: "h3", label: "H3" },
++                { value: "h4", label: "H4" },
++              ]}
++            />
++          </Field>
++          <Field label="Выравнивание">
++            <Select
++              value={b.align ?? "left"}
++              onChange={(v) => patch({ align: v })}
++              disabled={locked}
++              options={[
++                { value: "left", label: "Слева" },
++                { value: "center", label: "Центр" },
++                { value: "right", label: "Справа" },
++              ]}
++            />
++          </Field>
++        </div>
++      </div>
++    );
++  }
+ 
+-      case "heading": {
+-        const b = block as HeadingBlock;
+-        return (
+-          <>
+-            <Field label="Текст">
+-              <textarea
+-                className={inputBase}
+-                value={b.text ?? ""}
+-                onChange={(e) => patchIfAllowed({ text: e.target.value })}
+-              />
+-            </Field>
+-            <div className="grid grid-cols-2 gap-2">
+-              <Field label="Уровень">
+-                <select
+-                  className={inputBase}
+-                  value={b.level ?? "h2"}
+-                  onChange={(e) => patchIfAllowed({ level: e.target.value })}
+-                >
+-                  <option value="h2">H2</option>
+-                  <option value="h3">H3</option>
+-                  <option value="h4">H4</option>
+-                </select>
+-              </Field>
+-              <Field label="Выравнивание">
+-                <select
+-                  className={inputBase}
+-                  value={b.align ?? "left"}
+-                  onChange={(e) => patchIfAllowed({ align: e.target.value })}
+-                >
+-                  <option value="left">left</option>
+-                  <option value="center">center</option>
+-                  <option value="right">right</option>
+-                </select>
+-              </Field>
+-            </div>
+-          </>
+-        );
+-      }
++  if (type === "p") {
++    const b = block as PBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Текст">
++          <textarea className={inputBase + " min-h-[120px]"} value={b.text ?? ""} onChange={(e) => patch({ text: e.target.value })} disabled={locked} />
++        </Field>
++        <Field label="Выравнивание">
++          <Select
++            value={b.align ?? "left"}
++            onChange={(v) => patch({ align: v })}
++            disabled={locked}
++            options={[
++              { value: "left", label: "Слева" },
++              { value: "center", label: "Центр" },
++              { value: "right", label: "Справа" },
++            ]}
++          />
++        </Field>
++      </div>
++    );
++  }
+ 
+-      case "btn": {
+-        const b = block as BtnBlock;
+-        return (
+-          <>
+-            <Field label="Текст кнопки">
+-              <input
+-                className={inputBase}
+-                value={b.label}
+-                onChange={(e) => patchIfAllowed({ label: e.target.value })}
+-              />
+-            </Field>
+-            <Field label="Ссылка">
+-              <input
+-                className={inputBase}
+-                value={b.href}
+-                onChange={(e) => patchIfAllowed({ href: e.target.value })}
+-                placeholder="https://... или /path или #anchor"
+-              />
+-            </Field>
+-            <div className="grid grid-cols-2 gap-2">
+-              <Field label="Вариант">
+-                <select
+-                  className={inputBase}
+-                  value={b.variant ?? "primary"}
+-                  onChange={(e) => patchIfAllowed({ variant: e.target.value })}
+-                >
+-                  <option value="primary">primary</option>
+-                  <option value="secondary">secondary</option>
+-                  <option value="ghost">ghost</option>
+-                </select>
+-              </Field>
+-              <Field label="Выравнивание">
+-                <select
+-                  className={inputBase}
+-                  value={b.align ?? "left"}
+-                  onChange={(e) => patchIfAllowed({ align: e.target.value })}
+-                >
+-                  <option value="left">left</option>
+-                  <option value="center">center</option>
+-                  <option value="right">right</option>
+-                </select>
+-              </Field>
+-            </div>
+-          </>
+-        );
+-      }
++  if (type === "btn") {
++    const b = block as BtnBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Текст">
++          <input className={inputBase} value={b.label ?? ""} onChange={(e) => patch({ label: e.target.value })} disabled={locked} />
++        </Field>
++        <Field label="Ссылка">
++          <input className={inputBase} value={b.href ?? ""} onChange={(e) => patch({ href: e.target.value })} disabled={locked} placeholder="https://... или /page" />
++        </Field>
++        <div className="grid grid-cols-2 gap-2">
++          <Field label="Вариант">
++            <Select
++              value={b.variant ?? "primary"}
++              onChange={(v) => patch({ variant: v })}
++              disabled={locked}
++              options={[
++                { value: "primary", label: "Primary" },
++                { value: "secondary", label: "Secondary" },
++              ]}
++            />
++          </Field>
++          <Field label="Выравнивание">
++            <Select
++              value={b.align ?? "left"}
++              onChange={(v) => patch({ align: v })}
++              disabled={locked}
++              options={[
++                { value: "left", label: "Слева" },
++                { value: "center", label: "Центр" },
++                { value: "right", label: "Справа" },
++              ]}
++            />
++          </Field>
++        </div>
++      </div>
++    );
++  }
+ 
+-      case "img": {
+-        const b = block as ImgBlock;
+-        return (
+-          <>
+-            <Field label="CID / URL">
+-              <input
+-                className={inputBase}
+-                value={b.cid}
+-                onChange={(e) => patchIfAllowed({ cid: e.target.value })}
+-                placeholder="cid:... или https://..."
+-              />
+-            </Field>
+-            <Field label="Alt">
+-              <input
+-                className={inputBase}
+-                value={b.alt ?? ""}
+-                onChange={(e) => patchIfAllowed({ alt: e.target.value })}
+-              />
+-            </Field>
+-          </>
+-        );
+-      }
++  if (type === "img") {
++    const b = block as ImgBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="CID / URL">
++          <input
++            className={inputBase}
++            value={b.cid ?? ""}
++            onChange={(e) => patch({ cid: e.target.value })}
++            disabled={locked}
++            placeholder="cid:... или https://..."
++          />
++        </Field>
++        <Field label="Alt">
++          <input className={inputBase} value={b.alt ?? ""} onChange={(e) => patch({ alt: e.target.value })} disabled={locked} />
++        </Field>
++      </div>
++    );
++  }
+ 
+-      case "video": {
+-        const b = block as VideoBlock;
+-        return (
+-          <>
+-            <Field label="Video src">
+-              <input
+-                className={inputBase}
+-                value={b.src ?? ""}
+-                onChange={(e) => patchIfAllowed({ src: e.target.value })}
+-                placeholder="https://... / ipfs://..."
+-              />
+-            </Field>
+-            <Field label="Poster">
+-              <input
+-                className={inputBase}
+-                value={b.poster ?? ""}
+-                onChange={(e) => patchIfAllowed({ poster: e.target.value })}
+-              />
+-            </Field>
+-            <div className="flex flex-wrap gap-3">
+-              <label className="inline-flex items-center gap-2 text-sm text-white/80">
+-                <input
+-                  type="checkbox"
+-                  checked={Boolean(b.loop)}
+-                  onChange={(e) => patchIfAllowed({ loop: e.target.checked })}
+-                />
+-                loop
+-              </label>
+-              <label className="inline-flex items-center gap-2 text-sm text-white/80">
+-                <input
+-                  type="checkbox"
+-                  checked={Boolean(b.muted)}
+-                  onChange={(e) => patchIfAllowed({ muted: e.target.checked })}
+-                />
+-                muted
+-              </label>
+-            </div>
+-          </>
+-        );
+-      }
++  if (type === "video") {
++    const b = block as VideoBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Src">
++          <input className={inputBase} value={b.src ?? ""} onChange={(e) => patch({ src: e.target.value })} disabled={locked} placeholder="https://..." />
++        </Field>
++        <Field label="Poster">
++          <input className={inputBase} value={b.poster ?? ""} onChange={(e) => patch({ poster: e.target.value })} disabled={locked} placeholder="https://..." />
++        </Field>
++        <div className="flex gap-2">
++          <Field label="Loop">
++            <Toggle value={Boolean(b.loop)} onChange={(v) => patch({ loop: v })} disabled={locked} />
++          </Field>
++          <Field label="Muted">
++            <Toggle value={Boolean(b.muted)} onChange={(v) => patch({ muted: v })} disabled={locked} />
++          </Field>
++        </div>
++      </div>
++    );
++  }
+ 
+-      case "section": {
+-        const b = block as SectionBlock;
+-        return (
+-          <>
+-            <Field label="Заголовок секции">
+-              <input
+-                className={inputBase}
+-                value={b.title ?? ""}
+-                onChange={(e) => patchIfAllowed({ title: e.target.value })}
+-              />
+-            </Field>
+-            <Field label="Текст">
+-              <textarea
+-                className={inputBase}
+-                value={b.text ?? ""}
+-                onChange={(e) => patchIfAllowed({ text: e.target.value })}
+-              />
+-            </Field>
+-            <div className="grid grid-cols-2 gap-2">
+-              <Field label="Тема">
+-                <select
+-                  className={inputBase}
+-                  value={b.theme ?? "panel"}
+-                  onChange={(e) => patchIfAllowed({ theme: e.target.value })}
+-                >
+-                  <option value="panel">panel</option>
+-                  <option value="brand">brand</option>
+-                  <option value="plain">plain</option>
+-                </select>
+-              </Field>
+-              <Field label="Выравнивание">
+-                <select
+-                  className={inputBase}
+-                  value={b.align ?? "left"}
+-                  onChange={(e) => patchIfAllowed({ align: e.target.value })}
+-                >
+-                  <option value="left">left</option>
+-                  <option value="center">center</option>
+-                  <option value="right">right</option>
+-                </select>
+-              </Field>
+-            </div>
+-          </>
+-        );
+-      }
++  if (type === "section") {
++    const b = block as SectionBlock;
++    const lp = (b as any).layoutPreset;
++    const lpKey = Array.isArray(lp) ? lp.join("-") : "1";
++
++    const presets: Record<string, number[]> = {
++      "1": [1],
++      "1-1": [1, 1],
++      "2-1": [2, 1],
++      "1-2": [1, 2],
++      "1-1-1": [1, 1, 1],
++      "1-1-1-1": [1, 1, 1, 1],
++    };
++
++    ui = (
++      <div className="space-y-3">
++        <Field label="Заголовок секции">
++          <input className={inputBase} value={b.title ?? ""} onChange={(e) => patch({ title: e.target.value })} disabled={locked} />
++        </Field>
++        <Field label="Текст">
++          <textarea className={inputBase + " min-h-[80px]"} value={b.text ?? ""} onChange={(e) => patch({ text: e.target.value })} disabled={locked} />
++        </Field>
++
++        <div className="grid grid-cols-2 gap-2">
++          <Field label="Выравнивание">
++            <Select
++              value={b.align ?? "left"}
++              onChange={(v) => patch({ align: v })}
++              disabled={locked}
++              options={[
++                { value: "left", label: "Слева" },
++                { value: "center", label: "Центр" },
++                { value: "right", label: "Справа" },
++              ]}
++            />
++          </Field>
++          <Field label="Тема">
++            <Select
++              value={b.theme ?? "auto"}
++              onChange={(v) => patch({ theme: v })}
++              disabled={locked}
++              options={[
++                { value: "auto", label: "Auto" },
++                { value: "light", label: "Light" },
++                { value: "dark", label: "Dark" },
++              ]}
++            />
++          </Field>
++        </div>
+ 
+-      case "alert": {
+-        const b = block as AlertBlock;
+-        return (
+-          <>
+-            <Field label="Severity">
+-              <select
+-                className={inputBase}
+-                value={b.severity ?? "info"}
+-                onChange={(e) => patchIfAllowed({ severity: e.target.value })}
+-              >
+-                <option value="info">info</option>
+-                <option value="success">success</option>
+-                <option value="warning">warning</option>
+-                <option value="danger">danger</option>
+-              </select>
+-            </Field>
+-            <Field label="Заголовок">
+-              <input
+-                className={inputBase}
+-                value={b.title ?? ""}
+-                onChange={(e) => patchIfAllowed({ title: e.target.value })}
+-              />
+-            </Field>
+-            <Field label="Текст">
+-              <textarea
+-                className={inputBase}
+-                value={b.text ?? ""}
+-                onChange={(e) => patchIfAllowed({ text: e.target.value })}
+-              />
+-            </Field>
+-            <label className="inline-flex items-center gap-2 text-sm text-white/80">
+-              <input
+-                type="checkbox"
+-                checked={Boolean(b.dismissible)}
+-                onChange={(e) => patchIfAllowed({ dismissible: e.target.checked })}
+-              />
+-              dismissible
+-            </label>
+-          </>
+-        );
+-      }
++        <div className="grid grid-cols-2 gap-2">
++          <Field label="Паддинг">
++            <Select
++              value={b.pad ?? "md"}
++              onChange={(v) => patch({ pad: v })}
++              disabled={locked}
++              options={[
++                { value: "sm", label: "S" },
++                { value: "md", label: "M" },
++                { value: "lg", label: "L" },
++              ]}
++            />
++          </Field>
++          <Field label="Колонки">
++            <Select
++              value={lpKey}
++              onChange={(v) => patch({ layoutPreset: presets[v] ?? [1] })}
++              disabled={locked}
++              options={[
++                { value: "1", label: "1" },
++                { value: "1-1", label: "2 (1/1)" },
++                { value: "2-1", label: "2 (2/1)" },
++                { value: "1-2", label: "2 (1/2)" },
++                { value: "1-1-1", label: "3" },
++                { value: "1-1-1-1", label: "4" },
++              ]}
++            />
++          </Field>
++        </div>
+ 
+-      case "html": {
+-        const b = block as HtmlBlock;
+-        return (
+-          <>
+-            <Field label="HTML">
+-              <textarea
+-                className={`${inputBase} font-mono text-xs min-h-[180px]`}
+-                value={b.html}
+-                onChange={(e) => patchIfAllowed({ html: e.target.value })}
+-              />
+-            </Field>
+-          </>
+-        );
+-      }
++        <Field label="Фон (CSS)">
++          <input
++            className={inputBase}
++            value={b.bg ?? ""}
++            onChange={(e) => patch({ bg: e.target.value })}
++            disabled={locked}
++            placeholder="#ffffff или linear-gradient(...)"
++          />
++        </Field>
++      </div>
++    );
++  }
+ 
+-      case "code": {
+-        const b = block as CodeBlock;
+-        return (
+-          <>
+-            <Field label="Язык">
+-              <input
+-                className={inputBase}
+-                value={b.lang ?? ""}
+-                onChange={(e) => patchIfAllowed({ lang: e.target.value })}
+-                placeholder="ts, js, bash, ..."
+-              />
+-            </Field>
+-            <Field label="Код">
+-              <textarea
+-                className={`${inputBase} font-mono text-xs min-h-[220px]`}
+-                value={b.code}
+-                onChange={(e) => patchIfAllowed({ code: e.target.value })}
+-              />
+-            </Field>
+-          </>
+-        );
+-      }
++  if (type === "alert") {
++    const b = block as AlertBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Вариант">
++          <Select
++            value={b.variant ?? "info"}
++            onChange={(v) => patch({ variant: v })}
++            disabled={locked}
++            options={[
++              { value: "info", label: "Info" },
++              { value: "success", label: "Success" },
++              { value: "warning", label: "Warning" },
++              { value: "danger", label: "Danger" },
++            ]}
++          />
++        </Field>
++        <Field label="Заголовок">
++          <input className={inputBase} value={b.title ?? ""} onChange={(e) => patch({ title: e.target.value })} disabled={locked} />
++        </Field>
++        <Field label="Текст">
++          <textarea className={inputBase + " min-h-[90px]"} value={b.text ?? ""} onChange={(e) => patch({ text: e.target.value })} disabled={locked} />
++        </Field>
++      </div>
++    );
++  }
+ 
+-      case "rating": {
+-        const b = block as RatingBlock;
+-        return (
+-          <>
+-            <div className="grid grid-cols-2 gap-2">
+-              <Field label="Value">
+-                <input
+-                  className={inputBase}
+-                  type="number"
+-                  min={0}
+-                  step={0.5}
+-                  value={b.value ?? 0}
+-                  onChange={(e) => patchIfAllowed({ value: toNum(e.target.value) ?? 0 })}
+-                />
+-              </Field>
+-              <Field label="Max">
+-                <input
+-                  className={inputBase}
+-                  type="number"
+-                  min={1}
+-                  step={1}
+-                  value={b.max ?? 5}
+-                  onChange={(e) => patchIfAllowed({ max: toNum(e.target.value) ?? 5 })}
+-                />
+-              </Field>
+-            </div>
+-            <Field label="Label">
+-              <input
+-                className={inputBase}
+-                value={b.label ?? ""}
+-                onChange={(e) => patchIfAllowed({ label: e.target.value })}
+-              />
+-            </Field>
+-          </>
+-        );
+-      }
++  if (type === "html") {
++    const b = block as HtmlBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="HTML (Safe)">
++          <textarea className={inputBase + " min-h-[200px] font-mono text-xs"} value={b.html ?? ""} onChange={(e) => patch({ html: e.target.value })} disabled={locked} />
++        </Field>
++        <div className="text-xs text-white/50">
++          Скрипты/inline-event handlers будут удалены (safe-санация при экспорте).
++        </div>
++      </div>
++    );
++  }
+ 
+-      case "progress": {
+-        const b = block as ProgressBlock;
+-        return (
+-          <>
+-            <Field label="Value">
+-              <input
+-                className={inputBase}
+-                type="number"
+-                min={0}
+-                max={100}
+-                step={1}
+-                value={b.value ?? 0}
+-                onChange={(e) => patchIfAllowed({ value: toNum(e.target.value) ?? 0 })}
+-              />
+-            </Field>
+-            <Field label="Label">
+-              <input
+-                className={inputBase}
+-                value={b.label ?? ""}
+-                onChange={(e) => patchIfAllowed({ label: e.target.value })}
+-              />
+-            </Field>
+-            <label className="inline-flex items-center gap-2 text-sm text-white/80">
+-              <input
+-                type="checkbox"
+-                checked={Boolean(b.showPercent)}
+-                onChange={(e) => patchIfAllowed({ showPercent: e.target.checked })}
+-              />
+-              showPercent
+-            </label>
+-          </>
+-        );
+-      }
++  if (type === "code") {
++    const b = block as CodeBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Язык">
++          <input className={inputBase} value={b.lang ?? ""} onChange={(e) => patch({ lang: e.target.value })} disabled={locked} placeholder="js / ts / bash ..." />
++        </Field>
++        <Field label="Код">
++          <textarea className={inputBase + " min-h-[200px] font-mono text-xs"} value={b.code ?? ""} onChange={(e) => patch({ code: e.target.value })} disabled={locked} />
++        </Field>
++      </div>
++    );
++  }
+ 
+-      case "countdown": {
+-        const b = block as CountdownBlock;
+-        return (
+-          <>
+-            <Field label="Target (ISO)">
+-              <input
+-                className={inputBase}
+-                value={b.target}
+-                onChange={(e) => patchIfAllowed({ target: e.target.value })}
+-                placeholder="2026-12-31T23:59:59Z"
+-              />
+-            </Field>
+-          </>
+-        );
+-      }
++  if (type === "counter") {
++    const b = block as CounterBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Значение">
++          <input
++            className={inputBase}
++            value={String(b.value ?? 0)}
++            onChange={(e) => patch({ value: Number(e.target.value) })}
++            disabled={locked}
++            type="number"
++          />
++        </Field>
++        <div className="grid grid-cols-2 gap-2">
++          <Field label="Префикс">
++            <input className={inputBase} value={b.prefix ?? ""} onChange={(e) => patch({ prefix: e.target.value })} disabled={locked} />
++          </Field>
++          <Field label="Суффикс">
++            <input className={inputBase} value={b.suffix ?? ""} onChange={(e) => patch({ suffix: e.target.value })} disabled={locked} />
++          </Field>
++        </div>
++      </div>
++    );
++  }
+ 
+-      case "map": {
+-        const b = block as MapBlock;
+-        return (
+-          <>
+-            <div className="grid grid-cols-2 gap-2">
+-              <Field label="Lat">
+-                <input
+-                  className={inputBase}
+-                  type="number"
+-                  step={0.000001}
+-                  value={b.lat}
+-                  onChange={(e) => patchIfAllowed({ lat: toNum(e.target.value) ?? 0 })}
+-                />
+-              </Field>
+-              <Field label="Lon">
+-                <input
+-                  className={inputBase}
+-                  type="number"
+-                  step={0.000001}
+-                  value={b.lon}
+-                  onChange={(e) => patchIfAllowed({ lon: toNum(e.target.value) ?? 0 })}
+-                />
+-              </Field>
+-            </div>
+-            <div className="grid grid-cols-2 gap-2">
+-              <Field label="Zoom">
+-                <input
+-                  className={inputBase}
+-                  type="number"
+-                  min={1}
+-                  max={20}
+-                  step={1}
+-                  value={b.zoom ?? 12}
+-                  onChange={(e) => patchIfAllowed({ zoom: toNum(e.target.value) ?? 12 })}
+-                />
+-              </Field>
+-              <Field label="Style">
+-                <select
+-                  className={inputBase}
+-                  value={b.style ?? "auto"}
+-                  onChange={(e) => patchIfAllowed({ style: e.target.value })}
+-                >
+-                  <option value="auto">auto</option>
+-                  <option value="light">light</option>
+-                  <option value="dark">dark</option>
+-                </select>
+-              </Field>
+-            </div>
+-            <Field label="Label">
+-              <input
+-                className={inputBase}
+-                value={b.label ?? ""}
+-                onChange={(e) => patchIfAllowed({ label: e.target.value })}
+-              />
+-            </Field>
+-          </>
+-        );
+-      }
++  if (type === "progress") {
++    const b = block as ProgressBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Подпись">
++          <input className={inputBase} value={b.label ?? ""} onChange={(e) => patch({ label: e.target.value })} disabled={locked} />
++        </Field>
++        <Field label="Значение (0..100)">
++          <input
++            className={inputBase}
++            value={String(b.value ?? 0)}
++            onChange={(e) => patch({ value: Math.max(0, Math.min(100, Number(e.target.value))) })}
++            disabled={locked}
++            type="number"
++          />
++        </Field>
++      </div>
++    );
++  }
+ 
+-      // Для остальных блоков — быстрый JSON.
+-      default:
+-        return (
+-          <div className="text-sm text-white/70">
+-            Для этого блока нет отдельной формы. Используйте редактор JSON ниже.
+-          </div>
+-        );
+-    }
+-  })();
++  if (type === "rating") {
++    const b = block as RatingBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Рейтинг">
++          <input
++            className={inputBase}
++            value={String(b.value ?? 5)}
++            onChange={(e) => patch({ value: Math.max(0, Math.min(5, Number(e.target.value))) })}
++            disabled={locked}
++            type="number"
++          />
++        </Field>
++        <Field label="Максимум">
++          <input
++            className={inputBase}
++            value={String(b.max ?? 5)}
++            onChange={(e) => patch({ max: Math.max(1, Math.min(10, Number(e.target.value))) })}
++            disabled={locked}
++            type="number"
++          />
++        </Field>
++      </div>
++    );
++  }
+ 
+-  return (
+-    <div className="grid gap-3">
+-      <div className="rounded-xl border border-[#2a2f45] bg-[#0c0f1a] p-3 grid gap-3">
+-        <div className="text-xs uppercase tracking-wide text-[#9aa3b2]">Контент</div>
+-        {locked && (
+-          <div className="text-xs text-[#ffb4b4]">
+-            Блок <b>locked</b> — контент/стили не применяются. Снимите lock в «Advanced».
+-          </div>
+-        )}
+-        {content}
++  if (type === "map") {
++    const b = block as MapBlock;
++    ui = (
++      <div className="space-y-3">
++        <div className="grid grid-cols-2 gap-2">
++          <Field label="Lat">
++            <input
++              className={inputBase}
++              value={String(b.lat ?? 0)}
++              onChange={(e) => patch({ lat: toNum(e.target.value) ?? 0 })}
++              disabled={locked}
++            />
++          </Field>
++          <Field label="Lon">
++            <input
++              className={inputBase}
++              value={String(b.lon ?? 0)}
++              onChange={(e) => patch({ lon: toNum(e.target.value) ?? 0 })}
++              disabled={locked}
++            />
++          </Field>
++        </div>
++        <Field label="Масштаб">
++          <input
++            className={inputBase}
++            value={String(b.zoom ?? 12)}
++            onChange={(e) => patch({ zoom: Math.max(1, Math.min(20, Number(e.target.value))) })}
++            disabled={locked}
++            type="number"
++          />
++        </Field>
+       </div>
++    );
++  }
++
++  if (type === "countdown") {
++    const b = block as CountdownBlock;
++    ui = (
++      <div className="space-y-3">
++        <Field label="Дата (ISO)">
++          <input className={inputBase} value={b.target ?? ""} onChange={(e) => patch({ target: e.target.value })} disabled={locked} placeholder="2026-01-01T00:00:00Z" />
++        </Field>
++      </div>
++    );
++  }
++
++  // Фолбэк
++  if (!ui) {
++    ui = (
++      <div className="text-sm text-white/60">
++        Для этого виджета пока нет отдельной формы. Используйте JSON ниже.
++      </div>
++    );
++  }
++
++  return (
++    <div className="space-y-4">
++      {locked && (
++        <div className="rounded-xl border border-[#3b3f55] bg-[#141834] p-3 text-xs text-white/70">
++          🔒 Блок заблокирован. Снимите блокировку в канвасе/навигаторе, чтобы редактировать.
++        </div>
++      )}
++
++      {ui}
+ 
+-      <JsonEditor block={block} onPatch={(p) => patchIfAllowed(p)} />
++      <JsonEditor block={block} onPatch={(p) => patch(p)} disabled={locked} />
+     </div>
+   );
+ }
+diff -ruN ui/altnet-ui/src/screens/SiteBuilder/palette/Palette.tsx ui/altnet-ui/src/screens/SiteBuilder/palette/Palette.tsx
+--- ui/altnet-ui/src/screens/SiteBuilder/palette/Palette.tsx	2026-02-22 20:32:41.000000000 +0000
++++ ui/altnet-ui/src/screens/SiteBuilder/palette/Palette.tsx	2026-02-23 00:29:18.509295996 +0000
+@@ -6,6 +6,8 @@
+ 
+ type Props = { onInsert: (type: InsertChoice) => void; query?: string };
+ 
++const DND_MIME = "application/x-altnet-block";
++
+ function Group({ title, children }: { title: string; children: React.ReactNode }) {
+   return (
+     <div className="rounded-xl border border-[#1f2751] bg-[#0b1022] p-2">
+@@ -21,16 +23,36 @@
+   disabled,
+   onClick,
+   hint,
++  dragType,
+ }: {
+   label: string;
+   icon: string;
+   disabled?: boolean;
+   onClick?: () => void;
+   hint?: string;
++  dragType?: InsertChoice;
+ }) {
++  const canDrag = !disabled && !!dragType;
++
+   return (
+     <button
+-      className={`px-2 py-1 rounded-lg text-sm border ${disabled ? "cursor-not-allowed opacity-50 border-[#1f2751] bg-[#0b1022]" : "bg-[#101735] hover:bg-[#121b3f] border-[#1f2751]"} text-[#e6e9f4] inline-flex items-center gap-2`}
++      draggable={canDrag}
++      onDragStart={(e) => {
++        if (!canDrag) return;
++        try {
++          e.dataTransfer.setData(DND_MIME, JSON.stringify({ type: dragType }));
++          e.dataTransfer.effectAllowed = "copy";
++        } catch {
++          // ignore
++        }
++      }}
++      className={
++        `px-2 py-1 rounded-lg text-sm border ` +
++        (disabled
++          ? "cursor-not-allowed opacity-50 border-[#1f2751] bg-[#0b1022]"
++          : "bg-[#101735] hover:bg-[#121b3f] border-[#1f2751] cursor-grab active:cursor-grabbing") +
++        " text-[#e6e9f4] inline-flex items-center gap-2"
++      }
+       onClick={disabled ? undefined : onClick}
+       title={hint}
+       aria-disabled={disabled}
+@@ -45,6 +67,7 @@
+ export default function Palette({ onInsert, query }: Props) {
+   const groups = React.useMemo(() => groupsWithItems(), []);
+   const q = (query ?? "").trim().toLowerCase();
++
+   return (
+     <div className="grid gap-2">
+       {groups
+@@ -77,6 +100,7 @@
+                   icon={m.icon}
+                   onClick={() => onInsert(m.type)}
+                   hint={m.description}
++                  dragType={m.type}
+                 />
+               )
+             )}
+diff -ruN ui/altnet-ui/src/screens/SiteBuilder/types.ts ui/altnet-ui/src/screens/SiteBuilder/types.ts
+--- ui/altnet-ui/src/screens/SiteBuilder/types.ts	2026-02-22 17:17:40.000000000 +0000
++++ ui/altnet-ui/src/screens/SiteBuilder/types.ts	2026-02-23 01:14:27.352623274 +0000
+@@ -1,649 +1,657 @@
+-// src/screens/SiteBuilder/types.ts
+-// Типы документа и блоков Конструктора (извлечено из SiteBuilder.tsx)
+-// Никакой логики — только описательные интерфейсы/типы.
+-
+-export type BlockType =
+-  | "hero" | "h1" | "heading" | "p" | "btn" | "img" | "divider" | "spacer"
+-  | "cols2" | "section" | "grid"
+-  | "icon" | "iconlist" | "alert" | "html" | "code"
+-  | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
+-  | "counter" | "progress" | "breadcrumbs" | "pagination" | "social"
+-  | "iconbox" | "imagebox" 
+-  | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
+-  | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
+-  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
+-  | "container" | "sidebar" | "offcanvas" | "shortcode" | "pricetable";
+-
+-export type ColsRatio = "5-7" | "6-6" | "7-5";
+-
+-export type Align = "left" | "center" | "right";
+-
+-export type HeroBlock = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  type: "hero";
+-  title: string;
+-  subtitle?: string;
+-  ctaText?: string;
+-  ctaLink?: string;
+-  // Расширения:
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: {
+-    desktop?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-    tablet?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-    mobile?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  };
+-};
+-
+-export type H1Block = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  align?: Align;
+-  type: "h1";
+-  text: string;
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-};
+-
+-export type HeadingBlock = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  type: "heading";
+-  text: string;
+-  level?: "h2" | "h3" | "h4";
+-  align?: Align;
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-};
+-
+-export type PBlock = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  align?: Align;
+-  type: "p";
+-  text: string;
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-};
+-
+-export type ImgBlock = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  type: "img";
+-  cid: string; // altfs://CID, ipfs://, http(s) или data:
+-  alt?: string;
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-};
+-
+-export type BtnBlock = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  type: "btn";
+-  label: string;
+-  href: string;
+-  variant?: "primary" | "secondary";
+-  align?: Align;
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-};
+-
+-export type Cols2Block = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  type: "cols2";
+-  title: string;
+-  text: string;
+-  img: string; // CID/URL
+-  alt: string;
+-  ratio: ColsRatio;
+-  reverse?: boolean;
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-};
+-
+-export type SpacerBlock = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  type: "spacer";
+-  size?: "xs" | "sm" | "md" | "lg" | "xl";
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-};
+-
+-export type DividerBlock = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  type: "divider";
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-};
+-
+-export type SectionBlock = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  type: "section";
+-  title?: string;
+-  text?: string;
+-  align?: Align;
+-  theme?: "auto" | "light" | "dark";
+-  pad?: "sm" | "md" | "lg";
+-  bg?: "none" | "subtle" | "card" | "accent";
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-  layoutPreset?: FlexPreset | GridPreset;
+-};
+-
+-export type GridItem = { id: string; src: string; alt?: string; caption?: string };
+-
+-export type GridBlock = {
+-  id: string;
+-  hidden?: boolean;
+-  locked?: boolean;
+-  type: "grid";
+-  cols: 1 | 2 | 3 | 4;
+-  items: GridItem[];
+-  anchorId?: string;
+-  className?: string;
+-  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
+-  styleByBp?: HeroBlock["styleByBp"];
+-  layoutPreset?: FlexPreset | GridPreset;
+-};
+-
+-// ── B6: лёгкие контент-блоки ─────────────────────────────────────────────────
+-export type IconName = "star" | "check" | "heart" | "shield" | "alert";
+-
+-export type IconBlock = {
+-  id: string;
+-  type: "icon";
+-  name: IconName;
+-  size?: "sm" | "md" | "lg" | "xl"; // 16 / 24 / 32 / 48
+-  color?: string; // tailwind-класс цвета текста, напр. "text-[#2a3b8f]"
+-};
+-
+-export type IconListVariant = "dot" | "check" | "star" | "custom";
+-export type IconListSize = "sm" | "md" | "lg";
+-export type IconListAlign = "start" | "center" | "end";
+-export type IconListItem = { id: string; label: string; href?: string; description?: string; icon?: string };
+-
+-export type IconListBlock = {
+-  id: string;
+-  type: "iconlist";
+-  items: IconListItem[];
+-  variant?: IconListVariant;       // dot|check|star|custom
+-  size?: IconListSize;             // sm|md|lg
+-  gap?: IconListSize;              // sm|md|lg
+-  align?: IconListAlign;           // start|center|end
+-};
+-
+-export type AlertVariant = "info" | "success" | "warning" | "danger";
+-
+-export type AlertBlock = {
+-  id: string;
+-  type: "alert";
+-  variant: AlertVariant;
+-  title?: string;
+-  text?: string;
+-};
+-
+-export type HtmlBlock = {
+-  id: string;
+-  type: "html";
+-  html: string; // будет жёстко санитизироваться при рендере
+-};
+-
+-export type CodeBlock = {
+-  id: string;
+-  type: "code";
+-  code: string;
+-  lang?: string;
+-};
+-
+-// ── B6.c: вкладки/аккордеон/цитата/CTA/рейтинг ───────────────────────────────
+-export type TabsVariant = "underline" | "boxed" | "pill";
+-export type TabsSize = "sm" | "md" | "lg";
+-export type TabsAlign = "start" | "center" | "end";
+-export type TabsOrientation = "horizontal" | "vertical";
+-export type TabItem = { id: string; label: string; content?: string; disabled?: boolean };
+-
+-export type TabsBlock = {
+-  id: string;
+-  type: "tabs";
+-  tabs: TabItem[];                 // прежнее поле tabs — оставляем
+-  active?: number;                 // индекс 0..N-1
+-  variant?: TabsVariant;           // underline|boxed|pill
+-  size?: TabsSize;                 // sm|md|lg
+-  align?: TabsAlign;               // start|center|end
+-  orientation?: TabsOrientation;   // horizontal|vertical
+-};
+-
+-export type AccordionVariant = "ghost" | "filled" | "outline";
+-export type AccordionSize = "sm" | "md" | "lg";
+-export type AccordionItem = { id: string; title: string; content?: string; open?: boolean };
+-
+-export type AccordionBlock = {
+-  id: string;
+-  type: "accordion";
+-  items: AccordionItem[];          // было items — не ломаем
+-  allowMultiple?: boolean;         // можно открывать несколько
+-  allowToggle?: boolean;           // можно закрыть последний открытый
+-  variant?: AccordionVariant;      // ghost|filled|outline
+-  size?: AccordionSize;            // sm|md|lg
+-};
+-
+-export type BlockquoteBlock = {
+-  id: string;
+-  type: "blockquote";
+-  text: string;
+-  cite?: string;
+-};
+-
+-export type CtaVariant = "primary" | "secondary" | "outline" | "ghost";
+-export type CtaAlign = "start" | "center" | "end";
+-export type CtaEmphasis = "none" | "panel" | "brand";
+-
+-export type CtaBlock = {
+-  id: string;
+-  type: "cta";
+-  title?: string;
+-  text?: string;
+-  btnLabel?: string;
+-  btnHref?: string;
+-  variant?: CtaVariant;            // стиль кнопки
+-  align?: CtaAlign;                // выравнивание
+-  emphasis?: CtaEmphasis;          // фон/акцент
+-};
+-
+-export type RatingBlock = {
+-  id: string;
+-  type: "rating";
+-  value: number; // 0..max
+-  max?: number; // по умолчанию 5
+-  readonly?: boolean; // в предпросмотре можно изменять, если false
+-};
+-
+-// ── B6.d: простые контент/навигац. блоки ─────────────────────────────────────
+-export type CounterBlock = {
+-  id: string;
+-  type: "counter";
+-  value: number;            // текущее значение
+-  prefix?: string;          // например "≈"
+-  suffix?: string;          // например "+"
+-};
+-
+-export type ProgressBlock = {
+-  id: string;
+-  type: "progress";
+-  value: number;            // 0..100
+-  label?: string;
+-};
+-
+-export type Crumb = { id: string; label: string; href?: string };
+-export type CrumbItem = { id: string; label: string; href?: string };
+-export type BreadcrumbsSize = "sm" | "md" | "lg";
+-export type BreadcrumbsSeparator = "/" | "›" | "»";
+-export type BreadcrumbsBlock = {
+-  id: string;
+-  type: "breadcrumbs";
+-  items: CrumbItem[];             // последний — текущая страница (без href)
+-  size?: BreadcrumbsSize;
+-  separator?: BreadcrumbsSeparator;
+-  ariaLabel?: string;
+-};
+-
+-export type PaginationSize = "sm" | "md" | "lg";
+-export type PaginationBlock = {
+-  id: string;
+-  type: "pagination";
+-  current: number;                // 1..total
+-  total: number;                  // >=1
+-  baseHref?: string;              // например "/blog?page="
+-  size?: PaginationSize;
+-  siblings?: number;              // сколько соседей вокруг current
+-  boundary?: number;              // сколько страниц с краёв (1..N и ... N-1..N)
+-  ariaLabel?: string;
+-};
+-
+-export type SocialItem = { id: string; label: string; href: string };
+-export type SocialBlock = {
+-  id: string;
+-  type: "social";
+-  items: SocialItem[];
+-};
+-
+-export type IconBoxBlock = {
+-  id: string;
+-  type: "iconbox";
+-  icon: IconName;
+-  title: string;
+-  text?: string;
+-};
+-
+-export type ImageBoxBlock = {
+-  id: string;
+-  type: "imagebox";
+-  src?: string;     // url или cid
+-  alt?: string;
+-  title?: string;
+-  text?: string;
+-};
+-
+-// ── B6.e: price/testimonials/share/tracker/anchor/toc ────────────────────────
+-export type PriceItem = { id: string; title: string; price: string; desc?: string };
+-export type PriceListBlock = {
+-  id: string;
+-  type: "pricelist";
+-  items: PriceItem[];
+-};
+-
+-export type TestimonialItem = { id: string; author: string; text: string; role?: string };
+-export type TestimonialsBlock = {
+-  id: string;
+-  type: "testimonials";
+-  items: TestimonialItem[];
+-};
+-
+-export type ShareNetwork = "copy" | "telegram" | "vk" | "twitter" | "facebook";
+-export type ShareBlock = {
+-  id: string;
+-  type: "share";
+-  url?: string;                // если не задан — берём location.href в рантайме (в SafePreview не будет доступа, поэтому опционально)
+-  networks: ShareNetwork[];
+-};
+-
+-export type ProgressStep = { id: string; label: string };
+-export type ProgressTrackerBlock = {
+-  id: string;
+-  type: "progresstracker";
+-  steps: ProgressStep[];
+-  current: number;            // индекс 0..N-1
+-};
+-
+-export type AnchorBlock = {
+-  id: string;
+-  type: "anchor";
+-  name: string;               // якорь (id) для навигации, только [a-z0-9-_]
+-  label?: string;             // человекочитаемое
+-};
+-
+-export type TocItem = { id: string; label: string; href: string }; // href= "#id"
+-export type TocBlock = {
+-  id: string;
+-  type: "toc";
+-  items: TocItem[];          // пока ручной список; авто-скан добавим позже
+-};
+-
+-// ── B6.f: video/gallery/carousel/countdown/menu/search/contentnav ────────────
+-export type VideoBlock = {
+-  id: string;
+-  type: "video";
+-  src?: string;       // https:, ipfs:, data: — санитизируем
+-  poster?: string;
+-  loop?: boolean;
+-  muted?: boolean;
+-};
+-
+-export type GalleryItem = { id: string; src: string; alt?: string };
+-export type GalleryBlock = {
+-  id: string;
+-  type: "gallery";
+-  cols?: 2 | 3 | 4;
+-  items: GalleryItem[];
+-};
+-
+-export type CarouselSlide = { id: string; src: string; alt?: string; caption?: string };
+-export type CarouselBlock = {
+-  id: string;
+-  type: "carousel";
+-  slides: CarouselSlide[];
+-  initial?: number;
+-};
+-
+-export type CountdownBlock = {
+-  id: string;
+-  type: "countdown";
+-  target: string;  // ISO-дата/время
+-};
+-
+-export type MenuItem = { id: string; label: string; href: string; children?: MenuItem[] };
+-export type MenuOrientation = "horizontal" | "vertical";
+-export type MenuBlock = {
+-  id: string;
+-  type: "menu";
+-  items: MenuItem[];
+-  activeHref?: string;
+-  ariaLabel?: string;
+-  orientation?: MenuOrientation;
+-};
+-
+-export type SearchBlock = {
+-  id: string;
+-  type: "search";
+-  placeholder?: string;
+-  action?: string; // по умолчанию '#'
+-  method?: "GET" | "POST";
+-};
+-
+-export type ContentNavItem = { id: string; label: string; href: string }; // href="#id"
+-export type ContentNavBlock = {
+-  id: string;
+-  type: "contentnav";
+-  items: ContentNavItem[];
+-  orientation?: MenuOrientation;
+-  spy?: boolean;                  // включить scrollspy
+-  spyOffset?: number;             // отступ для расчёта видимости (px)
+-  activeHref?: string;            // текущий активный якорь
+-  ariaLabel?: string;             // подпись для nav
+-};
+-
+-// ── B6.g: map/lottie/mediacarousel/slides/videoplaylist/hotspot ──────────────
+-export type MapBlock = {
+-  id: string;
+-  type: "map";
+-  lat: number;
+-  lon: number;
+-  zoom?: number;                 // 1..20
+-  label?: string;
+-  style?: "auto" | "light" | "dark";
+-};
+-
+-export type LottieBlock = {
+-  id: string;
+-  type: "lottie";
+-  src?: string;                  // ссылка на .json (без внешних скриптов)
+-  autoplay?: boolean;
+-  loop?: boolean;
+-  poster?: string;               // картинка-заглушка
+-  caption?: string;
+-};
+-
+-export type MediaSlide = { id: string; kind: "img" | "video"; src: string; alt?: string; caption?: string };
+-export type MediaCarouselBlock = {
+-  id: string;
+-  type: "mediacarousel";
+-  slides: MediaSlide[];
+-  initial?: number;
+-};
+-
+-export type TextSlide = { id: string; title?: string; text?: string; ctaLabel?: string; ctaHref?: string };
+-export type SlidesBlock = {
+-  id: string;
+-  type: "slides";
+-  slides: TextSlide[];
+-  initial?: number;
+-};
+-
+-export type VideoItem = { id: string; src: string; title?: string; poster?: string };
+-export type VideoPlaylistBlock = {
+-  id: string;
+-  type: "videoplaylist";
+-  items: VideoItem[];
+-  initial?: number;
+-};
+-
+-export type HotspotMarker = { id: string; x: number; y: number; label?: string; href?: string }; // x/y — проценты 0..100
+-export type HotspotBlock = {
+-  id: string;
+-  type: "hotspot";
+-  src: string;
+-  alt?: string;
+-  markers: HotspotMarker[];
+-};
+-
+-// ── B6.h: layout container / sidebar / offcanvas ─────────────────────────────
+-export type ContainerWidth = "sm" | "md" | "lg" | "xl" | "full";
+-export type ContainerPadding = "none" | "sm" | "md" | "lg";
+-export type ContainerBg = "none" | "panel" | "brand";
+-
+-export type ContainerBlock = {
+-  id: string;
+-  type: "container";
+-  width?: ContainerWidth;     // по умолчанию md
+-  padding?: ContainerPadding; // по умолчанию md
+-  bg?: ContainerBg;           // фон: none|panel|brand
+-  border?: boolean;           // рамка
+-  rounded?: boolean;          // скругления
+-  note?: string;              // подпись/описание
+-};
+-
+-export type SidebarItem = { id: string; label: string; href: string };
+-export type SidebarSide = "left" | "right";
+-export type SidebarBlock = {
+-  id: string;
+-  type: "sidebar";
+-  side?: SidebarSide;         // left/right (для предпросмотра — оформление)
+-  width?: number;             // px, по умолчанию 260
+-  items: SidebarItem[];       // пункты навигации
+-  title?: string;
+-};
+-
+-export type OffcanvasSide = "left" | "right";
+-export type OffcanvasBlock = {
+-  id: string;
+-  type: "offcanvas";
+-  side?: OffcanvasSide;       // слева/справа
+-  width?: number;             // px, по умолчанию 320
+-  title?: string;
+-  body?: string;              // текст-заглушка (пока без вложенных блоков)
+-};
+-
+-// ── B6.k: новые блоки ─────────────────────────────────────────────────────────
+-export type ShortcodeBlock = {
+-  id: string;
+-  type: "shortcode";
+-  code: string; // например: [youtube id="dQw4w9WgXcQ"] или [soundcloud url="https://soundcloud.com/..."]
+-  title?: string;
+-};
+-
+-export type PriceTableFeature = { id: string; label: string; included?: boolean };
+-export type PriceTablePlan = {
+-  id: string;
+-  name: string;
+-  price: string;
+-  period?: string;    // /mo, /yr
+-  ctaLabel?: string;
+-  ctaHref?: string;
+-  popular?: boolean;
+-  features?: PriceTableFeature[];
+-};
+-export type PriceTableBlock = {
+-  id: string;
+-  type: "pricetable";
+-  plans: PriceTablePlan[];
+-};
+-
+-export type Block =
+-  | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock
+-  | DividerBlock | SpacerBlock | Cols2Block | SectionBlock | GridBlock
+-  | IconBlock | IconListBlock | AlertBlock | HtmlBlock | CodeBlock
+-  | TabsBlock | AccordionBlock | BlockquoteBlock | CtaBlock | RatingBlock
+-  | CounterBlock | ProgressBlock | BreadcrumbsBlock | PaginationBlock | SocialBlock
+-  | IconBoxBlock | ImageBoxBlock | PriceListBlock | TestimonialsBlock | ShareBlock
+-  | ProgressTrackerBlock | AnchorBlock | TocBlock
+-  | VideoBlock | GalleryBlock | CarouselBlock | CountdownBlock | MenuBlock | SearchBlock | ContentNavBlock
+-  | MapBlock | LottieBlock | MediaCarouselBlock | SlidesBlock | VideoPlaylistBlock | HotspotBlock
+-  | ContainerBlock | SidebarBlock | OffcanvasBlock | ShortcodeBlock | PriceTableBlock;
+-
+-// ─────────────────────────────────────────────
+-// Пресеты FLEX (12 вариантов, как в Elementor)
+-// ─────────────────────────────────────────────
+-
+-export type FlexPreset =
+-  | "1col"            // 100%
+-  | "2col-equal"      // 50 / 50
+-  | "2col-wide-left"  // 66 / 33
+-  | "2col-wide-right" // 33 / 66
+-  | "3col-equal"      // 33 / 33 / 33
+-  | "3col-wide-center"
+-  | "4col"
+-  | "5col"
+-  | "6col"
+-  | "hero-left"
+-  | "hero-right"
+-  | "hero-center";
+-
+-// ─────────────────────────────────────────────
+-// Пресеты GRID (6 вариантов)
+-// ─────────────────────────────────────────────
+-export type GridPreset =
+-  | "2x2"
+-  | "3x3"
+-  | "4x4"
+-  | "2x3"
+-  | "3x2"
+-  | "1x3";
+-
+-// ── C1.b: Респонсив-стили для блоков ───────────────────────────────────────────
+-export type Device = "desktop" | "tablet" | "mobile";
+-
+-export type ResponsiveStyle = Partial<
+-  Record<Device, {
+-    padding?: string; // например: "16px 24px" или "1rem"
+-    margin?: string;  // например: "0 auto" или "24px 0"
+-    radius?: string;  // например: "12px" или "0.75rem"
+-  }>
+->;
+-
+-/** Утилита, если захочешь сузить типизацию блока в пропсах */
+-export type WithStyle = { style?: ResponsiveStyle };
+-  
+-export type Doc = {
+-  title: string;
+-  description?: string; // meta description
+-  ogImage?: string;
+-  theme?: {
+-    accent?: string;   // HEX или css-цвет
+-    container?: number; // px
+-  };
+-  blocks: Block[];
+-};
++// src/screens/SiteBuilder/types.ts
++// Типы документа и блоков Конструктора (извлечено из SiteBuilder.tsx)
++// Никакой логики — только описательные интерфейсы/типы.
++
++export type BlockType =
++  | "hero" | "h1" | "heading" | "p" | "btn" | "img" | "divider" | "spacer"
++  | "cols2" | "section" | "grid"
++  | "icon" | "iconlist" | "alert" | "html" | "code"
++  | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
++  | "counter" | "progress" | "breadcrumbs" | "pagination" | "social"
++  | "iconbox" | "imagebox" 
++  | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
++  | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
++  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
++  | "container" | "sidebar" | "offcanvas" | "shortcode" | "pricetable";
++
++export type ColsRatio = "5-7" | "6-6" | "7-5";
++
++export type Align = "left" | "center" | "right";
++
++export type HeroBlock = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  type: "hero";
++  title: string;
++  subtitle?: string;
++  ctaText?: string;
++  ctaLink?: string;
++  // Расширения:
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: {
++    desktop?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++    tablet?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++    mobile?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  };
++};
++
++export type H1Block = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  align?: Align;
++  type: "h1";
++  text: string;
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++};
++
++export type HeadingBlock = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  type: "heading";
++  text: string;
++  level?: "h2" | "h3" | "h4";
++  align?: Align;
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++};
++
++export type PBlock = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  align?: Align;
++  type: "p";
++  text: string;
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++};
++
++export type ImgBlock = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  type: "img";
++  cid: string; // altfs://CID, ipfs://, http(s) или data:
++  alt?: string;
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++};
++
++export type BtnBlock = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  type: "btn";
++  label: string;
++  href: string;
++  variant?: "primary" | "secondary";
++  align?: Align;
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++};
++
++export type Cols2Block = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  type: "cols2";
++  title: string;
++  text: string;
++  img: string; // CID/URL
++  alt: string;
++  ratio: ColsRatio;
++  reverse?: boolean;
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++};
++
++export type SpacerBlock = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  type: "spacer";
++  size?: "xs" | "sm" | "md" | "lg" | "xl";
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++};
++
++export type DividerBlock = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  type: "divider";
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++};
++
++export type SectionBlock = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  type: "section";
++  title?: string;
++  text?: string;
++  align?: Align;
++  theme?: "auto" | "light" | "dark";
++  pad?: "sm" | "md" | "lg";
++  bg?: "none" | "subtle" | "card" | "accent";
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++  layoutPreset?: FlexPreset | GridPreset;
++};
++
++export type GridItem = { id: string; src: string; alt?: string; caption?: string };
++
++export type GridBlock = {
++  id: string;
++  hidden?: boolean;
++  locked?: boolean;
++  type: "grid";
++  cols: 1 | 2 | 3 | 4;
++  items: GridItem[];
++  anchorId?: string;
++  className?: string;
++  style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
++  styleByBp?: HeroBlock["styleByBp"];
++  layoutPreset?: FlexPreset | GridPreset;
++};
++
++// ── B6: лёгкие контент-блоки ─────────────────────────────────────────────────
++export type IconName = "star" | "check" | "heart" | "shield" | "alert";
++
++export type IconBlock = {
++  id: string;
++  type: "icon";
++  name: IconName;
++  size?: "sm" | "md" | "lg" | "xl"; // 16 / 24 / 32 / 48
++  color?: string; // tailwind-класс цвета текста, напр. "text-[#2a3b8f]"
++};
++
++export type IconListVariant = "dot" | "check" | "star" | "custom";
++export type IconListSize = "sm" | "md" | "lg";
++export type IconListAlign = "start" | "center" | "end";
++export type IconListItem = { id: string; label: string; href?: string; description?: string; icon?: string };
++
++export type IconListBlock = {
++  id: string;
++  type: "iconlist";
++  items: IconListItem[];
++  variant?: IconListVariant;       // dot|check|star|custom
++  size?: IconListSize;             // sm|md|lg
++  gap?: IconListSize;              // sm|md|lg
++  align?: IconListAlign;           // start|center|end
++};
++
++export type AlertVariant = "info" | "success" | "warning" | "danger";
++
++export type AlertBlock = {
++  id: string;
++  type: "alert";
++  variant: AlertVariant;
++  title?: string;
++  text?: string;
++};
++
++export type HtmlBlock = {
++  id: string;
++  type: "html";
++  html: string; // будет жёстко санитизироваться при рендере
++};
++
++export type CodeBlock = {
++  id: string;
++  type: "code";
++  code: string;
++  lang?: string;
++};
++
++// ── B6.c: вкладки/аккордеон/цитата/CTA/рейтинг ───────────────────────────────
++export type TabsVariant = "underline" | "boxed" | "pill";
++export type TabsSize = "sm" | "md" | "lg";
++export type TabsAlign = "start" | "center" | "end";
++export type TabsOrientation = "horizontal" | "vertical";
++export type TabItem = { id: string; label: string; content?: string; disabled?: boolean };
++
++export type TabsBlock = {
++  id: string;
++  type: "tabs";
++  tabs: TabItem[];                 // прежнее поле tabs — оставляем
++  active?: number;                 // индекс 0..N-1
++  variant?: TabsVariant;           // underline|boxed|pill
++  size?: TabsSize;                 // sm|md|lg
++  align?: TabsAlign;               // start|center|end
++  orientation?: TabsOrientation;   // horizontal|vertical
++};
++
++export type AccordionVariant = "ghost" | "filled" | "outline";
++export type AccordionSize = "sm" | "md" | "lg";
++export type AccordionItem = { id: string; title: string; content?: string; open?: boolean };
++
++export type AccordionBlock = {
++  id: string;
++  type: "accordion";
++  items: AccordionItem[];          // было items — не ломаем
++  allowMultiple?: boolean;         // можно открывать несколько
++  allowToggle?: boolean;           // можно закрыть последний открытый
++  variant?: AccordionVariant;      // ghost|filled|outline
++  size?: AccordionSize;            // sm|md|lg
++};
++
++export type BlockquoteBlock = {
++  id: string;
++  type: "blockquote";
++  text: string;
++  cite?: string;
++};
++
++export type CtaVariant = "primary" | "secondary" | "outline" | "ghost";
++export type CtaAlign = "start" | "center" | "end";
++export type CtaEmphasis = "none" | "panel" | "brand";
++
++export type CtaBlock = {
++  id: string;
++  type: "cta";
++  title?: string;
++  text?: string;
++  btnLabel?: string;
++  btnHref?: string;
++  variant?: CtaVariant;            // стиль кнопки
++  align?: CtaAlign;                // выравнивание
++  emphasis?: CtaEmphasis;          // фон/акцент
++};
++
++export type RatingBlock = {
++  id: string;
++  type: "rating";
++  value: number; // 0..max
++  max?: number; // по умолчанию 5
++  readonly?: boolean; // в предпросмотре можно изменять, если false
++};
++
++// ── B6.d: простые контент/навигац. блоки ─────────────────────────────────────
++export type CounterBlock = {
++  id: string;
++  type: "counter";
++  value: number;            // текущее значение
++  prefix?: string;          // например "≈"
++  suffix?: string;          // например "+"
++};
++
++export type ProgressBlock = {
++  id: string;
++  type: "progress";
++  value: number;            // 0..100
++  label?: string;
++};
++
++export type Crumb = { id: string; label: string; href?: string };
++export type CrumbItem = { id: string; label: string; href?: string };
++export type BreadcrumbsSize = "sm" | "md" | "lg";
++export type BreadcrumbsSeparator = "/" | "›" | "»";
++export type BreadcrumbsBlock = {
++  id: string;
++  type: "breadcrumbs";
++  items: CrumbItem[];             // последний — текущая страница (без href)
++  size?: BreadcrumbsSize;
++  separator?: BreadcrumbsSeparator;
++  ariaLabel?: string;
++};
++
++export type PaginationSize = "sm" | "md" | "lg";
++export type PaginationBlock = {
++  id: string;
++  type: "pagination";
++  current: number;                // 1..total
++  total: number;                  // >=1
++  baseHref?: string;              // например "/blog?page="
++  size?: PaginationSize;
++  siblings?: number;              // сколько соседей вокруг current
++  boundary?: number;              // сколько страниц с краёв (1..N и ... N-1..N)
++  ariaLabel?: string;
++};
++
++export type SocialItem = { id: string; label: string; href: string };
++export type SocialBlock = {
++  id: string;
++  type: "social";
++  items: SocialItem[];
++};
++
++export type IconBoxBlock = {
++  id: string;
++  type: "iconbox";
++  icon: IconName;
++  title: string;
++  text?: string;
++};
++
++export type ImageBoxBlock = {
++  id: string;
++  type: "imagebox";
++  src?: string;     // url или cid
++  alt?: string;
++  title?: string;
++  text?: string;
++};
++
++// ── B6.e: price/testimonials/share/tracker/anchor/toc ────────────────────────
++export type PriceItem = { id: string; title: string; price: string; desc?: string };
++export type PriceListBlock = {
++  id: string;
++  type: "pricelist";
++  items: PriceItem[];
++};
++
++export type TestimonialItem = { id: string; author: string; text: string; role?: string };
++export type TestimonialsBlock = {
++  id: string;
++  type: "testimonials";
++  items: TestimonialItem[];
++};
++
++export type ShareNetwork = "copy" | "telegram" | "vk" | "twitter" | "facebook";
++export type ShareBlock = {
++  id: string;
++  type: "share";
++  url?: string;                // если не задан — берём location.href в рантайме (в SafePreview не будет доступа, поэтому опционально)
++  networks: ShareNetwork[];
++};
++
++export type ProgressStep = { id: string; label: string };
++export type ProgressTrackerBlock = {
++  id: string;
++  type: "progresstracker";
++  steps: ProgressStep[];
++  current: number;            // индекс 0..N-1
++};
++
++export type AnchorBlock = {
++  id: string;
++  type: "anchor";
++  name: string;               // якорь (id) для навигации, только [a-z0-9-_]
++  label?: string;             // человекочитаемое
++};
++
++export type TocItem = { id: string; label: string; href: string }; // href= "#id"
++export type TocBlock = {
++  id: string;
++  type: "toc";
++  items: TocItem[];          // пока ручной список; авто-скан добавим позже
++};
++
++// ── B6.f: video/gallery/carousel/countdown/menu/search/contentnav ────────────
++export type VideoBlock = {
++  id: string;
++  type: "video";
++  src?: string;       // https:, ipfs:, data: — санитизируем
++  poster?: string;
++  loop?: boolean;
++  muted?: boolean;
++};
++
++export type GalleryItem = { id: string; src: string; alt?: string };
++export type GalleryBlock = {
++  id: string;
++  type: "gallery";
++  cols?: 2 | 3 | 4;
++  items: GalleryItem[];
++};
++
++export type CarouselSlide = { id: string; src: string; alt?: string; caption?: string };
++export type CarouselBlock = {
++  id: string;
++  type: "carousel";
++  slides: CarouselSlide[];
++  initial?: number;
++};
++
++export type CountdownBlock = {
++  id: string;
++  type: "countdown";
++  target: string;  // ISO-дата/время
++};
++
++export type MenuItem = { id: string; label: string; href: string; children?: MenuItem[] };
++export type MenuOrientation = "horizontal" | "vertical";
++export type MenuBlock = {
++  id: string;
++  type: "menu";
++  items: MenuItem[];
++  activeHref?: string;
++  ariaLabel?: string;
++  orientation?: MenuOrientation;
++};
++
++export type SearchBlock = {
++  id: string;
++  type: "search";
++  placeholder?: string;
++  action?: string; // по умолчанию '#'
++  method?: "GET" | "POST";
++};
++
++export type ContentNavItem = { id: string; label: string; href: string }; // href="#id"
++export type ContentNavBlock = {
++  id: string;
++  type: "contentnav";
++  items: ContentNavItem[];
++  orientation?: MenuOrientation;
++  spy?: boolean;                  // включить scrollspy
++  spyOffset?: number;             // отступ для расчёта видимости (px)
++  activeHref?: string;            // текущий активный якорь
++  ariaLabel?: string;             // подпись для nav
++};
++
++// ── B6.g: map/lottie/mediacarousel/slides/videoplaylist/hotspot ──────────────
++export type MapBlock = {
++  id: string;
++  type: "map";
++  lat: number;
++  lon: number;
++  zoom?: number;                 // 1..20
++  label?: string;
++  style?: "auto" | "light" | "dark";
++};
++
++export type LottieBlock = {
++  id: string;
++  type: "lottie";
++  src?: string;                  // ссылка на .json (без внешних скриптов)
++  autoplay?: boolean;
++  loop?: boolean;
++  poster?: string;               // картинка-заглушка
++  caption?: string;
++};
++
++export type MediaSlide = { id: string; kind: "img" | "video"; src: string; alt?: string; caption?: string };
++export type MediaCarouselBlock = {
++  id: string;
++  type: "mediacarousel";
++  slides: MediaSlide[];
++  initial?: number;
++};
++
++export type TextSlide = { id: string; title?: string; text?: string; ctaLabel?: string; ctaHref?: string };
++export type SlidesBlock = {
++  id: string;
++  type: "slides";
++  slides: TextSlide[];
++  initial?: number;
++};
++
++export type VideoItem = { id: string; src: string; title?: string; poster?: string };
++export type VideoPlaylistBlock = {
++  id: string;
++  type: "videoplaylist";
++  items: VideoItem[];
++  initial?: number;
++};
++
++export type HotspotMarker = { id: string; x: number; y: number; label?: string; href?: string }; // x/y — проценты 0..100
++export type HotspotBlock = {
++  id: string;
++  type: "hotspot";
++  src: string;
++  alt?: string;
++  markers: HotspotMarker[];
++};
++
++// ── B6.h: layout container / sidebar / offcanvas ─────────────────────────────
++export type ContainerWidth = "sm" | "md" | "lg" | "xl" | "full";
++export type ContainerPadding = "none" | "sm" | "md" | "lg";
++export type ContainerBg = "none" | "panel" | "brand";
++
++export type ContainerBlock = {
++  id: string;
++  type: "container";
++  width?: ContainerWidth;     // по умолчанию md
++  padding?: ContainerPadding; // по умолчанию md
++  bg?: ContainerBg;           // фон: none|panel|brand
++  border?: boolean;           // рамка
++  rounded?: boolean;          // скругления
++  note?: string;              // подпись/описание
++};
++
++export type SidebarItem = { id: string; label: string; href: string };
++export type SidebarSide = "left" | "right";
++export type SidebarBlock = {
++  id: string;
++  type: "sidebar";
++  side?: SidebarSide;         // left/right (для предпросмотра — оформление)
++  width?: number;             // px, по умолчанию 260
++  items: SidebarItem[];       // пункты навигации
++  title?: string;
++};
++
++export type OffcanvasSide = "left" | "right";
++export type OffcanvasBlock = {
++  id: string;
++  type: "offcanvas";
++  side?: OffcanvasSide;       // слева/справа
++  width?: number;             // px, по умолчанию 320
++  title?: string;
++  body?: string;              // текст-заглушка (пока без вложенных блоков)
++};
++
++// ── B6.k: новые блоки ─────────────────────────────────────────────────────────
++export type ShortcodeBlock = {
++  id: string;
++  type: "shortcode";
++  code: string; // например: [youtube id="dQw4w9WgXcQ"] или [soundcloud url="https://soundcloud.com/..."]
++  title?: string;
++};
++
++export type PriceTableFeature = { id: string; label: string; included?: boolean };
++export type PriceTablePlan = {
++  id: string;
++  name: string;
++  price: string;
++  period?: string;    // /mo, /yr
++  ctaLabel?: string;
++  ctaHref?: string;
++  popular?: boolean;
++  features?: PriceTableFeature[];
++};
++export type PriceTableBlock = {
++  id: string;
++  type: "pricetable";
++  plans: PriceTablePlan[];
++};
++
++export type Block = (
++  | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock
++  | DividerBlock | SpacerBlock | Cols2Block | SectionBlock | GridBlock
++  | IconBlock | IconListBlock | AlertBlock | HtmlBlock | CodeBlock
++  | TabsBlock | AccordionBlock | BlockquoteBlock | CtaBlock | RatingBlock
++  | CounterBlock | ProgressBlock | BreadcrumbsBlock | PaginationBlock | SocialBlock
++  | IconBoxBlock | ImageBoxBlock | PriceListBlock | TestimonialsBlock | ShareBlock
++  | ProgressTrackerBlock | AnchorBlock | TocBlock
++  | VideoBlock | GalleryBlock | CarouselBlock | CountdownBlock | MenuBlock | SearchBlock | ContentNavBlock
++  | MapBlock | LottieBlock | MediaCarouselBlock | SlidesBlock | VideoPlaylistBlock | HotspotBlock
++  | ContainerBlock | SidebarBlock | OffcanvasBlock | ShortcodeBlock | PriceTableBlock
++) & {
++  /** id родителя (например, section), если блок вложенный */
++  parentId?: string;
++  /** индекс колонки внутри секции (0..N-1) */
++  col?: number;
++};
++
++// ─────────────────────────────────────────────
++// Пресеты FLEX (12 вариантов, как в Elementor)
++// ─────────────────────────────────────────────
++
++export type FlexPreset =
++  | "1col"            // 100%
++  | "2col-equal"      // 50 / 50
++  | "2col-wide-left"  // 66 / 33
++  | "2col-wide-right" // 33 / 66
++  | "3col-equal"      // 33 / 33 / 33
++  | "3col-wide-center"
++  | "4col"
++  | "5col"
++  | "6col"
++  | "hero-left"
++  | "hero-right"
++  | "hero-center";
++
++// ─────────────────────────────────────────────
++// Пресеты GRID (6 вариантов)
++// ─────────────────────────────────────────────
++export type GridPreset =
++  | "2x2"
++  | "3x3"
++  | "4x4"
++  | "2x3"
++  | "3x2"
++  | "1x3";
++
++// ── C1.b: Респонсив-стили для блоков ───────────────────────────────────────────
++export type Device = "desktop" | "tablet" | "mobile";
++
++export type ResponsiveStyle = Partial<
++  Record<Device, {
++    padding?: string; // например: "16px 24px" или "1rem"
++    margin?: string;  // например: "0 auto" или "24px 0"
++    radius?: string;  // например: "12px" или "0.75rem"
++  }>
++>;
++
++/** Утилита, если захочешь сузить типизацию блока в пропсах */
++export type WithStyle = { style?: ResponsiveStyle };
++  
++export type Doc = {
++  title: string;
++  description?: string; // meta description
++  ogImage?: string;
++  theme?: {
++    accent?: string;   // HEX или css-цвет
++    container?: number; // px
++    mode?: "light" | "dark";
++    background?: string; // CSS background
++  };
++  blocks: Block[];
++};
+diff -ruN ui/altnet-ui/src/screens/SiteBuilder.tsx ui/altnet-ui/src/screens/SiteBuilder.tsx
+--- ui/altnet-ui/src/screens/SiteBuilder.tsx	2026-02-22 20:46:36.000000000 +0000
++++ ui/altnet-ui/src/screens/SiteBuilder.tsx	2026-02-23 01:08:29.022312262 +0000
+@@ -39,7 +39,7 @@
+   title: "Мой сайт",
+   description: "",
+   ogImage: "",
+-  theme: { accent: "#5865F2", container: 960 },
++  theme: { accent: "#5865F2", container: 960, mode: "light", background: "#ffffff" },
+   blocks: [],
+ };
+ 
+@@ -188,6 +188,10 @@
+       ? null
+       : widthByBp[iframeMode as Breakpoint];
+ 
++  const canvasBg =
++    ((doc as any).theme?.background ?? "").toString().trim() ||
++    ((doc as any).theme?.mode === "dark" ? "#0b1022" : "#ffffff");
++
+   // Выбор блока
+   const [selId, setSelId] = useState<string | null>(null);
+   const selBlock = useMemo(
+@@ -428,6 +432,14 @@
+   // Сворачивание левой панели (как в Elementor)
+   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+ 
++  const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
++
++
++  // В режиме предпросмотра Tablet/Mobile освобождаем место под канвас
++  useEffect(() => {
++    if (bp !== "desktop") setSidebarCollapsed(true);
++  }, [bp]);
++
+   // Табы редактора
+   const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
+   useEffect(() => {
+@@ -1195,12 +1207,108 @@
+     [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock]
+   );
+ 
++
++  type TemplateDef = {
++    id: string;
++    title: string;
++    description: string;
++    build: () => Block[];
++  };
++
++  const templates = useMemo<TemplateDef[]>(() => {
++    const mk = (type: any, preset?: any) =>
++      createDefaultBlock({ type, newId: uid(), preset }) as Block;
++
++    const tBlank: TemplateDef = {
++      id: "blank",
++      title: "Пустой холст",
++      description: "Ничего лишнего — добавляйте секции и виджеты вручную.",
++      build: () => [],
++    };
++
++    const tLanding: TemplateDef = {
++      id: "landing",
++      title: "Лендинг (Hero + секции)",
++      description: "Быстрый старт: Hero, блок о продукте и CTA.",
++      build: () => {
++        const hero = mk("hero") as any;
++        hero.title = "Ваш продукт";
++        hero.subtitle = "Коротко объясните ценность и призовите к действию.";
++        hero.ctaText = "Начать";
++        hero.ctaLink = "#cta";
++
++        const about = mk("section", [1]) as any;
++        about.title = "О продукте";
++        about.text = "Опишите проблему и как вы её решаете.";
++
++        const h2 = mk("heading") as any;
++        h2.text = "Почему это работает";
++        h2.level = "h2";
++        h2.align = "left";
++
++        const p = mk("p") as any;
++        p.text = "Добавьте пару абзацев: преимущества, аудитория, кейсы.";
++
++        const cta = mk("section", [1]) as any;
++        cta.title = "Готовы попробовать?";
++        cta.text = "Оставьте контакты или нажмите кнопку.";
++        cta.align = "center";
++
++        const btn = mk("btn") as any;
++        btn.label = "Связаться";
++        btn.href = "#";
++        btn.align = "center";
++
++        // якорь
++        (cta as any).anchorId = "cta";
++
++        return [hero, about, h2, p, cta, btn];
++      },
++    };
++
++    const tPortfolio: TemplateDef = {
++      id: "portfolio",
++      title: "Портфолио",
++      description: "Заголовок, описание и галерея работ.",
++      build: () => {
++        const title = mk("h1") as any;
++        title.text = "Портфолио";
++        title.align = "left";
++
++        const intro = mk("p") as any;
++        intro.text = "Короткое описание: кто вы и какие задачи решаете.";
++
++        const gallery = mk("gallery") as any;
++        gallery.items = [
++          { src: "https://picsum.photos/seed/1/900/600", alt: "Work 1" },
++          { src: "https://picsum.photos/seed/2/900/600", alt: "Work 2" },
++          { src: "https://picsum.photos/seed/3/900/600", alt: "Work 3" },
++        ];
++        gallery.cols = 3;
++
++        return [title, intro, gallery];
++      },
++    };
++
++    return [tBlank, tLanding, tPortfolio];
++  }, []);
++
++  const applyTemplate = (tpl: { build: () => Block[] }, mode: "replace" | "append") => {
++    const blocks = tpl.build();
++    setDoc((d: any) => ({
++      ...d,
++      blocks: mode === "replace" ? blocks : [...(d.blocks ?? []), ...blocks],
++    }));
++    setSelId(null);
++    setTemplateLibraryOpen(false);
++  };
++
+   return (
+-    <div className="relative w-full grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
++    <div className="relative w-full grid grid-cols-[360px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
+       <button
+         type="button"
+         className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 flex h-16 w-6 items-center justify-center rounded-r-full border border-l-0 border-[#2a2f45] bg-[#050816] text-xs text-[#cfd5e6] hover:bg-[#0c1020]"
+-        style={{ left: sidebarCollapsed ? 12 : 280 }}
++        style={{ left: sidebarCollapsed ? 12 : 360 }}
+         onClick={(e) => {
+           e.stopPropagation();
+           setSidebarCollapsed((v: boolean) => !v);
+@@ -1211,11 +1319,13 @@
+       {/* Левая колонка */}
+       <div
+         className={
+-          "grid content-start gap-4 max-h-[calc(100dvh-140px)] overflow-y-auto pr-1 " +
++          "grid content-start gap-4 max-h-[calc(100dvh-140px)] overflow-y-auto overflow-x-hidden pr-1 " +
+           "rounded-2xl bg-[#050816]/90 border border-[#1f2751] px-3 py-3" +
+           (sidebarCollapsed ? " hidden" : "")
+         }
+       >
++                <div className="h-12" />
++
+         {/* Настройки сайта (уровень документа) */}
+         <div className="rounded-xl border border-[#1f2751] bg-[#0c0f1a] p-3">
+           <div className="text-xs uppercase tracking-wide text-[#9aa3b2]">
+@@ -1254,32 +1364,54 @@
+                       theme: { ...(d.theme ?? {}), accent: e.target.value },
+                     }))
+                   }
+-                  placeholder="#5865F2"
+-                  autoComplete="off"
+-                  spellCheck={false}
+                 />
+               </Field>
+-                    <Field label="Container (px)">
++
++              <Field label="Container">
+                 <input
+-                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                   type="number"
+-                        value={(doc as any).theme?.container ?? 960}
++                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
++                  value={(doc as any).theme?.container ?? 960}
++                  onChange={(e) =>
++                    setDoc((d: any) => ({
++                      ...d,
++                      theme: { ...(d.theme ?? {}), container: Number(e.target.value) },
++                    }))
++                  }
++                />
++              </Field>
++
++              <Field label="Mode">
++                <select
++                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
++                  value={(doc as any).theme?.mode ?? "light"}
++                  onChange={(e) =>
++                    setDoc((d: any) => ({
++                      ...d,
++                      theme: { ...(d.theme ?? {}), mode: e.target.value },
++                    }))
++                  }
++                >
++                  <option value="light">Light</option>
++                  <option value="dark">Dark</option>
++                </select>
++              </Field>
++
++              <Field label="Canvas bg">
++                <input
++                  className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
++                  value={(doc as any).theme?.background ?? ""}
+                   onChange={(e) =>
+                     setDoc((d: any) => ({
+                       ...d,
+-                      theme: {
+-                        ...(d.theme ?? {}),
+-                              container: Number(e.target.value) || 960,
+-                      },
++                      theme: { ...(d.theme ?? {}), background: e.target.value },
+                     }))
+                   }
+-                  min={320}
+-                  max={1920}
+-                  step={10}
++                  placeholder="#ffffff или linear-gradient(...)"
+                 />
+               </Field>
+             </div>
+-            <Field label="OG image (url/cid)">
++<Field label="OG image (url/cid)">
+               <input
+                 className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
+                 value={(doc as any).ogImage ?? ""}
+@@ -1579,7 +1711,7 @@
+                       ? "mx-auto w-full max-w-[1140px] min-h-[100vh] px-8 py-8"
+                       : "mx-auto w-full max-w-[1140px] min-h-[calc(100vh-160px)] rounded-xl shadow-sm px-8 py-8"
+                   }
+-                  style={{ backgroundColor: "#ffffff" }}
++                  style={{ background: canvasBg }}
+                 >
+                   <Canvas
+                     cols={canvasCols}
+@@ -1700,6 +1832,8 @@
+                         return { ...d, blocks };
+                       });
+                     }}
++                  
++                    onOpenLibrary={() => setTemplateLibraryOpen(true)}
+                   />
+ 
+ 
+@@ -1775,6 +1909,61 @@
+ 
+           </div>
+         )}
++      {templateLibraryOpen && (
++        <div className="fixed inset-0 z-[100] flex items-center justify-center">
++          <div
++            className="absolute inset-0 bg-black/60"
++            onClick={() => setTemplateLibraryOpen(false)}
++          />
++
++          <div className="relative w-[min(920px,calc(100%-32px))] rounded-2xl border border-[#2a2f45] bg-[#0b1022] p-6 shadow-xl">
++            <div className="flex items-start justify-between gap-4">
++              <div>
++                <div className="text-lg font-semibold text-white">Шаблоны</div>
++                <div className="mt-1 text-xs text-white/60">
++                  Библиотека базовых шаблонов. «Вставить» добавляет в конец, «Заменить» заменяет текущую страницу.
++                </div>
++              </div>
++              <button
++                type="button"
++                onClick={() => setTemplateLibraryOpen(false)}
++                className="h-9 w-9 rounded-full border border-[#2a2f45] bg-[#0c0f1a] text-white/80 hover:text-white hover:bg-[#121832]"
++                aria-label="Закрыть"
++              >
++                ✕
++              </button>
++            </div>
++
++            <div className="mt-5 grid gap-4 md:grid-cols-2">
++              {templates.map((t) => (
++                <div key={t.id} className="rounded-xl border border-[#2a2f45] bg-[#0c0f1a] p-4">
++                  <div className="text-sm font-medium text-white">{t.title}</div>
++                  <div className="mt-1 text-xs text-white/60">{t.description}</div>
++
++                  <div className="mt-4 flex flex-wrap gap-2">
++                    <button
++                      type="button"
++                      onClick={() => applyTemplate(t, "append")}
++                      className="px-3 py-1.5 rounded-lg bg-[#6E59F2] text-white text-sm hover:brightness-110"
++                    >
++                      Вставить
++                    </button>
++
++                    <button
++                      type="button"
++                      onClick={() => applyTemplate(t, "replace")}
++                      className="px-3 py-1.5 rounded-lg bg-white/10 text-white text-sm hover:bg-white/15"
++                    >
++                      Заменить
++                    </button>
++                  </div>
++                </div>
++              ))}
++            </div>
++          </div>
++        </div>
++      )}
++
+       </div>
+     </div>
+   );

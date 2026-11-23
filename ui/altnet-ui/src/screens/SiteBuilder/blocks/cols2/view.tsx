@@ -11,8 +11,8 @@ export default function Cols2View({ block }: { block: Cols2Block }) {
   const reverse = !!block.reverse;
   const [leftN, rightN] =
     ratio === "5-7" ? [5, 7] : ratio === "7-5" ? [7, 5] : [6, 6];
-  const left = reverse ? rightN : leftN;
-  const right = reverse ? leftN : rightN;
+  const left = leftN;
+  const right = rightN;
 
   return (
     <div className="grid grid-cols-12 gap-6 items-center">
@@ -20,7 +20,7 @@ export default function Cols2View({ block }: { block: Cols2Block }) {
         <h3 className="text-xl font-bold text-[#0b1022]">{block.title || "Заголовок"}</h3>
         <p className="text-[#2b3050]">{block.text || ""}</p>
       </div>
-      <div className={`${spanClass(right)}`}>
+      <div className={`${spanClass(right)} ${reverse ? "order-first" : ""}`}>
         {block.img ? (
           <img
             src={block.img}

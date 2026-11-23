@@ -29,7 +29,7 @@ export function newId(prefix = "blk"): string {
 }
 
 // Создание дефолтного блока по типу InsertChoice
-export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPreset): Block {
+export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPreset | number[]): Block {
   switch (type) {
     case "h1": {
       const b: H1Block = { id: newId("h1"), type: "h1", text: "Заголовок", align: "left" };
@@ -87,11 +87,13 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
         title: "",
         text: "",
         layoutPreset: preset,
+        ...(Array.isArray(preset) ? { layoutCells: preset.map(() => []) } : {}),
       };
       return b;
     }
     case "grid": {
-      const b: GridBlock = { id: newId("grid"), type: "grid", cols: 3, items: [], layoutPreset: preset };
+      const b: GridBlock = { id: newId("grid"), type: "grid", cols: 3, items: [], layoutPreset: preset,
+        ...(Array.isArray(preset) ? { layoutCells: preset.map(() => []) } : {}) };
       return b;
     }
 
@@ -268,7 +270,7 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
       const b: ImageBoxBlock = {
         id: newId("imgb"),
         type: "imagebox",
-        src: "https://picsum.photos/800/450",
+        src: "",
         alt: "Демо",
         title: "Картинка с заголовком",
         text: "Подпись к изображению.",
@@ -345,10 +347,11 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
       const b: VideoBlock = {
         id: newId("vid"),
         type: "video",
-        src: "https://www.w3schools.com/html/mov_bbb.mp4",
+        src: "",
         poster: "",
         muted: false,
         loop: false,
+        controls: true,
       };
       return b;
     }
@@ -357,11 +360,7 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
         id: newId("gal"),
         type: "gallery",
         cols: 3,
-        items: [
-          { id: newId("gi"), src: "https://picsum.photos/seed/1/800/600", alt: "Фото 1" },
-          { id: newId("gi"), src: "https://picsum.photos/seed/2/800/600", alt: "Фото 2" },
-          { id: newId("gi"), src: "https://picsum.photos/seed/3/800/600", alt: "Фото 3" },
-        ],
+        items: [],
       };
       return b;
     }
@@ -370,10 +369,7 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
         id: newId("car"),
         type: "carousel",
         initial: 0,
-        slides: [
-          { id: newId("cs"), src: "https://picsum.photos/seed/a/1200/600", caption: "Слайд A" },
-          { id: newId("cs"), src: "https://picsum.photos/seed/b/1200/600", caption: "Слайд B" },
-        ],
+        slides: [],
       };
       return b;
     }
@@ -446,11 +442,7 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
         id: newId("mc"),
         type: "mediacarousel",
         initial: 0,
-        slides: [
-          { id: newId("ms"), kind: "img", src: "https://picsum.photos/seed/m1/1200/600", caption: "Кадр 1" },
-          { id: newId("ms"), kind: "video", src: "https://www.w3schools.com/html/mov_bbb.mp4", caption: "Видео" },
-          { id: newId("ms"), kind: "img", src: "https://picsum.photos/seed/m2/1200/600", caption: "Кадр 2" },
-        ],
+        slides: [],
       };
       return b;
     }
@@ -471,10 +463,7 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
         id: newId("vp"),
         type: "videoplaylist",
         initial: 0,
-        items: [
-          { id: newId("vi"), src: "https://www.w3schools.com/html/mov_bbb.mp4", title: "Демо 1" },
-          { id: newId("vi"), src: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4", title: "Демо 2" },
-        ],
+        items: [],
       };
       return b;
     }
@@ -482,7 +471,7 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
       const b: HotspotBlock = {
         id: newId("hs"),
         type: "hotspot",
-        src: "https://picsum.photos/seed/spot/1200/600",
+        src: "",
         alt: "Изображение с маркерами",
         markers: [
           { id: newId("hm"), x: 25, y: 40, label: "Точка A", href: "#" },
@@ -502,6 +491,8 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
         border: false,
         rounded: true,
         note: "Контейнер (макс. ширина + отступы)",
+        layoutPreset: [1],
+        layoutCells: [[]],
       };
       return b;
     }
@@ -526,6 +517,8 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
         type: "offcanvas",
         side: "left",
         width: 320,
+        layoutPreset: [1],
+        layoutCells: [[]],
         title: "Меню",
         body: "Панель Offcanvas. Здесь будет содержимое.",
       };

@@ -8,11 +8,13 @@ export type BlockType =
   | "icon" | "iconlist" | "alert" | "html" | "code"
   | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
   | "counter" | "progress" | "breadcrumbs" | "pagination" | "social"
-  | "iconbox" | "imagebox" 
+  | "iconbox" | "imagebox"
   | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
   | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
   | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
   | "container" | "sidebar" | "offcanvas" | "shortcode" | "pricetable";
+
+import type { LayoutByBreakpoint } from "./layoutResponsive";
 
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
@@ -57,7 +59,10 @@ export type HeadingBlock = {
   locked?: boolean;
   type: "heading";
   text: string;
-  level?: "h2" | "h3" | "h4";
+  level?: "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "div" | "span" | "p";
+  href?: string;
+  linkOpen?: "auto" | "same" | "new";
+  linkIndexing?: "auto" | "nofollow" | "follow";
   align?: Align;
   anchorId?: string;
   className?: string;
@@ -79,12 +84,18 @@ export type PBlock = {
 };
 
 export type ImgBlock = {
+  imageStyleByBp?: Partial<Record<"desktop" | "tablet" | "mobile", { width?: number; maxWidth?: number; height?: number; opacity?: number; fit?: "contain" | "cover" | "fill" | "none" | "scale-down"; align?: "left" | "center" | "right"; borderType?: string; hoverBorderType?: string; captionAlign?: string; captionColor?: string; captionFont?: string; captionSize?: number; captionSpacing?: number; captionLineHeight?: number; captionWeight?: number; radius?: number; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturate?: number; blur?: number; shadowMode?: "on" | "off"; shadowColor?: string; shadowX?: number; shadowY?: number; shadowBlur?: number; shadowSpread?: number; hoverOpacity?: number; hoverRadius?: number; hoverBorderWidth?: number; hoverBorderColor?: string; hoverBrightness?: number; hoverContrast?: number; hoverSaturate?: number; hoverBlur?: number; hoverShadowMode?: "on" | "off"; hoverShadowColor?: string; hoverShadowX?: number; hoverShadowY?: number; hoverShadowBlur?: number; hoverShadowSpread?: number; duration?: number }>>;
   id: string;
   hidden?: boolean;
   locked?: boolean;
   type: "img";
   cid: string; // altfs://CID, ipfs://, http(s) или data:
+  src?: string; // совместимость с документами, сохранёнными прежним инспектором
   alt?: string;
+  caption?: string;
+  href?: string;
+  linkOpen?: "auto" | "same" | "new";
+  linkIndexing?: "auto" | "nofollow" | "follow";
   anchorId?: string;
   className?: string;
   style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
@@ -98,12 +109,32 @@ export type BtnBlock = {
   type: "btn";
   label: string;
   href: string;
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "ghost";
   align?: Align;
+  icon?: string;
+  iconPosition?: "before" | "after";
+  linkOpen?: "auto" | "same" | "new";
+  linkIndexing?: "auto" | "nofollow" | "follow";
+  accessibleLabel?: string;
   anchorId?: string;
   className?: string;
   style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
   styleByBp?: HeroBlock["styleByBp"];
+  buttonStyleByBp?: Partial<Record<"desktop" | "tablet" | "mobile", {
+    color?: string; bg?: string; borderColor?: string; borderWidth?: number; radius?: number; paddingX?: number; paddingY?: number;
+    hoverColor?: string; hoverBg?: string; hoverBorderColor?: string; hoverBorderWidth?: number; hoverRadius?: number; hoverPaddingX?: number; hoverPaddingY?: number; duration?: number;
+    paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number;
+    hoverPaddingTop?: number; hoverPaddingRight?: number; hoverPaddingBottom?: number; hoverPaddingLeft?: number;
+    iconSize?: number; iconGap?: number;
+    backgroundType?: "solid" | "gradient"; gradientStart?: string; gradientEnd?: string; gradientAngle?: number;
+    hoverBackgroundType?: "solid" | "gradient"; hoverGradientStart?: string; hoverGradientEnd?: string; hoverGradientAngle?: number;
+    shadowMode?: "on" | "off"; shadowX?: number; shadowY?: number; shadowBlur?: number; shadowSpread?: number; shadowColor?: string;
+    hoverShadowMode?: "on" | "off"; hoverShadowX?: number; hoverShadowY?: number; hoverShadowBlur?: number; hoverShadowSpread?: number; hoverShadowColor?: string;
+    activeColor?: string; activeBg?: string; activeBorderColor?: string; activeBorderWidth?: number; activeRadius?: number; activePaddingX?: number; activePaddingY?: number;
+    activePaddingTop?: number; activePaddingRight?: number; activePaddingBottom?: number; activePaddingLeft?: number;
+    activeBackgroundType?: "solid" | "gradient"; activeGradientStart?: string; activeGradientEnd?: string; activeGradientAngle?: number;
+    activeShadowMode?: "on" | "off"; activeShadowX?: number; activeShadowY?: number; activeShadowBlur?: number; activeShadowSpread?: number; activeShadowColor?: string;
+  }>>;
 };
 
 export type Cols2Block = {
@@ -129,6 +160,7 @@ export type SpacerBlock = {
   locked?: boolean;
   type: "spacer";
   size?: "xs" | "sm" | "md" | "lg" | "xl";
+  heightByBp?: Partial<Record<"desktop" | "tablet" | "mobile", number>>;
   anchorId?: string;
   className?: string;
   style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
@@ -140,6 +172,11 @@ export type DividerBlock = {
   hidden?: boolean;
   locked?: boolean;
   type: "divider";
+  lineStyle?: "solid" | "dashed" | "dotted" | "double";
+  thickness?: number;
+  width?: number;
+  align?: "left" | "center" | "right";
+  color?: string;
   anchorId?: string;
   className?: string;
   style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
@@ -161,7 +198,10 @@ export type SectionBlock = {
   className?: string;
   style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
   styleByBp?: HeroBlock["styleByBp"];
-  layoutPreset?: FlexPreset | GridPreset;
+  layoutPreset?: FlexPreset | GridPreset | number[];
+  layoutCells?: Block[][];
+  layoutByBp?: LayoutByBreakpoint;
+  layoutGap?: number;
 };
 
 export type GridItem = { id: string; src: string; alt?: string; caption?: string };
@@ -177,7 +217,14 @@ export type GridBlock = {
   className?: string;
   style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
   styleByBp?: HeroBlock["styleByBp"];
-  layoutPreset?: FlexPreset | GridPreset;
+  layoutPreset?: FlexPreset | GridPreset | number[];
+  layoutCells?: Block[][];
+  layoutColumns?: number;
+  layoutMerges?: Array<{ start: number; columns: number; rows: number }>;
+  layoutGapX?: number;
+  layoutGapY?: number;
+  layoutByBp?: LayoutByBreakpoint;
+  layoutGap?: number;
 };
 
 // ── B6: лёгкие контент-блоки ─────────────────────────────────────────────────
@@ -299,6 +346,10 @@ export type CounterBlock = {
   value: number;            // текущее значение
   prefix?: string;          // например "≈"
   suffix?: string;          // например "+"
+  animate?: boolean;
+  start?: number;
+  durationMs?: number;
+  decimals?: number;
 };
 
 export type ProgressBlock = {
@@ -411,6 +462,7 @@ export type VideoBlock = {
   poster?: string;
   loop?: boolean;
   muted?: boolean;
+  controls?: boolean;
 };
 
 export type GalleryItem = { id: string; src: string; alt?: string };
@@ -528,12 +580,18 @@ export type ContainerBg = "none" | "panel" | "brand";
 export type ContainerBlock = {
   id: string;
   type: "container";
+  hidden?: boolean;
+  locked?: boolean;
   width?: ContainerWidth;     // по умолчанию md
   padding?: ContainerPadding; // по умолчанию md
   bg?: ContainerBg;           // фон: none|panel|brand
   border?: boolean;           // рамка
   rounded?: boolean;          // скругления
   note?: string;              // подпись/описание
+  layoutPreset?: number[];
+  layoutCells?: Block[][];
+  layoutByBp?: LayoutByBreakpoint;
+  layoutGap?: number;
 };
 
 export type SidebarItem = { id: string; label: string; href: string };
@@ -554,7 +612,9 @@ export type OffcanvasBlock = {
   side?: OffcanvasSide;       // слева/справа
   width?: number;             // px, по умолчанию 320
   title?: string;
-  body?: string;              // текст-заглушка (пока без вложенных блоков)
+  body?: string;
+  layoutPreset?: number[];
+  layoutCells?: Block[][];
 };
 
 // ── B6.k: новые блоки ─────────────────────────────────────────────────────────
@@ -636,14 +696,26 @@ export type ResponsiveStyle = Partial<
 
 /** Утилита, если захочешь сузить типизацию блока в пропсах */
 export type WithStyle = { style?: ResponsiveStyle };
-  
+
 export type Doc = {
   title: string;
   description?: string; // meta description
   ogImage?: string;
+  seo?: { canonical?: string; index?: boolean; follow?: boolean };
   theme?: {
     accent?: string;   // HEX или css-цвет
     container?: number; // px
   };
   blocks: Block[];
+  /** Активная страница находится в корне документа, остальные — в workspace. */
+  sitePages?: SitePages;
+  /** Неактивные проекты хранятся рядом с текущим проектом в одном черновике. */
+  siteProjects?: SiteProjects;
 };
+
+export type PageDocument = Omit<Doc, "sitePages" | "siteProjects">;
+export type SitePage = { id: string; path: string; document?: PageDocument };
+export type SitePages = { version: 1; activeId: string; pages: SitePage[] };
+export type ProjectDocument = Omit<Doc, "siteProjects">;
+export type SiteProject = { id: string; name: string; document?: ProjectDocument };
+export type SiteProjects = { version: 1; activeId: string; projects: SiteProject[] };

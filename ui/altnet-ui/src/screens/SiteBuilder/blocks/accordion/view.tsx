@@ -9,14 +9,18 @@ function clsItem(variant?: "ghost" | "filled" | "outline") {
 function clsBtn(open: boolean) {
   return `w-full text-left px-3 py-2 rounded-lg ${open ? "bg-[#121b3f] text-[#e6e9f4]" : "bg-[#101735] text-[#e6e9f4] hover:bg-[#121b3f]"} border border-[#1f2751]`;
 }
-function clsPanel() { return "px-3 py-2 text-sm text-[#c9d0e9]"; }
+function clsPanel(variant?: "ghost" | "filled" | "outline") { return `px-3 py-2 text-sm ${variant === "filled" ? "text-[#c9d0e9]" : "text-[#2b3050]"}`; }
 
 export default function AccordionView({ block }: { block: AccordionBlock }) {
-  const [openIds, setOpen] = React.useState<string[]>(
-    block.items.filter(i => i.open).map(i => i.id)
-  );
   const allowMultiple = !!block.allowMultiple;
   const allowToggle = block.allowToggle !== false; // по умолчанию можно закрыть последний
+  const initial = () => {
+    const chosen = block.items.filter(i => i.open).map(i => i.id);
+    const normalized = allowMultiple ? chosen : chosen.slice(0, 1);
+    return !allowToggle && !normalized.length && block.items.length ? [block.items[0].id] : normalized;
+  };
+  const [openIds, setOpen] = React.useState<string[]>(initial);
+  React.useEffect(() => { setOpen(initial()); }, [block.items, allowMultiple, allowToggle]);
 
   function toggle(id: string) {
     setOpen(prev => {
@@ -52,10 +56,10 @@ export default function AccordionView({ block }: { block: AccordionBlock }) {
               id={panelId}
               role="region"
               aria-labelledby={btnId}
-              className={`transition-all ${open ? "max-h-[320px] opacity-100" : "max-h-0 opacity-0"} overflow-hidden`}
+              hidden={!open}
             >
-              <div className={clsPanel()}>
-                {it.content || "Контент секции"}
+              <div className={clsPanel(block.variant)}>
+                {it.content ?? ""}
               </div>
             </div>
           </div>

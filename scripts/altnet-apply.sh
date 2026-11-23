@@ -1,20 +1,29 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-exec 9>/run/altnet-apply.lock
-flock -n 9 || { echo "[apply] another instance running, exit"; exit 0; }
+exec 9>"${ALTNET_APPLY_LOCK:-/run/altnet-apply.lock}"
+flock 9
 
-BASE="/opt/altnet/modules"
-APPS="/opt/altnet/apps"
-CUR="/opt/altnet/current"
+ROOT="${ALTNET_ROOT:-/opt/altnet}"
+BASE="$ROOT/modules"
+APPS="$ROOT/apps"
+CUR="$ROOT/current"
 
 log(){ echo "[apply] $*"; }
 
 mkdir -p "$APPS" "$CUR"
 shopt -s nullglob
 
-for m in "$BASE"/*/*; do
-  [ -d "$m" ] || continue
+for pending in "$BASE"/*/*/.fetched; do
+  [ -f "$pending" ] || continue
+  m=${pending%/.fetched}
+  attempted="$m/.apply-attempted"
+  # Забираем событие до проверки пакета. Новая публикация создаст отдельный .fetched.
+  mv -fT -- "$pending" "$attempted"
+  if [ -f "$m/.applied" ]; then
+    rm -f -- "$attempted"
+    continue
+  fi
 
   manifest="$m/manifest.json"
   if [ ! -f "$manifest" ]; then
@@ -22,16 +31,10 @@ for m in "$BASE"/*/*; do
     continue
   fi
 
-  name=$(jq -r '.name // empty' "$manifest")
-  ver=$(jq -r '.version // empty' "$manifest")
-  file=$(jq -r '.filename // empty' "$manifest")
-
-  [ -n "$name" ] && [ -n "$ver" ] || { log "bad manifest fields in $m"; continue; }
-
-  # уже применено? подчистим .fetched, чтобы .path не триггерился
-  if [ -f "$m/.applied" ]; then
-    [ -f "$m/.fetched" ] && rm -f "$m/.fetched" || true
-    log "skip $name@$ver"
+  if ! name=$(jq -er '.name | strings | select(length > 0)' "$manifest") ||
+     ! ver=$(jq -er '.version | strings | select(length > 0)' "$manifest") ||
+     ! file=$(jq -r '.filename // empty' "$manifest"); then
+    log "bad manifest in $m"
     continue
   fi
 
@@ -63,9 +66,9 @@ for m in "$BASE"/*/*; do
 
   # запускаем в его директории
   if ( cd "$(dirname "$inst")" && "./$(basename "$inst")" ); then
+    ln -sfn "$APPS/$name/$ver" "$CUR/$name"
     : > "$m/.applied"
-    rm -f "$m/.fetched" || true
-    ln -sfn "/opt/altnet/apps/$name/$ver" "$CUR/$name"
+    rm -f -- "$attempted"
     log "set current/$name -> $ver"
     log "applied $name@$ver"
   else

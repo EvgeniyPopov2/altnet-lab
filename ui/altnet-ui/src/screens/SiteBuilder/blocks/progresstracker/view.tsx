@@ -11,7 +11,7 @@ export default function ProgressTrackerView({ block }: { block: ProgressTrackerB
             ${i <= cur ? "bg-[#5865F2] border-[#5865F2] text-white" : "bg-[#101735] border-[#1f2751] text-[#9aa3b2]"}`}>
             {i + 1}
           </span>
-          <span className={i <= cur ? "text-[#e6e9f4]" : "text-[#9aa3b2]"}>{s.label}</span>
+          <span aria-current={i === cur ? "step" : undefined} className={i <= cur ? "text-[#1d2440]" : "text-[#697184]"}>{s.label}</span>
           {i < total - 1 && <span className="opacity-50">—</span>}
         </li>
       ))}

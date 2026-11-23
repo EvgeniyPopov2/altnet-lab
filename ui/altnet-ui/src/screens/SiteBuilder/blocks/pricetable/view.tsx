@@ -4,15 +4,14 @@ function safeHref(h?: string) {
   const s = (h || "").trim().toLowerCase();
   if (!s) return undefined;
   if (s.startsWith("javascript:")) return "#";
-  if (/^https?:\/\//.test(s) || s.startsWith("#") || s.startsWith("/")) return h!;
+  if (/^https?:\/\//.test(s) || s.startsWith("#") || (s.startsWith("/") && !s.startsWith("//"))) return h!;
   return "#";
 }
 
 export default function PriceTableView({ block }: { block: PriceTableBlock }) {
   const plans = block.plans || [];
-  const grid = plans.length >= 3 ? "md:grid-cols-3" : "md:grid-cols-2";
   return (
-    <div className={`grid gap-3 ${grid}`}>
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,220px),1fr))] gap-3">
       {plans.map((p: PriceTablePlan) => (
         <article key={p.id} className={`rounded-2xl border ${p.popular ? "border-[#5865F2]" : "border-[#1f2751]"} bg-[#0b1022] p-5`}>
           {p.popular && <div className="mb-2 inline-block text-[10px] px-2 py-0.5 rounded bg-[#5865F2] text-white">Популярный</div>}
@@ -23,7 +22,7 @@ export default function PriceTableView({ block }: { block: PriceTableBlock }) {
           <ul className="mt-3 grid gap-1 text-xs text-[#c9d0e9]">
             {(p.features || []).map(f => (
               <li key={f.id} className="flex items-center gap-2">
-                <span className={`inline-block w-3 h-3 rounded-full ${f.included ? "bg-[#27E3CE]" : "bg-[#2a2f45]"}`} />
+                <span aria-label={f.included ? "Включено" : "Не включено"}>{f.included ? "✓" : "−"}</span>
                 <span>{f.label}</span>
               </li>
             ))}

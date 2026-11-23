@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SlidesBlock } from "../../types";
 
 function safeHref(h?: string) {
@@ -11,6 +11,7 @@ function safeHref(h?: string) {
 
 export default function SlidesView({ block }: { block: SlidesBlock }) {
   const [i, setI] = useState(Math.max(0, Math.min(block.initial ?? 0, block.slides.length - 1)));
+  useEffect(() => { setI(Math.max(0, Math.min(block.initial ?? 0, block.slides.length - 1))); }, [block.initial, block.slides]);
   const n = block.slides.length || 1;
   const s = block.slides[i];
 

@@ -3,8 +3,9 @@ import React from "react";
 import type { InsertChoice } from "../../../builder/SortableCanvas";
 import IconSvg from "./IconSvg";
 import { groupsWithItems } from "./blocksMeta";
+import { WIDGET_DRAG_TYPE } from "./drag";
 
-type Props = { onInsert: (type: InsertChoice) => void };
+type Props = { onInsert: (type: InsertChoice) => void; query?: string };
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -21,12 +22,14 @@ function Item({
   disabled,
   onClick,
   hint,
+  dragType,
 }: {
   label: string;
   icon: string;
   disabled?: boolean;
   onClick?: () => void;
   hint?: string;
+  dragType?: InsertChoice;
 }) {
   return (
     <button
@@ -34,6 +37,12 @@ function Item({
       onClick={disabled ? undefined : onClick}
       title={hint}
       aria-disabled={disabled}
+      disabled={disabled}
+      draggable={Boolean(dragType)}
+      onDragStart={dragType ? (event) => {
+        event.dataTransfer.effectAllowed = "copy";
+        event.dataTransfer.setData(WIDGET_DRAG_TYPE, dragType);
+      } : undefined}
     >
       <IconSvg name={icon} />
       {label}
@@ -42,10 +51,11 @@ function Item({
 }
 
 /** Палитра блоков: рендерится из метаданных. */
-export default function Palette({ onInsert }: Props) {
-  const groups = React.useMemo(() => groupsWithItems(), []);
+export default function Palette({ onInsert, query = "" }: Props) {
+  const groups = React.useMemo(() => groupsWithItems(query), [query]);
   return (
     <div className="grid gap-2">
+      {groups.length === 0 && <p className="text-sm text-[#9aa3b2]" role="status">Виджеты не найдены.</p>}
       {groups.map(({ group, items }) => (
         <Group key={group} title={group}>
           {items.map((m, index) =>
@@ -63,6 +73,7 @@ export default function Palette({ onInsert }: Props) {
                 label={m.title}
                 icon={m.icon}
                 onClick={() => onInsert(m.type)}
+                dragType={m.type}
                 hint={m.description}
               />
             )

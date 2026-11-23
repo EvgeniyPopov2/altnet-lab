@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 
 import "./index.css";
 import { AnimatePresence, motion } from "framer-motion";
 
 import BrowserAlt from "./screens/BrowserAlt";
-import SiteBuilder from "./screens/SiteBuilder";
+const SiteBuilder = lazy(() => import("./screens/SiteBuilder"));
 import ExploreDiscover from "./screens/ExploreDiscover";
 import Messages, { type DmContact } from "./screens/Messages";
 import Servers, { type ServerItem } from "./screens/Servers";
@@ -12,6 +12,7 @@ import SecurityCenter from "./screens/SecurityCenter";
 import Mail from "./screens/Mail";
 import QuickSwitcher, { type QSItem } from "./components/QuickSwitcher";
 import NetStatus from "./components/NetStatus";
+import BridgeConnection from "./components/BridgeConnection";
 import MobileNavigation from "./components/MobileNavigation";
 import { usePrivacyProfile } from "./core/settings/profile";
 import { SecurityCoach } from "./core/security/coach";
@@ -535,6 +536,7 @@ export default function App() {
       <div className="altnet-content flex-1 min-w-0 flex flex-col">
         <header className="altnet-header px-4 py-3 border-b border-white/10 bg-white/5 flex items-center justify-between">
           <div className="flex items-center gap-2">
+            <img src="/altnet-logo.png" alt="AltNet" className="h-8 w-8 shrink-0 object-contain" />
             {rail !== "global" && (
               <button type="button" className="altnet-mobile-list-button" aria-expanded={mobilePanelOpen} onClick={() => setMobilePanelOpen(true)}>
                 {rail === "messages" ? "Чаты" : "Серверы"}
@@ -591,6 +593,7 @@ export default function App() {
             </button>
           </div>
         </header>
+        <BridgeConnection panic={panic} />
 
         <div className="altnet-main flex-1 p-4 overflow-hidden">
           <AnimatePresence mode="wait">
@@ -604,13 +607,13 @@ export default function App() {
             >
               {section === "browser" &&
                 (builderOpen ? (
-                  <SiteBuilder
+                  <Suspense fallback={<div role="status" className="p-4 text-sm text-[#c9d0e9]">Открываем конструктор…</div>}><SiteBuilder
                     onClose={() => setBuilderOpen(false)}
                     onPublished={(url) => {
                       setBuilderOpen(false);
                       setBrowserNav({ url, token: Date.now() });
                     }}
-                  />
+                  /></Suspense>
                 ) : (
                   <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} navRequest={browserNav} />
                 ))}

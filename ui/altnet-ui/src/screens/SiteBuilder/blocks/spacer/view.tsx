@@ -1,12 +1,8 @@
 // src/screens/SiteBuilder/blocks/spacer/view.tsx
 import type { SpacerBlock } from "../../types";
+import { spacerHeight } from "./size";
+import type { LayoutBreakpoint } from "../../layoutResponsive";
 
-export default function SpacerView({ block }: { block: SpacerBlock }) {
-  const h =
-    block.size === "xs" ? "h-2" :
-    block.size === "sm" ? "h-4" :
-    block.size === "lg" ? "h-12" :
-    block.size === "xl" ? "h-16" :
-    "h-8"; // md по умолчанию
-  return <div className={`${h}`} aria-hidden="true" />;
+export default function SpacerView({ block, device = "desktop" }: { block: SpacerBlock; device?: LayoutBreakpoint }) {
+  return <div style={{ height: spacerHeight(block, device) }} aria-hidden="true" />;
 }

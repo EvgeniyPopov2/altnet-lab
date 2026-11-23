@@ -1,12 +1,8 @@
 import type { AnchorBlock } from "../../types";
-
-function safeName(name: string) {
-  const n = (name || "").toLowerCase().replace(/[^a-z0-9-_]/g, "-");
-  return n || "anchor";
-}
+import { safeAnchorName } from "./name";
 
 export default function AnchorView({ block }: { block: AnchorBlock }) {
-  const id = safeName(block.name);
+  const id = safeAnchorName(block.name);
   return (
     <div className="grid gap-1">
       <div id={id} className="h-0" aria-hidden="true" />

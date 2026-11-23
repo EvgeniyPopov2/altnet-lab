@@ -1,0 +1,4 @@
+.sb-gallery { container-type: inline-size; }
+@container (max-width: 500px) {
+  .sb-gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

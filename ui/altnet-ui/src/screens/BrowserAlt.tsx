@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Plus, RotateCw, X } from "lucide-react";
+import { prepareLocalPreviewHtml } from "../core/sites/localPreview";
 import {
   deletePublishedSite,
   getPublishedSite,
   listPublishedSites,
   type PublishedSiteMeta,
+  type PublishedSite,
 } from "../core/sites/published";
 
 type NavRequest = {
@@ -47,8 +49,16 @@ function normalizeToUrl(raw: string): string {
 function parseSiteSlug(url: string): string | null {
   if (!url.startsWith("alt://site/")) return null;
   const rest = url.slice("alt://site/".length);
-  const slug = rest.split(/[?#]/)[0];
-  return slug ? slug : null;
+  const slug = rest.split(/[/?#]/)[0];
+  return /^[a-z0-9][a-z0-9-]{0,95}$/.test(slug) ? slug : null;
+}
+
+function parseSitePath(url: string): string | null {
+  if (!parseSiteSlug(url)) return null;
+  const parts = url.slice("alt://site/".length).split(/[?#]/)[0].split("/");
+  if (parts.length === 1) return "index.html";
+  if (parts.length !== 2 || !/^[a-z0-9][a-z0-9-]{0,63}\.html$/.test(parts[1])) return null;
+  return parts[1];
 }
 
 function fmtTime(ts: number): string {
@@ -87,16 +97,39 @@ export default function BrowserAlt({
   const [addressValue, setAddressValue] = useState<string>(() => tabs[0].url);
 
   const [publishedToken, setPublishedToken] = useState<number>(0);
-  const publishedSites = useMemo<PublishedSiteMeta[]>(
-    () => listPublishedSites(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [publishedToken]
-  );
+  const [publishedSites, setPublishedSites] = useState<PublishedSiteMeta[]>([]);
+  const [publishedLoading, setPublishedLoading] = useState(true);
+  const [publishedError, setPublishedError] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
+  const [siteState, setSiteState] = useState<{ slug: string; loading: boolean; site: PublishedSite | null; error: string } | null>(null);
+  const siteFrameRef = useRef<HTMLIFrameElement>(null);
+  const deletingSites = useRef(new Set<string>());
+
+  useEffect(() => {
+    let active = true; setPublishedLoading(true);
+    listPublishedSites().then(result => { if (active) { setPublishedSites(result.sites); setPublishedError(result.warning); } }, () => {
+      if (!active) return;
+      setPublishedSites([]);
+      setPublishedError("Не удалось прочитать локальные публикации. Повторите попытку после восстановления хранилища.");
+    }).finally(() => { if (active) setPublishedLoading(false); });
+    return () => { active = false; };
+  }, [publishedToken]);
 
   const activeTab = useMemo(
     () => tabs.find((t) => t.id === activeId) ?? tabs[0],
     [tabs, activeId]
   );
+
+  useEffect(() => {
+    const slug = parseSiteSlug(activeTab?.url || "");
+    if (!slug) { setSiteState(null); return; }
+    let active = true;
+    setSiteState({ slug, loading: true, site: null, error: "" });
+    getPublishedSite(slug).then(site => { if (active) setSiteState({ slug, loading: false, site, error: "" }); }, () => {
+      if (active) setSiteState({ slug, loading: false, site: null, error: "Не удалось прочитать публикацию. Проверьте доступность хранилища и повторите попытку." });
+    });
+    return () => { active = false; };
+  }, [activeTab?.url, activeTab?.reloadToken, publishedToken]);
 
   useEffect(() => {
     if (!activeTab) return;
@@ -131,6 +164,40 @@ export default function BrowserAlt({
         };
       })
     );
+  };
+
+  useEffect(() => {
+    const slug = parseSiteSlug(activeTab?.url || "");
+    const site = slug && siteState?.slug === slug ? siteState.site : null;
+    if (!slug || !site) return;
+    const pages = site.pages?.map(page => page.path) ?? ["index.html"];
+    const onMessage = (event: MessageEvent) => {
+      if (event.source !== siteFrameRef.current?.contentWindow || !event.data || event.data.type !== "altnet.local-page" ||
+          typeof event.data.path !== "string" || !pages.includes(event.data.path)) return;
+      const fragment = event.data.fragment;
+      if (fragment !== undefined && (typeof fragment !== "string" || (fragment !== "" && !/^[a-zA-Z0-9_-]{1,128}$/.test(fragment)))) return;
+      setActiveUrl(`alt://site/${slug}${event.data.path === "index.html" ? "" : `/${event.data.path}`}${fragment ? `#${fragment}` : ""}`);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+    // Функция привязана к активной вкладке и публикации.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, activeTab?.url, siteState]);
+
+  const deletePublication = async (slug: string, returnHome: boolean) => {
+    if (deletingSites.current.has(slug)) return;
+    if (!window.confirm("Удалить эту локальную публикацию?")) return;
+    deletingSites.current.add(slug);
+    try {
+      await deletePublishedSite(slug);
+      setPublishedError(""); setPublishedToken(value => value + 1);
+      if (returnHome) setActiveUrl("alt://home");
+    } catch (error) {
+      const detail = error instanceof Error && error.message ? ` ${error.message}` : "";
+      setPublishedError(`Не удалось полностью удалить публикацию. Проверьте хранилище и повторите попытку.${detail}`);
+    } finally {
+      deletingSites.current.delete(slug);
+    }
   };
 
   const goBack = () => {
@@ -240,8 +307,9 @@ export default function BrowserAlt({
   const copyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
+      setCopyStatus("Адрес скопирован.");
     } catch {
-      // fail-silent
+      setCopyStatus("Не удалось скопировать адрес. Выделите и скопируйте его вручную.");
     }
   };
 
@@ -278,7 +346,7 @@ export default function BrowserAlt({
             <div className="text-white/50 text-xs">{publishedSites.length} шт.</div>
           </div>
 
-          {publishedSites.length === 0 ? (
+          {publishedLoading ? <div role="status" className="mt-3 text-sm text-white/60">Загружаем локальные публикации…</div> : publishedSites.length === 0 && publishedError ? null : publishedSites.length === 0 ? (
             <div className="mt-3 text-sm text-white/60">
               Пока ничего не опубликовано. Нажмите <span className="text-white/90">«Создать / опубликовать сайт»</span>.
             </div>
@@ -309,10 +377,7 @@ export default function BrowserAlt({
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        deletePublishedSite(s.slug);
-                        setPublishedToken(Date.now());
-                      }}
+                      onClick={() => void deletePublication(s.slug, false)}
                       className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white/80 text-xs"
                       title="Удалить локальную публикацию"
                     >
@@ -328,9 +393,13 @@ export default function BrowserAlt({
     );
   };
 
-  const renderSite = (slug: string) => {
-    const site = getPublishedSite(slug);
-    const url = `alt://site/${slug}`;
+  const renderSite = (slug: string, path: string | null) => {
+    const state = siteState?.slug === slug ? siteState : null;
+    const url = activeTab?.url || `alt://site/${slug}`;
+
+    if (!state || state.loading) return <div role="status" className="p-6 text-sm text-white/70">Открываем локальную публикацию…</div>;
+    if (state.error) return <div role="alert" className="rounded-2xl border border-amber-400/50 p-6 text-amber-100">{state.error}</div>;
+    const site = state.site;
 
     if (!site) {
       return (
@@ -359,11 +428,16 @@ export default function BrowserAlt({
       );
     }
 
+    const page = path === "index.html" ? { title: site.title, html: site.html } : site.pages?.find(item => item.path === path);
+    if (!page) return <div role="alert" className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+      Страница отсутствует в локальной публикации. <button type="button" className="underline" onClick={() => setActiveUrl(`alt://site/${slug}`)}>На главную сайта</button>
+    </div>;
+
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
         <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-white/90 font-semibold truncate">{site.title}</div>
+            <div className="text-white/90 font-semibold truncate">{page.title}</div>
             <div className="text-white/50 text-xs truncate">{url}</div>
           </div>
           <div className="flex items-center gap-2">
@@ -377,11 +451,7 @@ export default function BrowserAlt({
             </button>
             <button
               type="button"
-              onClick={() => {
-                deletePublishedSite(slug);
-                setPublishedToken(Date.now());
-                setActiveUrl("alt://home");
-              }}
+              onClick={() => void deletePublication(slug, true)}
               className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white/80 text-xs"
               title="Удалить локальную публикацию"
             >
@@ -390,11 +460,14 @@ export default function BrowserAlt({
           </div>
         </div>
 
+        {site.storageWarning && <p role="alert" className="px-3 py-2 text-xs text-amber-300">{site.storageWarning}</p>}
+        <p className="px-3 py-2 text-xs text-[#c9d0e9]">В локальном просмотре внешние ссылки, формы и медиа отключены до подключения защищённого маршрута.</p>
         <iframe
-          key={`${activeTab.id}:${activeTab.reloadToken}:${publishedToken}`}
-          title={site.title}
-          sandbox=""
-          srcDoc={site.html}
+          key={`${activeTab.id}:${activeTab.url}:${activeTab.reloadToken}:${publishedToken}`}
+          ref={siteFrameRef}
+          title={page.title}
+          sandbox="allow-scripts"
+          srcDoc={prepareLocalPreviewHtml(page.html, site.pages?.map(item => item.path) ?? ["index.html"], url.split("#")[1] || "")}
           className="w-full h-[70vh] bg-white"
         />
       </div>
@@ -420,8 +493,9 @@ export default function BrowserAlt({
     const url = activeTab?.url || "alt://home";
     if (url.startsWith("alt://home")) return renderHome();
     if (url.startsWith("alt://site/")) {
-      const slug = parseSiteSlug(url) ?? "";
-      return renderSite(slug);
+      const slug = parseSiteSlug(url);
+      if (!slug) return <div role="alert" className="p-6 text-amber-100">Некорректный адрес сайта.</div>;
+      return renderSite(slug, parseSitePath(url));
     }
     if (url.startsWith("http://") || url.startsWith("https://")) return renderExternal(url);
 
@@ -437,6 +511,8 @@ export default function BrowserAlt({
 
   return (
     <div className="space-y-3">
+      {publishedError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{publishedError} <button type="button" className="underline" onClick={() => setPublishedToken(value => value + 1)}>Повторить</button></div>}
+      {copyStatus && <div role="status" className="rounded-lg border border-white/20 p-2 text-sm text-white/80">{copyStatus} <button type="button" className="underline" onClick={() => setCopyStatus("")}>Закрыть</button></div>}
       {/* Табы */}
       <div className="rounded-xl bg-white/5 border border-white/10 px-2 py-1 overflow-x-auto">
         <div className="flex items-center gap-1">

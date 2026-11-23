@@ -12,16 +12,11 @@ export default function IconBoxView({ block }: { block: any }) {
   // используем тип, чтобы не было "не используется"
   const bx = (block as Partial<IconBoxLike>) || {};
 
-  const cols = bx.columns ?? 3;
+  const cols = bx.columns ?? (Array.isArray(bx.items) ? 3 : 1);
   const grid =
-    cols === 4 ? "md:grid-cols-4" : cols === 2 ? "md:grid-cols-2" : "md:grid-cols-3";
+    cols === 4 ? "md:grid-cols-4" : cols === 2 ? "md:grid-cols-2" : cols === 1 ? "grid-cols-1" : "md:grid-cols-3";
 
-  const items: IconBoxItem[] =
-    (Array.isArray(bx.items) && (bx.items as IconBoxItem[])) || [
-      { id: "i1", title: "Функция A", text: "Короткое описание", icon: "★" },
-      { id: "i2", title: "Функция B", text: "Короткое описание", icon: "✓" },
-      { id: "i3", title: "Функция C", text: "Короткое описание", icon: "⚙" },
-    ];
+  const items: IconBoxItem[] = Array.isArray(bx.items) ? bx.items : [{ id: block.id, title: block.title, text: block.text, icon: block.icon }];
 
   return (
     <div className={`grid gap-3 ${grid}`}>
@@ -31,7 +26,7 @@ export default function IconBoxView({ block }: { block: any }) {
           className="rounded-2xl border border-[#1f2751] bg-[#0b1022] p-4"
         >
           <div className="w-10 h-10 rounded-xl grid place-items-center bg-[#101735] text-[#9bb1ff] text-lg mb-2">
-            {it.icon?.slice(0, 2) || "•"}
+            {({ star: "★", check: "✓", heart: "♥", shield: "⬡", alert: "!" } as Record<string, string>)[it.icon || ""] || it.icon?.slice(0, 2) || "•"}
           </div>
           <div className="text-sm font-semibold text-[#e6e9f4]">
             {it.title || it.label || "Заголовок"}

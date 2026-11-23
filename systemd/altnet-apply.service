@@ -1,6 +1,7 @@
 [Unit]
 Description=Altnet Apply Modules
 After=network-online.target
+ConditionPathExistsGlob=/opt/altnet/modules/*/*/.fetched
 
 [Service]
 Type=oneshot

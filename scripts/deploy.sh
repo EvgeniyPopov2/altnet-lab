@@ -22,6 +22,7 @@ copy_unit "$SRC/systemd/onion-fwd@.service" "/etc/systemd/system/onion-fwd@.serv
 
 # tor drop-in (без bridges, только override с NoNewPrivileges)
 copy_unit "$SRC/systemd/tor@default.service.d/override.conf" "/etc/systemd/system/tor@default.service.d/override.conf"
+bash "$SRC/scripts/configure-tor-apparmor.sh"
 
 # ipfs unit (без override живого пользователя)
 copy_unit "$SRC/systemd/ipfs.service" "/etc/systemd/system/ipfs.service"
@@ -30,6 +31,8 @@ log "daemon-reload..."
 systemctl daemon-reload
 
 # --- install altnet-* units ---
+install -D -m 0755 "$SRC/scripts/altnet-apply.sh" /opt/altnet/bin/altnet-apply.sh
+copy_unit "$SRC/deploy/systemd/altnet-apply.path" /etc/systemd/system/altnet-apply.path
 install -m 0644 /vagrant/altnet/systemd/altnet-apply.service                /etc/systemd/system/altnet-apply.service
 install -m 0644 /vagrant/altnet/systemd/altnet-apply.timer                  /etc/systemd/system/altnet-apply.timer
 install -m 0644 /vagrant/altnet/systemd/altnet-peers-http.service           /etc/systemd/system/altnet-peers-http.service
@@ -46,6 +49,9 @@ echo "[deploy] installed: altnet-* units"
 systemctl daemon-reload
 
 # timers & helpers: enable
+systemctl start tor@default.service
+systemctl reset-failed altnet-apply.service altnet-apply.path
+systemctl enable --now altnet-apply.path
 systemctl enable --now altnet-apply.timer
 systemctl enable --now altnet-peers-refresh.timer
 systemctl enable --now altnet-peers-refresh-fast.timer

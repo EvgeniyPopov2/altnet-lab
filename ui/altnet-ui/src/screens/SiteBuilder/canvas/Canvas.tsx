@@ -18,6 +18,7 @@ export type CanvasProps = {
   onReorder: (next: Block[]) => void;
   /** Совместим с нативным InsertChoice */
   onInsertAt?: NativeOnInsertAt;
+  onMoveToRoot?: (index: number, id: string) => void;
 };
 
 /**
@@ -27,7 +28,7 @@ export type CanvasProps = {
  * - onInsertAt: берём родной тип из SortableCanvas
  */
 export default function Canvas(props: CanvasProps) {
-  const { cols, gapX, gapY, blocks, renderBlock, onReorder, onInsertAt } = props;
+  const { cols, gapX, gapY, blocks, renderBlock, onReorder, onInsertAt, onMoveToRoot } = props;
 
   return (
     <SortableCanvas
@@ -39,6 +40,7 @@ export default function Canvas(props: CanvasProps) {
       renderBlock={(b) => renderBlock(b as Block)}
       onReorder={(next) => onReorder(next as Block[])}
       onInsertAt={onInsertAt as NativeOnInsertAt}
+      onMoveToRoot={onMoveToRoot}
     />
   );
 }

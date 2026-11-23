@@ -12,7 +12,9 @@ export default function IconSvg({ name, size = 18, title }: Props) {
       src={src}
       width={size}
       height={size}
-      alt={title || name}
+      alt=""
+      aria-hidden="true"
+      style={{ filter: "invert(0.85)" }}
       onError={() => setOk(false)}
       draggable={false}
       referrerPolicy="no-referrer"
@@ -22,7 +24,7 @@ export default function IconSvg({ name, size = 18, title }: Props) {
     <span
       className="inline-block rounded-sm bg-[#101735] text-[#9aa3b2] grid place-items-center"
       style={{ width: size, height: size, fontSize: 10 }}
-      aria-label={title || name}
+      aria-hidden="true"
       title={title || name}
     >
       ●

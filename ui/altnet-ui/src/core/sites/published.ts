@@ -1,36 +1,35 @@
+import { deleteIndexedSite, listIndexedSites, readIndexedSite, writeIndexedSite } from "./publishedDb";
+import type { PublishedPage } from "./publishedDb";
+
 type PublishedSiteMetaV1 = {
   slug: string;
   title: string;
   createdAt: number;
   updatedAt: number;
+  pageCount?: number;
 };
 
 export type PublishedSiteMeta = PublishedSiteMetaV1;
 
 export type PublishedSite = PublishedSiteMetaV1 & {
   html: string;
+  pages?: PublishedPage[];
+  storageWarning?: string;
 };
 
 const LS_INDEX_KEY = "altnet.sites.published.index.v1";
 const LS_SITE_PREFIX = "altnet.sites.published.site.v1:";
-const MAX_SITES = 20;
-
-function safeParseJson<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
 function readIndex(): PublishedSiteMeta[] {
   if (typeof window === "undefined") return [];
-  const parsed = safeParseJson<PublishedSiteMeta[]>(window.localStorage.getItem(LS_INDEX_KEY));
-  if (!Array.isArray(parsed)) return [];
+  const raw = window.localStorage.getItem(LS_INDEX_KEY);
+  if (raw === null) return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error("Старый список публикаций повреждён; данные не изменены."); }
+  if (!Array.isArray(parsed) || !parsed.every(x => x && typeof x.slug === "string" && typeof x.title === "string")) throw new Error("Старый список публикаций повреждён; данные не изменены.");
+  if (new Set(parsed.map(x => x.slug)).size !== parsed.length) throw new Error("Старый список содержит повторяющиеся адреса; данные не изменены.");
   return parsed
-    .filter((x) => x && typeof x.slug === "string" && typeof x.title === "string")
     .map((x) => ({
+      ...x,
       slug: x.slug,
       title: x.title,
       createdAt: typeof x.createdAt === "number" ? x.createdAt : Date.now(),
@@ -39,12 +38,8 @@ function readIndex(): PublishedSiteMeta[] {
 }
 
 function writeIndex(items: PublishedSiteMeta[]): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(LS_INDEX_KEY, JSON.stringify(items));
-  } catch {
-    // fail-silent
-  }
+  if (typeof window === "undefined") throw new Error("Хранилище публикаций недоступно.");
+  window.localStorage.setItem(LS_INDEX_KEY, JSON.stringify(items));
 }
 
 function siteKey(slug: string): string {
@@ -53,29 +48,12 @@ function siteKey(slug: string): string {
 
 function readSiteRaw(slug: string): string | null {
   if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(siteKey(slug));
-  } catch {
-    return null;
-  }
-}
-
-function writeSiteRaw(slug: string, html: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(siteKey(slug), html);
-  } catch {
-    // quota/blocked storage
-  }
+  return window.localStorage.getItem(siteKey(slug));
 }
 
 function deleteSiteRaw(slug: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(siteKey(slug));
-  } catch {
-    // fail-silent
-  }
+  if (typeof window === "undefined") throw new Error("Хранилище публикаций недоступно.");
+  window.localStorage.removeItem(siteKey(slug));
 }
 
 // Простейшая транслитерация RU -> LAT, чтобы slug был человекочитаемым
@@ -149,27 +127,45 @@ function ensureUniqueSlug(base: string, existing: Set<string>): string {
   return `${base}-${Date.now().toString(36)}`;
 }
 
-export function listPublishedSites(): PublishedSiteMeta[] {
-  const idx = readIndex();
-  return idx.sort((a, b) => b.updatedAt - a.updatedAt);
+export async function listPublishedSites(): Promise<{ sites: PublishedSiteMeta[]; warning: string }> {
+  let indexed: PublishedSiteMeta[] = [], legacy: PublishedSiteMeta[] = [];
+  const failures: string[] = [];
+  try { indexed = await listIndexedSites(); } catch { failures.push("новое хранилище"); }
+  try { legacy = readIndex(); } catch { failures.push("старый список"); }
+  const combined = new Map(legacy.map(site => [site.slug, site]));
+  for (const site of indexed) combined.set(site.slug, site);
+  return { sites: [...combined.values()].sort((a, b) => b.updatedAt - a.updatedAt), warning: failures.length ? `Не удалось прочитать ${failures.join(" и ")}; показаны доступные публикации.` : "" };
 }
 
-export function getPublishedSite(slug: string): PublishedSite | null {
+function getLegacySite(slug: string): PublishedSite | null {
   const clean = String(slug || "").trim();
   if (!clean) return null;
-
   const idx = readIndex();
   const meta = idx.find((x) => x.slug === clean);
   if (!meta) return null;
-
   const html = readSiteRaw(clean);
-  if (typeof html !== "string" || html.length === 0) return null;
-
+  if (typeof html !== "string" || html.length === 0) throw new Error("Старая публикация повреждена или её содержимое недоступно.");
   return { ...meta, html };
 }
 
-export function upsertPublishedSite(input: { title: string; html: string; slug?: string }): PublishedSiteMeta {
-  const idx = readIndex();
+export async function getPublishedSite(slug: string): Promise<PublishedSite | null> {
+  const clean = String(slug || "").trim();
+  if (!clean) return null;
+  try {
+    const site = await readIndexedSite(clean);
+    return site || getLegacySite(clean);
+  } catch (error) {
+    const legacy = getLegacySite(clean);
+    if (legacy) return { ...legacy, storageWarning: "Новое хранилище недоступно; показана старая локальная копия." };
+    throw error;
+  }
+}
+
+export async function upsertPublishedSite(input: { title: string; html: string; slug?: string; pages?: PublishedPage[] }): Promise<PublishedSiteMeta> {
+  const indexed = await listIndexedSites();
+  const combined = new Map(readIndex().map(site => [site.slug, site]));
+  for (const site of indexed) combined.set(site.slug, site);
+  const idx = [...combined.values()];
   const existing = new Set(idx.map((x) => x.slug));
 
   const base = slugify(input.slug || input.title);
@@ -180,35 +176,33 @@ export function upsertPublishedSite(input: { title: string; html: string; slug?:
   const prev = idx.find((x) => x.slug === slug);
 
   const meta: PublishedSiteMeta = {
+    ...prev,
     slug,
     title: input.title || prev?.title || slug,
     createdAt: prev?.createdAt ?? now,
     updatedAt: now,
+    pageCount: input.pages?.length,
   };
 
-  writeSiteRaw(slug, input.html);
-
-  const nextIdx = [meta, ...idx.filter((x) => x.slug !== slug)]
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .slice(0, MAX_SITES);
-
-  writeIndex(nextIdx);
-
-  // Если обрезали по MAX_SITES — удаляем html “вытеснённых”
-  const keep = new Set(nextIdx.map((x) => x.slug));
-  for (const m of idx) {
-    if (!keep.has(m.slug)) {
-      deleteSiteRaw(m.slug);
-    }
-  }
-
+  await writeIndexedSite({ ...meta, html: input.html, pages: input.pages }, indexed.some(site => site.slug === slug));
   return meta;
 }
 
-export function deletePublishedSite(slug: string): void {
+export async function deletePublishedSite(slug: string): Promise<void> {
   const clean = String(slug || "").trim();
   if (!clean) return;
+  await listIndexedSites();
   const idx = readIndex();
-  writeIndex(idx.filter((x) => x.slug !== clean));
-  deleteSiteRaw(clean);
+  if (idx.some(site => site.slug === clean)) {
+    writeIndex(idx.filter((x) => x.slug !== clean));
+    try {
+      deleteSiteRaw(clean);
+    } catch (error) {
+      // Содержимое ещё на месте. Вернём запись в каталог, если это возможно.
+      try { writeIndex(idx); }
+      catch { throw new Error("Содержимое старой публикации сохранено, но не удалось вернуть её в список. Не очищайте данные браузера."); }
+      throw error;
+    }
+  }
+  await deleteIndexedSite(clean);
 }

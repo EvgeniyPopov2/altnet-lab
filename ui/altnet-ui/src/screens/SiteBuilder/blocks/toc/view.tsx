@@ -12,7 +12,7 @@ export default function TocView({ block }: { block: TocBlock }) {
       <ol className="grid gap-1 text-sm">
         {block.items.map((it) => (
           <li key={it.id}>
-            <a href={safeHref(it.href)} className="text-[#9bb1ff] hover:underline">{it.label}</a>
+            <a href={safeHref(it.href)} className="text-[#9bb1ff] hover:underline" onClick={event => event.preventDefault()}>{it.label}</a>
           </li>
         ))}
       </ol>

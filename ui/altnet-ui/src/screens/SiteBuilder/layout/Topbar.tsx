@@ -95,16 +95,13 @@ export default function Topbar({
   };
 
   return (
-    <div className="sticky top-0 z-20 h-12 bg-[#0b0f17] border-b border-[#1f2751] flex items-center justify-between px-3 select-none">
+    <div onClick={event => event.stopPropagation()} className="builder-topbar sticky top-0 z-20 min-h-12 bg-[#0b0f17] border-b border-[#1f2751] flex items-center justify-between gap-3 px-3 select-none">
       {/* Лево: логотип+название (минимально) */}
       <div className="flex items-center gap-2">
         <div className="h-8 w-8 grid place-items-center rounded-md border border-[#2a2f45] text-[#cfd5e6]">
-          {/* простая «Е»-плашка, можно заменить позже на наш логотип */}
-          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-            <path fill="currentColor" d="M6 4h12v3H9v5h8v3H9v5H6z" />
-          </svg>
+          <img src="/altnet-logo.png" alt="" className="h-6 w-6 object-contain" />
         </div>
-        <div className="text-sm text-[#e6e9f4] font-medium">
+        <div className="max-w-40 truncate text-sm text-[#e6e9f4] font-medium" title={title || "Страница"}>
           {title || "Страница"} <span className="ml-2 text-[#9aa3b2]">(Черновик)</span>
         </div>
       </div>

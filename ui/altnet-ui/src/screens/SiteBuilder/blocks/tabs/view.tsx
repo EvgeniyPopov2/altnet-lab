@@ -29,6 +29,10 @@ function dirCls(o?: TabsOrientation) {
 
 export default function TabsView({ block }: { block: TabsBlock }) {
   const [idx, setIdx] = React.useState(Math.max(0, Math.min(block.active ?? 0, (block.tabs?.length || 1) - 1)));
+  React.useEffect(() => {
+    const requested = Math.max(0, Math.min(block.active ?? 0, Math.max(0, block.tabs.length - 1)));
+    setIdx(block.tabs[requested]?.disabled ? Math.max(0, block.tabs.findIndex(tab => !tab.disabled)) : requested);
+  }, [block.active, block.tabs]);
   const refList = React.useRef<HTMLDivElement | null>(null);
   const variant = block.variant ?? "underline";
   const size = block.size ?? "md";
@@ -36,12 +40,18 @@ export default function TabsView({ block }: { block: TabsBlock }) {
   const orient = block.orientation ?? "horizontal";
 
   function onKey(e: React.KeyboardEvent) {
-    if (orient === "horizontal") {
-      if (e.key === "ArrowRight") { e.preventDefault(); setIdx(i => Math.min(i + 1, (block.tabs.length - 1))); }
-      if (e.key === "ArrowLeft")  { e.preventDefault(); setIdx(i => Math.max(i - 1, 0)); }
-    } else {
-      if (e.key === "ArrowDown")  { e.preventDefault(); setIdx(i => Math.min(i + 1, (block.tabs.length - 1))); }
-      if (e.key === "ArrowUp")    { e.preventDefault(); setIdx(i => Math.max(i - 1, 0)); }
+    const forward = orient === "horizontal" ? "ArrowRight" : "ArrowDown";
+    const backward = orient === "horizontal" ? "ArrowLeft" : "ArrowUp";
+    if (e.key !== forward && e.key !== backward) return;
+    e.preventDefault();
+    const direction = e.key === forward ? 1 : -1;
+    for (let offset = 1; offset <= block.tabs.length; offset++) {
+      const next = (idx + direction * offset + block.tabs.length * 2) % block.tabs.length;
+      if (!block.tabs[next]?.disabled) {
+        setIdx(next);
+        refList.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+        break;
+      }
     }
   }
 
@@ -59,8 +69,10 @@ export default function TabsView({ block }: { block: TabsBlock }) {
           return (
             <button
               key={t.id}
+              id={`tab-${block.id}-${i}`}
               role="tab"
               aria-selected={active}
+              aria-controls={`panel-${block.id}-${i}`}
               tabIndex={active ? 0 : -1}
               className={clsTab(variant, active, size)}
               onClick={() => !t.disabled && setIdx(i)}
@@ -72,8 +84,8 @@ export default function TabsView({ block }: { block: TabsBlock }) {
         })}
       </div>
 
-      <div role="tabpanel" className="rounded-2xl border border-[#1f2751] bg-[#0b1022] p-4 text-sm text-[#e6e9f4]">
-        {(block.tabs[idx]?.content || "Контент вкладки")}
+      <div id={`panel-${block.id}-${idx}`} role="tabpanel" aria-labelledby={`tab-${block.id}-${idx}`} className="rounded-2xl border border-[#1f2751] bg-[#0b1022] p-4 text-sm text-[#e6e9f4]">
+        {block.tabs[idx]?.content ?? ""}
       </div>
     </div>
   );

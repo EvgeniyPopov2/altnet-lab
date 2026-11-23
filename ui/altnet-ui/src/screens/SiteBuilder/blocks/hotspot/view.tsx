@@ -11,8 +11,8 @@ function safeHref(h?: string) {
 export default function HotspotView({ block }: { block: HotspotBlock }) {
   return (
     <div className="relative rounded-2xl overflow-hidden border border-[#1f2751]">
-      <img src={block.src} alt={block.alt || ""} className="w-full h-auto block" />
-      {block.markers.map(m => (
+      {block.src ? <img src={block.src} alt={block.alt || ""} className="w-full h-auto block" referrerPolicy="no-referrer" /> : <div className="grid aspect-video place-items-center text-xs text-[#9aa3b2]">Укажите адрес изображения</div>}
+      {(Array.isArray(block.markers) ? block.markers : []).map(m => (
         <a key={m.id}
            href={safeHref(m.href)}
            className="absolute -translate-x-1/2 -translate-y-1/2 grid place-items-center h-6 w-6 rounded-full bg-[#5865F2] text-white text-[11px] border border-white/50"

@@ -15,8 +15,8 @@ export default function VideoView({ block }: { block: VideoBlock }) {
     <div className="rounded-xl border border-[#1f2751] bg-black overflow-hidden">
       <video
         className="w-full h-auto"
-        controls
-        preload="metadata"
+        controls={block.controls !== false}
+        preload="none"
         muted={!!block.muted}
         loop={!!block.loop}
         poster={poster || undefined}

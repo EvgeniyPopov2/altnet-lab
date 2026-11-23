@@ -1,0 +1,166 @@
+@font-face {
+  font-family: "AltNet Manrope";
+  src: url("/fonts/manrope/Manrope-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+.altnet-builder {
+  --builder-bg: #0d1019;
+  --builder-panel: #151a29;
+  --builder-field: #1c2233;
+  --builder-border: #30384d;
+  --builder-text: #eceef7;
+  --builder-muted: #aeb7cd;
+  --builder-accent: #8975ff;
+}
+.altnet-builder[data-editor-theme="light"] {
+  --builder-bg: #f4f5f9;
+  --builder-panel: #fff;
+  --builder-field: #f4f5fa;
+  --builder-border: #d9dce8;
+  --builder-text: #24283b;
+  --builder-muted: #626b80;
+  --builder-accent: #654ed6;
+}
+.builder-sidebar, .builder-topbar, .builder-collapse, [data-insert-slot] {
+  font-family: "AltNet Manrope", system-ui, sans-serif;
+}
+.builder-sidebar {
+  background: var(--builder-bg) !important;
+  border-color: var(--builder-border) !important;
+  color: var(--builder-text);
+  scrollbar-color: var(--builder-border) transparent;
+}
+.builder-sidebar .builder-inspector {
+  border: 0;
+  border-radius: 10px;
+  background: var(--builder-panel) !important;
+}
+.builder-inspector > div { padding: 10px; }
+.builder-inspector #inspector-panel > div { gap: 10px; }
+.builder-sidebar input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+.builder-sidebar select, .builder-sidebar textarea {
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.sb-slider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 62px 22px;
+  grid-template-areas: "label label label" "range number reset";
+  align-items: center;
+  gap: 4px 8px;
+}
+.sb-slider > label { display: contents; }
+.sb-slider > label > span { grid-area: label; }
+.sb-slider > label > input { grid-area: number; text-align: right; }
+.sb-slider > input[type="range"] { grid-area: range; min-width: 0; height: 18px; accent-color: var(--builder-accent); }
+.sb-slider > button { grid-area: reset; color: var(--builder-muted); font-size: 16px; }
+.sb-color-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  grid-template-areas: "label label" "text picker" "hint hint";
+  align-items: center;
+  gap: 4px 7px;
+}
+.sb-color-control > label { display: contents; }
+.sb-color-control > label > span { grid-area: label; }
+.sb-color-control > label > input { grid-area: text; }
+.sb-color-control > input[type="color"] {
+  grid-area: picker;
+  width: 34px;
+  height: 32px;
+  padding: 2px !important;
+  border: 1px solid var(--builder-border);
+  border-radius: 7px;
+  background: var(--builder-field);
+  cursor: pointer;
+}
+.sb-color-control > p { grid-area: hint; }
+.builder-topbar {
+  background: var(--builder-bg) !important;
+  border-color: var(--builder-border) !important;
+  color: var(--builder-text);
+}
+.builder-theme-toggle {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  border: 1px solid var(--builder-border);
+  border-radius: 8px;
+  background: var(--builder-panel);
+  color: var(--builder-text);
+  font-size: 17px;
+}
+.builder-theme-toggle:hover { border-color: var(--builder-accent); }
+.builder-theme-toggle:focus-visible, .builder-sidebar :focus-visible, [data-layout-preview]:focus-visible {
+  outline: 2px solid var(--builder-accent);
+  outline-offset: 2px;
+}
+.altnet-builder[data-editor-theme="light"] .builder-sidebar [class*="bg-[#0"],
+.altnet-builder[data-editor-theme="light"] .builder-sidebar [class*="bg-[#1"],
+.altnet-builder[data-editor-theme="light"] .builder-topbar button,
+.altnet-builder[data-editor-theme="light"] .builder-collapse {
+  background-color: var(--builder-panel) !important;
+  border-color: var(--builder-border) !important;
+  color: var(--builder-text) !important;
+}
+.altnet-builder[data-editor-theme="light"] .builder-sidebar input:not([type="range"]),
+.altnet-builder[data-editor-theme="light"] .builder-sidebar textarea,
+.altnet-builder[data-editor-theme="light"] .builder-sidebar select {
+  background-color: var(--builder-field) !important;
+  color: var(--builder-text) !important;
+  border-color: var(--builder-border) !important;
+}
+.altnet-builder[data-editor-theme="light"] .builder-sidebar [class*="text-[#"],
+.altnet-builder[data-editor-theme="light"] .builder-topbar [class*="text-[#"] {
+  color: var(--builder-text) !important;
+}
+.altnet-builder[data-editor-theme="light"] .builder-sidebar label span,
+.altnet-builder[data-editor-theme="light"] .builder-sidebar p { color: var(--builder-muted) !important; }
+.altnet-builder[data-editor-theme="light"] .builder-sidebar [role="tab"][aria-selected="true"] {
+  background: #ede9ff !important;
+  border-color: #b7a7f7 !important;
+  color: #4933b0 !important;
+}
+.altnet-builder[data-editor-theme="light"] .builder-topbar > div:nth-child(2) > div > div[class*="bg-[#e6e9f4]"] { background-color: var(--builder-accent); }
+.builder-topbar > div:last-child { min-width: 0; overflow-x: auto; scrollbar-width: thin; }
+.builder-topbar > div:last-child > div { gap: 6px; white-space: nowrap; }
+.builder-topbar > div:last-child button:not(.builder-theme-toggle) { padding: 6px 9px; font-size: 12px; }
+.builder-topbar > div:nth-child(2) { flex-shrink: 0; gap: 12px; }
+.altnet-builder .sb-sort-handle { touch-action: none; }
+@media (hover: none), (pointer: coarse) {
+  .altnet-builder .sb-sortable-block { padding-top: 36px; }
+  .altnet-builder .sb-sort-handle { opacity: 1; min-width: 32px; min-height: 32px; display: grid; place-items: center; }
+}
+
+/* На узком экране палитра открывается поверх холста, а не вытесняет его. */
+@media (max-width: 767px) {
+  .altnet-builder { display: block; }
+  .altnet-builder .builder-sidebar {
+    position: absolute;
+    z-index: 29;
+    inset: 0 auto auto 0;
+    width: min(280px, calc(100% - 42px));
+    max-height: min(80dvh, 720px);
+    box-shadow: 0 12px 32px #0008;
+  }
+  .altnet-builder .builder-collapse {
+    top: 104px;
+    left: min(280px, calc(100% - 42px));
+    width: 36px;
+    height: 48px;
+    transform: none;
+    font-size: 20px;
+  }
+  .altnet-builder[data-sidebar-collapsed="true"] .builder-collapse { left: 0; }
+  .altnet-builder .builder-topbar { flex-wrap: wrap; justify-content: flex-start; gap: 4px 12px; padding: 6px; }
+  .altnet-builder .builder-topbar > div:first-child { flex: 1 1 80px; min-width: 0; }
+  .altnet-builder .builder-topbar > div:nth-child(2) { gap: 8px; }
+  .altnet-builder .builder-topbar > div:last-child { flex: 1 0 100%; width: 100%; }
+}

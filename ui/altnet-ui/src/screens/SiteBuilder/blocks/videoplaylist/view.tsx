@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { VideoPlaylistBlock } from "../../types";
 
 function safeUrl(s?: string) {
@@ -11,12 +11,13 @@ function safeUrl(s?: string) {
 
 export default function VideoPlaylistView({ block }: { block: VideoPlaylistBlock }) {
   const [i, setI] = useState(Math.max(0, Math.min(block.initial ?? 0, block.items.length - 1)));
+  useEffect(() => setI(Math.max(0, Math.min(block.initial ?? 0, block.items.length - 1))), [block.initial, block.items]);
   const cur = block.items[i];
   return (
     <div className="grid gap-3">
       <div className="rounded-xl overflow-hidden border border-[#1f2751] bg-black">
         {cur && (
-          <video className="w-full h-auto" controls preload="metadata" poster={safeUrl(cur.poster) || undefined}>
+          <video key={cur.id || i} className="w-full h-auto" controls preload="none" poster={safeUrl(cur.poster) || undefined}>
             <source src={safeUrl(cur.src)} />
           </video>
         )}

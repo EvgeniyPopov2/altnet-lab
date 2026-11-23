@@ -1,4 +1,4 @@
-type PriceItem = { id: string; title?: string; price?: string; period?: string; features?: string[]; ctaLabel?: string; ctaHref?: string };
+type PriceItem = { id: string; title?: string; price?: string; desc?: string; period?: string; features?: string[]; ctaLabel?: string; ctaHref?: string };
 type PriceListLike = { items?: PriceItem[] };
 
 function safeHref(h?: string) {
@@ -20,12 +20,13 @@ export default function PriceListView({ block }: { block: PriceListLike }) {
         <div key={p.id} className="rounded-2xl border border-[#1f2751] bg-[#0b1022] p-4">
           <div className="text-sm font-semibold text-[#e6e9f4]">{p.title || "Тариф"}</div>
           <div className="mt-1 text-xl font-extrabold text-[#e6e9f4]">{p.price || "0 ₽"} <span className="text-xs text-[#9aa3b2]">{p.period || ""}</span></div>
+          {p.desc && <p className="mt-2 text-xs text-[#c9d0e9]">{p.desc}</p>}
           <ul className="mt-2 grid gap-1 text-xs text-[#c9d0e9] list-disc pl-5">
             {(p.features || []).map((f, i) => <li key={i}>{f}</li>)}
           </ul>
           {p.ctaLabel && safeHref(p.ctaHref) && (
             <div className="mt-3">
-              <a href={safeHref(p.ctaHref)} className="px-3 py-2 rounded-lg bg-[#5865F2] text-white hover:bg-[#4854e6]" rel="noopener noreferrer nofollow">
+              <a href={safeHref(p.ctaHref)} className="px-3 py-2 rounded-lg bg-[#5865F2] text-white hover:bg-[#4854e6]" rel="noopener noreferrer nofollow" onClick={event => event.preventDefault()}>
                 {p.ctaLabel}
               </a>
             </div>

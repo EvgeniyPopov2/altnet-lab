@@ -1,6 +1,7 @@
-﻿import React, { useCallback, useMemo, useRef, useState, useEffect } from "react";
-import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc } from "../builder/exporter";
+﻿import React, { useCallback, useMemo, useRef, useState, useEffect, useReducer } from "react";
+import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc, unsupportedBlockTypes } from "../builder/exporter";
 import { upsertPublishedSite } from "../core/sites/published";
+import type { PublishedPage } from "../core/sites/publishedDb";
 import { pushSecurityEvent } from "../core/security/bus";
 import Canvas from "./SiteBuilder/canvas/Canvas";
 import Outline from "./SiteBuilder/outline/Outline";
@@ -11,6 +12,27 @@ import Inspector from "./SiteBuilder/inspector/Inspector";
 import Field from "./SiteBuilder/ui/Field";
 import Topbar from "./SiteBuilder/layout/Topbar";
 import InspectorTabs from "./SiteBuilder/inspector/InspectorTabs";
+import { exportDraft, importDraft, loadDraft, STORAGE_KEY, validateDraft } from "./SiteBuilder/storage";
+import { importLegacyDoc } from "./SiteBuilder/legacyImport";
+import { getSharedDraftWriter, readIndexedDraft, type SaveStatus } from "./SiteBuilder/draftPersistence";
+import { getSharedEditorLease, type LeaseResult } from "./SiteBuilder/editorLease";
+import { historyReducer } from "./SiteBuilder/history";
+import LayoutCanvas from "./SiteBuilder/layout/LayoutCanvas";
+import { cellsOf, copyTree, findBlock, findLocation, insertIntoCell, moveToCell, moveToRoot, removeFromTree, updateBlock, visibleBlocks } from "./SiteBuilder/layoutTree";
+import { resolveResponsiveStyle } from "./SiteBuilder/responsiveStyle";
+import { gridColumnCount, gridCoveredCells } from "./SiteBuilder/gridLayout";
+import { hasBlockedPreviewAssets, previewSafeBlock } from "./SiteBuilder/previewAssets";
+import { prepareLocalPreviewHtml } from "../core/sites/localPreview";
+import SpacerView from "./SiteBuilder/blocks/spacer/view";
+import ImgView from "./SiteBuilder/blocks/img/view";
+import BtnView from "./SiteBuilder/blocks/btn/view";
+import "./SiteBuilder/builderChrome.css";
+import RevisionPanel from "./SiteBuilder/RevisionPanel";
+import PagePanel from "./SiteBuilder/PagePanel";
+import ProjectPanel from "./SiteBuilder/ProjectPanel";
+import { allPageDocuments } from "./SiteBuilder/pages";
+import { exportPagesZip } from "./SiteBuilder/exportPages";
+import { exportProject, importProject, parseProject, projectsOf } from "./SiteBuilder/projects";
 import type {
   BlockType,
   HeroBlock,
@@ -18,8 +40,6 @@ import type {
   PBlock,
   ImgBlock,
   BtnBlock,
-  ColsRatio,
-  Cols2Block,
   Block,
   Doc,
 } from "./SiteBuilder/types";
@@ -32,8 +52,6 @@ type CheckItem = { id: string; ok: boolean; text: string };
 const isHttp = (s: string) => /^https?:\/\//i.test(s || "");
 const isHash = (s: string) => (s || "").trim().startsWith("#");
 const notEmpty = (s?: string) => !!(s && s.trim().length > 0);
-
-const STORAGE_KEY = "altnet.sitebuilder.v1";
 
 const DEFAULT_DOC: Doc = {
   title: "Мой сайт",
@@ -101,12 +119,6 @@ function validateDoc(doc: Doc): CheckItem[] {
   return checks;
 }
 
-function loadFromStorage(): Doc | null {
-  // ВРЕМЕННО отключаем автозагрузку черновика из localStorage,
-  // чтобы всегда стартовать с DEFAULT_DOC и видеть мастер Flex/Grid.
-  return null;
-}
-
 function uid() {
   return Math.random().toString(36).slice(2, 9);
 }
@@ -127,14 +139,22 @@ function prettyFileName(title: string, ext: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 type Breakpoint = "desktop" | "tablet" | "mobile";
 type BlockStyle = {
+  w?: number;
+  minh?: number;
+  op?: number;
   mt?: number;
   mb?: number;
+  ml?: number;
+  mr?: number;
   pt?: number;
   pb?: number;
+  pl?: number;
+  pr?: number;
   py?: number;
   fs?: number;
   fw?: number;
   lh?: number;
+  ff?: string;
   ta?: "left" | "center" | "right" | "justify";
   tc?: string;
   bg?: string;
@@ -156,7 +176,78 @@ export default function SiteBuilder({
   onClose?: () => void;
   onPublished?: (url: string) => void;
 }) {
-  const [doc, setDoc] = useState<Doc>(() => loadFromStorage() ?? DEFAULT_DOC);
+  const [draftWriter] = useState(() => {
+    try { return getSharedDraftWriter(); } catch { return undefined; }
+  });
+  const [draftLease] = useState(() => getSharedEditorLease(draftWriter));
+  const [leaseStatus, setLeaseStatus] = useState<LeaseResult | "checking">("checking");
+  const [leaseAttempt, setLeaseAttempt] = useState(0);
+  const [history, dispatchHistory] = useReducer(historyReducer, {
+    past: [], current: DEFAULT_DOC, future: [],
+  });
+  const doc = history.current;
+  const currentDocRef = useRef(doc);
+  currentDocRef.current = doc;
+  const setDoc = useCallback((value: React.SetStateAction<Doc>) => dispatchHistory({ type: "edit", value }), []);
+  const [loadingDraft, setLoadingDraft] = useState(true);
+  const [draftBlocked, setDraftBlocked] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>(draftWriter?.status ?? "failed");
+  const [revisionConflict, setRevisionConflict] = useState(false);
+  const [importConflict, setImportConflict] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState("");
+  const publishingRef = useRef(false);
+  const saveFailed = saveStatus === "failed";
+
+  useEffect(() => draftWriter?.subscribe(setSaveStatus), [draftWriter]);
+  useEffect(() => {
+    let active = true;
+    void draftLease.acquire().then(result => { if (active) setLeaseStatus(result); });
+    return () => { active = false; draftLease.release(); };
+  }, [draftLease, leaseAttempt]);
+  useEffect(() => {
+    if (leaseStatus !== "owned" && leaseStatus !== "unsupported") return;
+    let active = true;
+    const restore = async () => {
+      try {
+        if (draftWriter?.status === "saving") await draftWriter.waitForIdle();
+        const unsaved = draftWriter?.getUnsaved();
+        let result = unsaved ? validateDraft(unsaved) : loadDraft(window.localStorage);
+        if (result.status === "indexeddb") {
+          const raw = await readIndexedDraft();
+          result = raw === undefined ? { status: "unavailable" } : validateDraft(JSON.parse(raw));
+        }
+        if (!active) return;
+        if (result.status === "loaded") dispatchHistory({ type: "restore", doc: result.doc });
+        else if (result.status !== "empty") throw new Error("Черновик недоступен.");
+        setDraftBlocked(false);
+      } catch {
+        if (active) setDraftBlocked(true);
+      } finally {
+        if (active) setLoadingDraft(false);
+      }
+    };
+    void restore();
+    return () => { active = false; };
+  }, [leaseStatus, draftWriter]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select, [contenteditable=true]"))) return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const key = event.key.toLowerCase();
+      if (key === "z") {
+        event.preventDefault();
+        dispatchHistory({ type: event.shiftKey ? "redo" : "undo" });
+      } else if (key === "y" && !event.shiftKey) {
+        event.preventDefault();
+        dispatchHistory({ type: "redo" });
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Канвас: кол-во колонок и зазоры
   const [canvasCols] = useState<1 | 2 | 3 | 4>(3);
@@ -174,8 +265,9 @@ export default function SiteBuilder({
 
   // Выбор блока
   const [selId, setSelId] = useState<string | null>(null);
+  const [targetCell, setTargetCell] = useState<{ parentId: string; cellIndex: number } | null>(null);
   const selBlock = useMemo(
-    () => doc.blocks.find((b: any) => b.id === selId),
+    () => selId ? findBlock(doc.blocks, selId) : undefined,
     [doc.blocks, selId]
   );
 
@@ -410,7 +502,16 @@ export default function SiteBuilder({
 
 
   // Сворачивание левой панели (как в Elementor)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => typeof window !== "undefined" && Boolean(window.matchMedia?.("(max-width: 767px)").matches));
+  const [editorTheme, setEditorTheme] = useState<"dark" | "light">(() => {
+    try { return localStorage.getItem("altnet.builder.theme") === "light" ? "light" : "dark"; }
+    catch { return "dark"; }
+  });
+  const toggleEditorTheme = () => {
+    const next = editorTheme === "dark" ? "light" : "dark";
+    setEditorTheme(next);
+    try { localStorage.setItem("altnet.builder.theme", next); } catch { /* тема остаётся доступной в текущем сеансе */ }
+  };
 
   // Табы редактора
   const [editorTab, setEditorTab] = useState<"content" | "style" | "advanced">("content");
@@ -428,8 +529,11 @@ export default function SiteBuilder({
 
   // Мини-предпросмотр (встроенный iframe) — чтобы не было «не прочитан» у переменных
   const [autoPreview, setAutoPreview] = useState<boolean>(true);
+  const autoPreviewRef = useRef(autoPreview);
+  autoPreviewRef.current = autoPreview;
+  const [previewError, setPreviewError] = useState("");
 
-  type ExportPhase = "cdr" | "build";
+  type ExportPhase = "cdr" | "build" | "pages";
   const [exportState, setExportState] = useState<{
     format: "html" | "zip";
     phase: ExportPhase;
@@ -437,42 +541,63 @@ export default function SiteBuilder({
     total: number;
   } | null>(null);
   const isExporting = exportState !== null;
+  const [exportError, setExportError] = useState("");
 
   // Для live-preview (отдельная вкладка)
   const importJsonInputRef = useRef<HTMLInputElement>(null);
-  const livePreviewWindowRef = useRef<Window | null>(null);
+  const importProjectInputRef = useRef<HTMLInputElement>(null);
   const livePreviewChannelRef = useRef<BroadcastChannel | null>(null);
-  const livePreviewIdRef = useRef<string>("");
   const liveDebounceRef = useRef<number | null>(null);
+  const livePreviewSequence = useRef(0);
+  const livePreviewReady = useRef(false);
+  const livePreviewRunning = useRef(false);
+  const livePreviewPending = useRef<{ channel: BroadcastChannel; force: boolean; sequence: number; snapshot: Doc } | null>(null);
+  const livePreviewUrls = useRef<string[]>([]);
 
   // ── Хелперы правки документа ───────────────────────────────────────────────
-  const patchBlock = useCallback((id: string, patch: Partial<any>) => {
-    setDoc((d) => ({ ...d, blocks: d.blocks.map((b) => (b.id === id ? { ...b, ...patch } : b)) }));
+  const patchBlock = useCallback((id: string, patch: Partial<any> | ((block: any) => Partial<any>), group?: string) => {
+    dispatchHistory({ type: "edit", group, value: (d) => ({ ...d, blocks: updateBlock(d.blocks, id, b => ({ ...b, ...(typeof patch === "function" ? patch(b) : patch) })) }) });
   }, []);
 
   const removeBlock = useCallback(
     (id: string) => {
-      setDoc((d) => ({ ...d, blocks: d.blocks.filter((b) => b.id !== id) }));
+      setDoc((d) => ({ ...d, blocks: removeFromTree(d.blocks, id) }));
       if (selId === id) setSelId(null);
     },
     [selId]
   );
 
   const duplicateBlock = useCallback((id: string) => {
+    const original = findBlock(doc.blocks, id);
+    if (!original) return;
+    const copy = copyTree(original, uid);
     setDoc((d) => {
+      const location = findLocation(d.blocks, id);
+      if (location?.parentId) {
+        const blocks = insertIntoCell(d.blocks, location.parentId, location.cellIndex, copy, location.index + 1);
+        return blocks === d.blocks ? d : { ...d, blocks };
+      }
       const i = d.blocks.findIndex((b) => b.id === id);
       if (i < 0) return d;
-      const copy = { ...(d.blocks[i] as any), id: uid() } as any;
       const next = d.blocks.slice();
       next.splice(i + 1, 0, copy);
       return { ...d, blocks: next };
     });
-  }, []);
+  }, [doc.blocks, setDoc]);
 
   const moveBlock = useCallback((id: string, dir: -1 | 1) => {
     setDoc((d) => {
+      const location = findLocation(d.blocks, id);
+      if (location?.parentId) {
+        const parent = findBlock(d.blocks, location.parentId);
+        const siblings = parent && cellsOf(parent)?.[location.cellIndex];
+        if (!siblings || location.index + dir < 0 || location.index + dir >= siblings.length) return d;
+        const blocks = moveToCell(d.blocks, id, location.parentId, location.cellIndex, location.index + (dir > 0 ? 2 : -1));
+        return blocks === d.blocks ? d : { ...d, blocks };
+      }
       const i = d.blocks.findIndex((b) => b.id === id);
       if (i < 0) return d;
+      if ("locked" in d.blocks[i] && d.blocks[i].locked) return d;
       const j = i + dir;
       if (j < 0 || j >= d.blocks.length) return d;
       const next = d.blocks.slice();
@@ -486,24 +611,31 @@ export default function SiteBuilder({
   const resolveStyle = (b: any, cur: Breakpoint): BlockStyle => {
     const base: BlockStyle = (b && b.style) || {};
     const perAll: StyleByBp = (b && b.styleByBp) || {};
-    const per: BlockStyle = (perAll && (perAll as any)[cur]) || {};
-    return { ...base, ...per };
+    return resolveResponsiveStyle(base, perAll, cur) as BlockStyle;
   };
 
   const styleInline = useCallback(
     (b: any): React.CSSProperties => {
       const s = resolveStyle(b, bp);
-      const pt = s.py != null ? s.py : s.pt;
-      const pb = s.py != null ? s.py : s.pb;
+      const pt = s.pt ?? s.py;
+      const pb = s.pb ?? s.py;
       const mt = s.mt;
       const mb = s.mb;
       return {
+        ...(typeof s.w === "number" && Number.isFinite(s.w) ? { width: `${Math.max(1, Math.min(200, s.w))}%` } : {}),
+        ...(typeof s.minh === "number" && Number.isFinite(s.minh) ? { minHeight: Math.max(0, Math.min(1200, s.minh)) } : {}),
+        ...(typeof s.op === "number" && Number.isFinite(s.op) ? { opacity: Math.max(0, Math.min(100, s.op)) / 100 } : {}),
         ...(pt != null ? { paddingTop: Number(pt) } : {}),
         ...(pb != null ? { paddingBottom: Number(pb) } : {}),
+        ...(s.pl != null ? { paddingLeft: Number(s.pl) } : {}),
+        ...(s.pr != null ? { paddingRight: Number(s.pr) } : {}),
         ...(mt != null ? { marginTop: Number(mt) } : {}),
         ...(mb != null ? { marginBottom: Number(mb) } : {}),
+        ...(s.ml != null ? { marginLeft: Number(s.ml) } : {}),
+        ...(s.mr != null ? { marginRight: Number(s.mr) } : {}),
 
         ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
+        ...(s.ff && ["system-ui", "sans-serif", "serif", "monospace", "Arial", "Georgia", "Verdana", "Tahoma"].includes(s.ff) ? { fontFamily: s.ff } : {}),
         ...(s.fw != null ? { fontWeight: Number(s.fw) as any } : {}),
         ...(s.lh != null ? { lineHeight: Number(s.lh) } : {}),
         ...(s.ta ? { textAlign: s.ta as any } : {}),
@@ -527,9 +659,7 @@ export default function SiteBuilder({
     (b: Block) => {
       const wrapStyled = (children: React.ReactNode, pad = true) => (
         <div
-          id={(b as any).anchorId || undefined}
-          className={`${pad ? "p-3 " : ""}${(b as any).className || ""}`}
-          style={styleInline(b as any)}
+          className={pad ? "p-3" : ""}
         >
           {children}
         </div>
@@ -582,7 +712,8 @@ export default function SiteBuilder({
           const align = (h as any).align || "left";
           return wrapStyled(
             <div
-              className={`text-2xl font-semibold text-[#e6e9f4] text-${align}`}
+              className="text-2xl font-semibold text-[#0b1022]"
+              style={{ textAlign: align }}
               contentEditable
               suppressContentEditableWarning
               onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
@@ -598,7 +729,8 @@ export default function SiteBuilder({
           const align = p.align || "left";
           return wrapStyled(
             <div
-              className={`text-sm leading-6 text-[#cfd5e6] whitespace-pre-wrap text-${align}`}
+              className="text-sm leading-6 text-[#2b3050] whitespace-pre-wrap"
+              style={{ textAlign: align }}
               contentEditable
               suppressContentEditableWarning
               onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
@@ -609,57 +741,14 @@ export default function SiteBuilder({
           );
         }
 
-        case "img": {
-          const im = b as ImgBlock;
-          const src = im.cid || "";
-          return wrapStyled(
-            <figure className="grid gap-2">
-              <img
-                src={src}
-                alt={im.alt || ""}
-                className="max-w-full rounded-lg border border-[#2a2f45] bg-[#0b0e18] object-contain"
-                onDoubleClick={() => setSelId(b.id)}
-                draggable={false}
-              />
-              <figcaption className="text-xs text-[#9aa3b2]">{im.alt || "alt-текст"}</figcaption>
-            </figure>
-          );
-        }
-
-        case "btn": {
-          const bt = b as BtnBlock;
-          const align = bt.align || "left";
-          return wrapStyled(
-            <div className={`text-${align}`}>
-              <a
-                href={bt.href || "#"}
-                className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border ${bt.variant === "secondary"
-                    ? "bg-transparent border-[#2a2f45] text-[#e6e9f4] hover:bg-[#111425]"
-                    : "bg-[#1a203b] border-[#2a2f45] text-[#e6e9f4] hover:bg-[#222a4a]"
-                  }`}
-                rel="noopener noreferrer nofollow"
-                onClick={(e) => e.preventDefault()}
-                title="Кнопка (клик в предпросмотре заблокирован)"
-                onDoubleClick={() => setSelId(b.id)}
-              >
-                {bt.label || "Кнопка"}
-              </a>
-            </div>
-          );
-        }
-
         case "divider":
-          return wrapStyled(<hr className="border-t border-[#2a2f45]" />, false);
+          return wrapStyled(renderBlockView(b), false);
 
         case "spacer":
-          return wrapStyled(<div className="h-8" />, false);
+          return wrapStyled(renderBlockView(b), false);
 
         default:
-          return wrapStyled(
-            <div className="text-xs text-[#9aa3b2]">
-              [Превью для типа «{(b as any).type}» пока нет]
-            </div>
-          );
+          return wrapStyled(renderBlockView(b));
       }
     },
     [patchBlock, setSelId, styleInline]
@@ -697,9 +786,13 @@ export default function SiteBuilder({
 
   // ── Документ без скрытых блоков — для экспорта/предпросмотра ───────────────
   const docForBuild = useMemo(
-    () => ({ ...doc, blocks: doc.blocks.filter((b) => !(b as any).hidden) }),
+    () => ({ ...doc, blocks: visibleBlocks(doc.blocks) }),
     [doc]
   );
+  const docForBuildRef = useRef(docForBuild);
+  docForBuildRef.current = docForBuild;
+  const unsupportedTypes = useMemo(() => unsupportedBlockTypes(adaptFromSiteBuilderDoc(docForBuild)), [docForBuild]);
+  const blockedPreviewAssets = useMemo(() => hasBlockedPreviewAssets(doc.blocks), [doc.blocks]);
 
   // ── Экспорт / импорт / live-preview ────────────────────────────────────────
   const runExport = useCallback(
@@ -707,12 +800,15 @@ export default function SiteBuilder({
       if (isExporting) return;
 
       const model = adaptFromSiteBuilderDoc(docForBuild);
+      setExportError("");
       setExportState({ format, phase: "cdr", done: 0, total: 0 });
 
       try {
         const blob =
           format === "zip"
-            ? await exportSiteZip(model, {
+            ? allPageDocuments(doc).length > 1
+              ? await exportPagesZip(doc, (done, total) => setExportState({ format: "zip", phase: "pages", done, total }))
+              : await exportSiteZip(model, {
                 bundleAssets: true,
                 onProgress: (done, total) => setExportState({ format: "zip", phase: "cdr", done, total }),
               })
@@ -732,7 +828,8 @@ export default function SiteBuilder({
           title: `Экспорт ${format === "zip" ? "ZIP" : "HTML"} завершён`,
           message: "Файл сохранён на устройство.",
         });
-      } catch {
+      } catch (error) {
+        setExportError(error instanceof Error ? error.message : "Не удалось подготовить экспорт.");
         pushSecurityEvent({
           severity: "warning",
           code: "SITE_EXPORT_FAILED",
@@ -743,7 +840,7 @@ export default function SiteBuilder({
         setExportState(null);
       }
     },
-    [docForBuild, doc.title, isExporting]
+    [doc, docForBuild, isExporting]
   );
 
   const onExportZip = useCallback(async () => {
@@ -755,15 +852,29 @@ export default function SiteBuilder({
   }, [runExport]);
 
   const onPublishAlt = useCallback(async () => {
-    if (isExporting) return;
+    if (isExporting || publishingRef.current) return;
+    publishingRef.current = true;
+    setPublishing(true);
+    setPublishError("");
     try {
-      const model = adaptFromSiteBuilderDoc(docForBuild);
-      const blob = await exportSingleHtml(model, { bundleAssets: true });
-      const html = await blob.text();
+      const sitePages = allPageDocuments(doc);
+      const pages: PublishedPage[] | undefined = sitePages.length > 1 ? [] : undefined;
+      if (pages) {
+        for (const page of sitePages) {
+          const model = adaptFromSiteBuilderDoc({ ...page.document, blocks: visibleBlocks(page.document.blocks) });
+          const unsupported = unsupportedBlockTypes(model);
+          if (unsupported.length) throw new Error(`Страница «${page.document.title}»: неподдерживаемые виджеты ${unsupported.join(", ")}.`);
+          const blob = await exportSingleHtml(model, { bundleAssets: true, restrictExternalMedia: true });
+          pages.push({ path: page.path, title: page.document.title, html: await blob.text() });
+        }
+      }
+      const homepage = pages?.find(page => page.path === "index.html");
+      const html = homepage?.html ?? await (await exportSingleHtml(adaptFromSiteBuilderDoc(docForBuild), { bundleAssets: true, restrictExternalMedia: true })).text();
 
-      const meta = upsertPublishedSite({
-        title: doc.title || "site",
+      const meta = await upsertPublishedSite({
+        title: homepage?.title || doc.title || "site",
         html,
+        pages,
       });
       const url = `alt://site/${meta.slug}`;
 
@@ -781,11 +892,11 @@ export default function SiteBuilder({
           {
             label: "Скопировать адрес",
             kind: "secondary",
-            onClick: () => {
+            onClick: async () => {
               try {
-                navigator.clipboard.writeText(url);
+                await navigator.clipboard.writeText(url);
               } catch {
-                // fail-silent
+                pushSecurityEvent({ severity: "warning", code: "SITE_COPY_FAILED", title: "Не удалось скопировать адрес", message: `Скопируйте адрес вручную: ${url}` });
               }
             },
           },
@@ -794,19 +905,25 @@ export default function SiteBuilder({
 
       // UX: после публикации сразу открыть в .alt-браузере (если контекст передан)
       onPublished?.(url);
-    } catch {
+    } catch (error) {
+      setPublishError(`Публикация не сохранена. ${error instanceof Error && error.message ? error.message : "Проверьте доступность и свободное место хранилища браузера и повторите попытку."}`);
       pushSecurityEvent({
         severity: "warning",
         code: "SITE_PUBLISH_FAILED",
         title: "Не удалось опубликовать",
-        message: "Проверьте, что хранилище браузера доступно (localStorage), и повторите попытку.",
+        message: "Проверьте доступность и свободное место хранилища браузера и повторите попытку.",
       });
+    } finally {
+      publishingRef.current = false;
+      setPublishing(false);
     }
-  }, [docForBuild, doc.title, isExporting, onPublished]);
+  }, [doc, docForBuild, isExporting, onPublished]);
 
 
   const exportPhaseLabel = exportState?.phase === "cdr"
     ? `CDR: ${exportState.done}/${exportState.total}`
+    : exportState?.phase === "pages"
+      ? `Страницы: ${exportState.done}/${exportState.total}`
     : exportState?.phase === "build"
       ? "Сборка файла…"
       : "";
@@ -840,7 +957,7 @@ export default function SiteBuilder({
     <div class="sep"></div>
     <span>Ширина:</span><input id="w" type="number" min="320" max="1920" step="10" placeholder="px"/>
   </div>
-  <div id="viewport"><iframe id="stage" sandbox="allow-same-origin"></iframe></div>
+  <div id="viewport"><iframe id="stage" sandbox="allow-scripts"></iframe></div>
   <script>
     (function(){
       const ch = new BroadcastChannel("altnet_live_preview:${id}");
@@ -859,64 +976,91 @@ export default function SiteBuilder({
       ch.onmessage = function(e){
         if(!e || !e.data) return;
         if(e.data.type === "html" && typeof e.data.html === "string"){
-          const doc = stage.contentWindow.document; doc.open(); doc.write(e.data.html); doc.close();
+          stage.srcdoc = e.data.html;
         } else if(e.data.type === "width"){ var m = e.data.mode; applyWidth(String(m)); }
       };
+      ch.postMessage({type:"ready"});
     })();
   </script>
 </body></html>`;
 
-  const onOpenLivePreview = useCallback(async () => {
-    const id = `s${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    livePreviewIdRef.current = id;
+  const sendLivePreview = useCallback(async (channel: BroadcastChannel, force: boolean) => {
+    livePreviewPending.current = { channel, force, sequence: ++livePreviewSequence.current, snapshot: docForBuildRef.current };
+    if (livePreviewRunning.current) return;
+    livePreviewRunning.current = true;
+    try {
+      while (livePreviewPending.current) {
+        const job = livePreviewPending.current;
+        livePreviewPending.current = null;
+        try {
+          const model = adaptFromSiteBuilderDoc(job.snapshot);
+          const blob = await exportSingleHtml(model, { bundleAssets: true, restrictExternalMedia: true });
+          const html = prepareLocalPreviewHtml(await blob.text());
+          if (job.sequence !== livePreviewSequence.current || job.channel !== livePreviewChannelRef.current || (!job.force && !autoPreviewRef.current)) continue;
+          job.channel.postMessage({ type: "html", html });
+          livePreviewReady.current = true;
+          setPreviewError("");
+        } catch {
+          if (job.sequence === livePreviewSequence.current && job.channel === livePreviewChannelRef.current) setPreviewError("Не удалось обновить предпросмотр. Проверьте содержимое страницы и откройте его повторно.");
+        }
+      }
+    } finally { livePreviewRunning.current = false; }
+  }, []);
 
+  const onOpenLivePreview = useCallback(() => {
+    const id = `s${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    livePreviewSequence.current++;
+    livePreviewReady.current = false;
+    livePreviewPending.current = null;
     if (livePreviewChannelRef.current) {
       try {
         livePreviewChannelRef.current.close();
       } catch { }
     }
-    livePreviewChannelRef.current = new BroadcastChannel(`altnet_live_preview:${id}`);
-
-    const shell = buildLiveShellHtml(id);
-    const shellBlob = new Blob([shell], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(shellBlob);
-    livePreviewWindowRef.current = window.open(url, "_blank", "noopener,noreferrer") || null;
-
-    setTimeout(async () => {
-      try {
-        const model = adaptFromSiteBuilderDoc(docForBuild);
-        const blob = await exportSingleHtml(model, { bundleAssets: true });
-        const html = await blob.text();
-        livePreviewChannelRef.current?.postMessage({ type: "html", html });
-      } catch (e) {
-        console.error("Live preview first paint error:", e);
-      }
-    }, 200);
-  }, [docForBuild]);
+    try {
+      const channel = new BroadcastChannel(`altnet_live_preview:${id}`);
+      livePreviewChannelRef.current = channel;
+      channel.onmessage = event => { if (event.data?.type === "ready") void sendLivePreview(channel, true); };
+      const shellBlob = new Blob([buildLiveShellHtml(id)], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(shellBlob);
+      for (const previous of livePreviewUrls.current) URL.revokeObjectURL(previous);
+      livePreviewUrls.current = [];
+      livePreviewUrls.current.push(url);
+      window.open(url, "_blank", "noopener,noreferrer");
+      setPreviewError("");
+    } catch {
+      livePreviewChannelRef.current?.close();
+      livePreviewChannelRef.current = null;
+      setPreviewError("Не удалось открыть предпросмотр. Проверьте поддержку браузера и разрешение на открытие окон.");
+    }
+  }, [sendLivePreview]);
 
   // Авто-обновление live-вкладки при изменениях
   useEffect(() => {
+    livePreviewSequence.current++;
+    livePreviewPending.current = null;
     if (!livePreviewChannelRef.current) return;
     if (liveDebounceRef.current) {
       window.clearTimeout(liveDebounceRef.current);
     }
-    liveDebounceRef.current = window.setTimeout(async () => {
-      try {
-        const model = adaptFromSiteBuilderDoc(docForBuild);
-        const blob = await exportSingleHtml(model, { bundleAssets: true });
-        const html = await blob.text();
-        livePreviewChannelRef.current?.postMessage({ type: "html", html });
-      } catch (e) {
-        console.error("Live preview auto refresh error:", e);
-      }
-    }, 400);
+    const channel = livePreviewChannelRef.current;
+    if (autoPreview || !livePreviewReady.current) liveDebounceRef.current = window.setTimeout(() => { void sendLivePreview(channel, !livePreviewReady.current); }, 400);
     return () => {
       if (liveDebounceRef.current) {
         window.clearTimeout(liveDebounceRef.current);
         liveDebounceRef.current = null;
       }
     };
-  }, [docForBuild]);
+  }, [docForBuild, autoPreview, sendLivePreview]);
+
+  useEffect(() => () => {
+    livePreviewSequence.current++;
+    livePreviewPending.current = null;
+    livePreviewChannelRef.current?.close();
+    livePreviewChannelRef.current = null;
+    for (const url of livePreviewUrls.current) URL.revokeObjectURL(url);
+    livePreviewUrls.current = [];
+  }, []);
 
   // Синхронизация режима ширины с Live-preview
   useEffect(() => {
@@ -932,135 +1076,139 @@ export default function SiteBuilder({
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
+    const expected = currentDocRef.current;
 
     try {
       const text = await f.text();
       const data = JSON.parse(text);
 
-      if (!data || typeof data !== "object" || !Array.isArray((data as any).blocks)) {
-        throw new Error("Ожидался объект с массивом blocks.");
+      let importedDoc: Doc;
+      if (data?.format === "altnet.sitebuilder.document") {
+        const imported = importDraft(data);
+        if (imported.status !== "loaded") throw new Error("Версия или содержимое документа не поддерживаются.");
+        importedDoc = imported.doc;
+      } else {
+        importedDoc = importLegacyDoc(data);
       }
-
-      const okTypes = new Set<BlockType>([
-        "hero",
-        "h1",
-        "heading",
-        "p",
-        "img",
-        "btn",
-        "cols2",
-        "spacer",
-        "divider",
-        "section",
-        "grid",
-      ]);
-
-      const title = typeof (data as any).title === "string" ? (data as any).title : "Мой сайт";
-      const description = typeof (data as any).description === "string" ? (data as any).description : "";
-      const blocksRaw: any[] = (data as any).blocks;
-
-      const blocks: Block[] = blocksRaw
-        .map((b: any) => {
-          if (!b || !okTypes.has(b.type)) return null;
-          const id = uid();
-          const p = (b && typeof b.props === "object" && b.props) || b;
-
-          switch (b.type as BlockType) {
-            case "hero":
-              return {
-                id,
-                type: "hero",
-                title: String(p.title ?? ""),
-                subtitle: String(p.subtitle ?? ""),
-                ctaText: String(p.ctaText ?? p.ctaLabel ?? ""),
-                ctaLink: String(p.ctaLink ?? p.ctaHref ?? "#"),
-              } as HeroBlock;
-            case "h1":
-              return { id, type: "h1", text: String(p.text ?? p.title ?? "") } as H1Block;
-            case "p":
-              return { id, type: "p", text: String(p.text ?? "") } as PBlock;
-            case "img":
-              return {
-                id,
-                type: "img",
-                cid: String(p.cid ?? p.src ?? ""),
-                alt: String(p.alt ?? ""),
-              } as ImgBlock;
-            case "btn":
-              return {
-                id,
-                type: "btn",
-                label: String(p.label ?? p.text ?? "Кнопка"),
-                href: String(p.href ?? p.url ?? "#"),
-              } as BtnBlock;
-            case "cols2":
-              return {
-                id,
-                type: "cols2",
-                title: String(b.title ?? ""),
-                text: String(b.text ?? ""),
-                img: String(b.img ?? ""),
-                alt: String(b.alt ?? ""),
-                ratio: (["5-7", "6-6", "7-5"].includes(b.ratio) ? b.ratio : "6-6") as ColsRatio,
-                reverse: Boolean(b.reverse),
-              } as Cols2Block;
-            default:
-              return null;
-          }
-        })
-        .filter(Boolean) as Block[];
-
-      if (!blocks.length) throw new Error("В файле нет валидных блоков.");
-      if (!confirm("Импортировать JSON и заменить текущий документ?")) return;
-      setDoc({ title, description, blocks });
+      if (currentDocRef.current !== expected) { setImportConflict(true); return; }
+      if (!confirm("Импортировать JSON и заменить все текущие проекты и страницы?")) return;
+      if (currentDocRef.current !== expected) { setImportConflict(true); return; }
+      setImportConflict(false);
+      setDoc(current => current === expected ? importedDoc : current);
     } catch (err: any) {
       alert("Не удалось импортировать JSON: " + (err?.message || String(err)));
     }
   };
 
   const onExportJson = useCallback(() => {
-    const model = adaptFromSiteBuilderDoc(docForBuild);
-    const blob = new Blob([JSON.stringify(model, null, 2)], { type: "application/json" });
+    const blob = new Blob([exportDraft(doc)], { type: "application/json" });
     const fname = prettyFileName(doc.title || "site", "json");
     downloadBlob(blob, fname);
-  }, [docForBuild, doc.title]);
+  }, [doc]);
+
+  const onExportProject = useCallback(() => {
+    const workspace = projectsOf(doc);
+    const name = workspace.projects.find(project => project.id === workspace.activeId)?.name || "project";
+    downloadBlob(new Blob([exportProject(doc)], { type: "application/json" }), prettyFileName(name, "json"));
+  }, [doc]);
+
+  const onImportProjectChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const expected = currentDocRef.current;
+    try {
+      const project = parseProject(JSON.parse(await file.text()));
+      if (currentDocRef.current !== expected) { setImportConflict(true); return; }
+      const updated = importProject(expected, project);
+      setImportConflict(false);
+      setDoc(current => current === expected ? updated : current);
+      setSelId(null); setTargetCell(null);
+    } catch (error) {
+      alert("Не удалось импортировать проект: " + (error instanceof Error ? error.message : String(error)));
+    }
+  };
 
   const resetDoc = useCallback(() => {
+    if (!draftBlocked) {
+      if (!window.confirm("Сбросить текущую страницу? Остальные страницы сохранятся. Действие можно отменить в текущей сессии.")) return;
+      setDoc(current => ({ ...DEFAULT_DOC, ...(current.sitePages ? { sitePages: current.sitePages } : {}), ...(current.siteProjects ? { siteProjects: current.siteProjects } : {}) }));
+      setSelId(null); setTargetCell(null);
+      return;
+    }
+    if (!window.confirm("Заменить недоступный черновик новым документом? Все сохранённые в нём проекты и страницы будут заменены.")) return;
+    draftWriter?.invalidate();
     setDoc(DEFAULT_DOC);
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch { }
-  }, []);
+      setDraftBlocked(false);
+    } catch {
+      setSaveStatus("failed");
+    }
+  }, [draftWriter, setDoc, draftBlocked]);
 
   // Автосохранение
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
-    } catch { }
-  }, [doc]);
+    if (draftBlocked || loadingDraft || (leaseStatus !== "owned" && leaseStatus !== "unsupported")) return;
+    if (draftWriter) draftWriter.save(doc);
+    else setSaveStatus("failed");
+  }, [doc, draftBlocked, loadingDraft, draftWriter, leaseStatus]);
 
   // ── Навигатор (Outline) ────────────────────────────────────────────────────
   const Navigator = useCallback(
-    () => (
+    () => {
+      const renderChildren = (parent: Block): React.ReactNode => {
+        const cells = cellsOf(parent);
+        if (!cells) return null;
+        const covered = parent.type === "grid" ? gridCoveredCells(parent) : new Set<number>();
+        const columns = parent.type === "grid" ? gridColumnCount(parent) : cells.length;
+        return cells.map((cell, index) => {
+        if (covered.has(index)) return null;
+        const previous = Array.from({ length: index }, (_, i) => i).reverse().find(i => !covered.has(i));
+        const next = Array.from({ length: cells.length - index - 1 }, (_, i) => i + index + 1).find(i => !covered.has(i));
+        return (
+        <div key={index} className="ml-3 border-l border-[#57516c] pl-2" data-navigator-cell={`${parent.id}:${index}`}>
+          <div className="my-1 text-xs text-[#9aa3b2]">{parent.type === "grid" ? `Строка ${Math.floor(index / columns) + 1}, колонка ${index % columns + 1}` : `Колонка ${index + 1}`}</div>
+          {cell.map(child => <div key={child.id}>
+            <div className="flex min-w-0 flex-wrap items-center gap-1 rounded border border-[#2a2f45] bg-[#0c0f1a] p-1" data-navigator-block={child.id}>
+              <button type="button" onClick={() => { setTargetCell(null); setSelId(child.id); }} className="min-w-0 flex-auto basis-16 truncate text-left text-xs" title={labelOf(child)}>{labelOf(child)}</button>
+              <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
+              <button type="button" title="В предыдущую колонку" aria-label="В предыдущую колонку" disabled={previous === undefined} onClick={() => { if (previous !== undefined) setDoc(d => ({ ...d, blocks: moveToCell(d.blocks, child.id, parent.id, previous) })); }}>←</button>
+              <button type="button" title="В следующую колонку" aria-label="В следующую колонку" disabled={next === undefined} onClick={() => { if (next !== undefined) setDoc(d => ({ ...d, blocks: moveToCell(d.blocks, child.id, parent.id, next) })); }}>→</button>
+              <button type="button" title="Вверх" aria-label="Вверх" onClick={() => moveBlock(child.id, -1)}>↑</button>
+              <button type="button" title="Вниз" aria-label="Вниз" onClick={() => moveBlock(child.id, 1)}>↓</button>
+              <button type="button" title="В конец страницы" aria-label="В конец страницы" onClick={() => setDoc(d => ({ ...d, blocks: moveToRoot(d.blocks, child.id, d.blocks.length) }))}>⇱</button>
+              <button type="button" title={(child as any).hidden ? "Показать" : "Скрыть"} onClick={() => patchBlock(child.id, { hidden: !(child as any).hidden })}>{(child as any).hidden ? "◉" : "◌"}</button>
+              <button type="button" title="Дублировать" onClick={() => duplicateBlock(child.id)}>⧉</button>
+              <button type="button" title="Удалить" disabled={(child as any).locked} onClick={() => removeBlock(child.id)}>×</button>
+              </div>
+            </div>
+            {renderChildren(child)}
+          </div>)}
+        </div>
+        ); });
+      };
+      return (
       <div className="grid gap-2">
         {doc.blocks.map((b, idx) => (
+          <div key={b.id}>
           <div
-            key={b.id}
-            className={`group flex items-center justify-between gap-2 rounded-lg border ${selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
+            className={`group flex min-w-0 flex-wrap items-center gap-1 rounded-lg border ${selId === b.id ? "border-[#6E59F2] bg-[#121528]" : "border-[#2a2f45] bg-[#0c0f1a]"
               } px-2 py-1`}
           >
             <button
               onClick={() => setSelId(b.id)}
-              className={`rounded-xl border ${selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
-                } bg-[#0c0f1a] p-3 cursor-pointer`}
+              className={`min-w-0 flex-auto basis-16 truncate rounded-xl border text-left text-xs ${selId === b.id ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-[#2a2f45]"
+                } bg-[#0c0f1a] px-2 py-2 cursor-pointer`}
               title={labelOf(b)}
             >
               <span className="opacity-60 mr-1">#{idx + 1}</span>
               {labelOf(b)}
             </button>
-            <div className="flex items-center gap-1">
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1">
               <button
                 title="Вверх"
+                aria-label="Вверх"
                 onClick={() => moveBlock(b.id, -1)}
                 className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
               >
@@ -1068,6 +1216,7 @@ export default function SiteBuilder({
               </button>
               <button
                 title="Вниз"
+                aria-label="Вниз"
                 onClick={() => moveBlock(b.id, 1)}
                 className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
               >
@@ -1075,6 +1224,7 @@ export default function SiteBuilder({
               </button>
               <button
                 title={(b as any).hidden ? "Показать" : "Скрыть"}
+                aria-label={(b as any).hidden ? "Показать" : "Скрыть"}
                 onClick={() => patchBlock(b.id, { hidden: !(b as any).hidden })}
                 className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
               >
@@ -1082,6 +1232,7 @@ export default function SiteBuilder({
               </button>
               <button
                 title={(b as any).locked ? "Разблокировать" : "Заблокировать"}
+                aria-label={(b as any).locked ? "Разблокировать" : "Заблокировать"}
                 onClick={() => patchBlock(b.id, { locked: !(b as any).locked })}
                 className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
               >
@@ -1089,6 +1240,7 @@ export default function SiteBuilder({
               </button>
               <button
                 title="Дублировать"
+                aria-label="Дублировать"
                 onClick={() => duplicateBlock(b.id)}
                 className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
               >
@@ -1096,6 +1248,7 @@ export default function SiteBuilder({
               </button>
               <button
                 title="Удалить"
+                aria-label="Удалить"
                 onClick={() => removeBlock(b.id)}
                 className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs text-[#ffb3a8]"
               >
@@ -1103,18 +1256,112 @@ export default function SiteBuilder({
               </button>
             </div>
           </div>
+          {renderChildren(b)}
+          </div>
         ))}
       </div>
-    ),
+    ); },
     [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock]
   );
 
+  function renderEditorContent(block: Block, selected: boolean): React.ReactNode {
+    if (block.type === "img") return <ImgView block={block} device={bp} />;
+    if (block.type === "btn") return <BtnView block={block} device={bp} accent={doc.theme?.accent} />;
+    if (block.type === "spacer") return <SpacerView block={block} device={bp} />;
+    if (block.type === "shortcode") return <div className="rounded border border-amber-400/50 bg-amber-50 p-3 text-xs text-amber-900">Внешнее встраивание не загружается до подключения проверенного маршрута.</div>;
+    if ((block.type === "grid" || block.type === "section" || block.type === "container" || block.type === "offcanvas") && cellsOf(block)) {
+      return <LayoutCanvas block={block} device={bp} selectedId={selId}
+        onSelect={id => { setTargetCell(null); setSelId(id); if (window.matchMedia?.("(max-width: 767px)").matches) setSidebarCollapsed(false); }}
+        onChooseCell={(parentId, cellIndex) => { setSelId(null); setTargetCell({ parentId, cellIndex }); if (window.matchMedia?.("(max-width: 767px)").matches) setSidebarCollapsed(false); }}
+        onInsert={(parentId, cellIndex, type, preset, at) => {
+          const child = createDefaultBlock(type as BlockType, preset);
+          setDoc(d => ({ ...d, blocks: insertIntoCell(d.blocks, parentId, cellIndex, child, at) }));
+          setTargetCell(null); setSelId(child.id);
+        }}
+        onMove={(id, parentId, cellIndex, at) => setDoc(d => ({ ...d, blocks: moveToCell(d.blocks, id, parentId, cellIndex, at) }))}
+        onRemove={removeBlock}
+        renderChild={child => renderEditorBlock(child, child.id === selId)} />;
+    }
+    if (block.type === "offcanvas" && !cellsOf(block)) return <>{selected ? previewOf(block) : renderBlockView(block)}
+      <button type="button" className="m-2 rounded border border-[#6E59F2] px-3 py-1 text-xs text-[#5140ad]"
+        onClick={event => { event.stopPropagation(); patchBlock(block.id, { layoutPreset: [1], layoutCells: [[]] }); }}>
+        Добавить вложенные виджеты в панель
+      </button></>;
+    if (block.type === "container" && !cellsOf(block)) return <>{selected ? previewOf(block) : renderBlockView(block)}
+      <button type="button" className="m-2 rounded border border-[#6E59F2] px-3 py-1 text-xs text-[#5140ad]"
+        onClick={event => { event.stopPropagation(); patchBlock(block.id, { layoutPreset: [1], layoutCells: [[]] }); }}>
+        Сделать контейнер редактируемым
+      </button></>;
+    const oldPreset = block.type === "grid" || block.type === "section" ? block.layoutPreset : undefined;
+    if ((block.type === "grid" || block.type === "section") && Array.isArray(oldPreset) &&
+        oldPreset.length > 0 && oldPreset.length <= 12 &&
+        (block.type !== "grid" || !block.items?.length)) {
+      return <>{selected ? previewOf(block) : renderBlockView(block)}
+        <button type="button" className="m-2 rounded border border-[#6E59F2] px-3 py-1 text-xs text-[#5140ad]"
+          onClick={event => { event.stopPropagation(); patchBlock(block.id, { layoutCells: oldPreset.map(() => []) }); }}>
+          Сделать ячейки редактируемыми
+        </button></>;
+    }
+    return selected ? previewOf(block) : renderBlockView(block);
+  }
+
+  function renderEditorBlock(block: Block, selected: boolean): React.ReactNode {
+    const typographic = ["h1", "heading", "p", "btn"].includes(block.type);
+    const styles = typographic ? resolveStyle(block, bp) : {};
+    const classes = typographic ? ["ff", "fs", "fw", "lh", "tc", "ta"].filter(key => (styles as any)[key] != null).map(key => `editor-typo-${key}`).join(" ") : "";
+    const hiddenOnDevice = (block as any).hideOn?.[bp] === true;
+    return <div data-styled-block={block.id} className={`relative ${classes}`} style={{ ...styleInline(block), ...(hiddenOnDevice ? { opacity: 0.5 } : {}) }}
+      onClickCapture={event => { if (event.target instanceof Element && event.target.closest("a")) event.preventDefault(); }}
+      onSubmitCapture={event => event.preventDefault()}>{hiddenOnDevice && <span className="absolute right-1 top-1 z-10 rounded bg-[#312767] px-2 py-1 text-xs text-white">Скрыт на этом экране</span>}{renderEditorContent(previewSafeBlock(block), selected)}</div>;
+  }
+
+  if (leaseStatus === "checking") return <div role="status" className="p-4 text-sm text-[#e6e9f4]">Проверяем доступ к черновику…</div>;
+  if (leaseStatus === "busy") return <div role="alert" className="grid gap-3 p-4 text-sm text-[#e6e9f4]">
+    <p>Конструктор этого профиля уже открыт в другой вкладке. Закройте его там, затем повторите попытку: это защищает черновик от перезаписи.</p>
+    <div className="flex gap-2"><button type="button" className="rounded border px-3 py-2" onClick={() => { setLeaseStatus("checking"); setLeaseAttempt(value => value + 1); }}>Попробовать снова</button>{onClose && <button type="button" className="rounded border px-3 py-2" onClick={onClose}>Закрыть</button>}</div>
+  </div>;
+  if (loadingDraft) return <div role="status" className="p-4 text-sm text-[#e6e9f4]">Восстанавливаем сохранённый черновик…</div>;
+
   return (
-    <div className="relative w-full grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
+    <div data-editor-theme={editorTheme} data-sidebar-collapsed={sidebarCollapsed} className="altnet-builder relative w-full grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] gap-3">
+      {leaseStatus === "unsupported" && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Этот браузер не поддерживает блокировку черновика между вкладками. Не редактируйте одну страницу одновременно в нескольких вкладках.</div>}
+      {publishError && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{publishError}</div>}
+      {exportError && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Экспорт не выполнен: {exportError}</div>}
+      {previewError && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{previewError}</div>}
+      {revisionConflict && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Страница изменилась во время чтения версии. Восстановление отменено, текущие изменения не заменены. <button type="button" className="underline" onClick={() => setRevisionConflict(false)}>Закрыть</button></div>}
+      {importConflict && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Документ изменился во время чтения файла. Импорт отменён, текущие изменения сохранены. <button type="button" className="underline" onClick={() => setImportConflict(false)}>Закрыть</button></div>}
+      {blockedPreviewAssets && <div role="status" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">
+        Часть медиа в редакторе и локальном предпросмотре не загружается: защищённый маршрут ещё не подключён. Адреса сохраняются в проекте; внешние изображения в HTML/ZIP пока заменяются заглушками. Для локального предпросмотра используйте PNG, JPEG, WebP или GIF в формате data.
+      </div>}
+      {unsupportedTypes.length > 0 && <div role="status" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">
+        Экспорт этих виджетов ещё не подключён: {unsupportedTypes.join(", ")}. На опубликованной странице вместо них будет показана заглушка.
+      </div>}
+      {saveStatus === "saving" && !draftBlocked && <div role="status" className="col-span-full rounded-lg border border-[#6E59F2] bg-[#121528] p-3 text-sm text-[#e6e9f4]">Сохраняем большой черновик… <button type="button" className="underline" onClick={onExportJson}>Скачать текущий JSON</button></div>}
+      {(draftBlocked || saveFailed) && (
+        <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">
+          {draftBlocked
+            ? "Не удалось восстановить сохранённый черновик. Автосохранение приостановлено, чтобы сохранить исходные данные."
+            : "Не удалось сохранить изменения на устройстве. Скачайте JSON, чтобы сохранить текущую работу."}
+          {draftBlocked && (
+            <button type="button" className="ml-2 underline" onClick={async () => {
+              try {
+                const raw = loadDraft(localStorage).status === "indexeddb" ? await readIndexedDraft() : localStorage.getItem(STORAGE_KEY);
+                if (typeof raw === "string") downloadBlob(new Blob([raw], { type: "application/json" }), "altnet-draft-recovery.json");
+                else setSaveStatus("failed");
+              } catch {
+                setSaveStatus("failed");
+              }
+            }}>Скачать сохранённые данные</button>
+          )}
+          {saveFailed && !draftBlocked && <button type="button" className="ml-2 underline" onClick={onExportJson}>Скачать текущий JSON</button>}
+        </div>
+      )}
       <button
         type="button"
-        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 flex h-16 w-6 items-center justify-center rounded-r-full border border-l-0 border-[#2a2f45] bg-[#050816] text-xs text-[#cfd5e6] hover:bg-[#0c1020]"
-        style={{ left: sidebarCollapsed ? 12 : 280 }}
+        aria-label={sidebarCollapsed ? "Открыть панель виджетов" : "Закрыть панель виджетов"}
+        aria-expanded={!sidebarCollapsed}
+        aria-controls="builder-sidebar"
+        className={`builder-collapse absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-30 flex h-16 w-6 items-center justify-center rounded-r-full border border-l-0 border-[#2a2f45] bg-[#050816] text-xs text-[#cfd5e6] hover:bg-[#0c1020] ${sidebarCollapsed ? "left-3" : "left-[280px] xl:left-[300px]"}`}
         onClick={(e) => {
           e.stopPropagation();
           setSidebarCollapsed((v: boolean) => !v);
@@ -1124,14 +1371,15 @@ export default function SiteBuilder({
       </button>
       {/* Левая колонка */}
       <div
+        id="builder-sidebar"
         className={
-          "grid content-start gap-4 max-h-[calc(100dvh-140px)] overflow-y-auto pr-1 " +
+          "builder-sidebar grid min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-3 max-h-[calc(100dvh-140px)] overflow-x-hidden overflow-y-auto pr-1 " +
           "rounded-2xl bg-[#050816]/90 border border-[#1f2751] px-3 py-3" +
           (sidebarCollapsed ? " hidden" : "")
         }
       >
-        <div className="mt-3">
-          <Field label="Поиск виджета">
+        <div>
+          {!selBlock && <Field label="Поиск виджета">
             <input
               className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
               value={elQuery}
@@ -1140,24 +1388,27 @@ export default function SiteBuilder({
               autoComplete="off"
               spellCheck={false}
             />
-          </Field>
+          </Field>}
+          {targetCell && !selBlock && <p className="mb-2 text-xs text-[#c9d0e9]">Выберите виджет для ячейки.</p>}
           {/* Левая панель: если выбран блок — показываем редактор; иначе — палитру */}
           {selBlock ? (
             <>
-              <div className="text-xs text-[#9aa3b2] mb-2">Редактор блока</div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-xs text-[#9aa3b2]">Редактор блока</div>
+                <button type="button" onClick={() => setSelId(null)} className="rounded-md border border-[#2a2f45] px-2 py-1 text-xs text-[#e6e9f4] hover:border-[#6E59F2]">Все виджеты</button>
+              </div>
               <InspectorTabs active={editorTab} onChange={(t) => setEditorTab(t)} />
               <Inspector
                 block={selBlock}
-                onPatch={(patch) =>
-                  setDoc((d: any) => ({
-                    ...d,
-                    blocks: d.blocks.map((b: any) => (b.id === selId ? { ...b, ...patch } : b)),
-                  }))
-                }
+                onPatch={(patch, group) => { if (selId) patchBlock(selId, patch, group); }}
+                tab={editorTab}
+                device={bp}
+                onDeviceChange={device => { setBp(device); setIframeMode(device); }}
               />
             </>
           ) : (
             <Palette
+              query={elQuery}
               onInsert={(type) => {
                 const make = createDefaultBlock as (t: any) => any;
                 const fresh = make(type as any);
@@ -1165,6 +1416,7 @@ export default function SiteBuilder({
                 const withId = { ...(fresh as any), id: uid() };
 
                 setDoc((d) => {
+                  if (targetCell) return { ...d, blocks: insertIntoCell(d.blocks, targetCell.parentId, targetCell.cellIndex, withId) };
                   const idx = selId ? d.blocks.findIndex((b) => b.id === selId) : -1;
                   const next = d.blocks.slice();
                   if (idx >= 0) next.splice(idx + 1, 0, withId);
@@ -1173,6 +1425,7 @@ export default function SiteBuilder({
                 });
 
                 setSelId(withId.id);
+                setTargetCell(null);
               }}
             />
           )}
@@ -1185,6 +1438,17 @@ export default function SiteBuilder({
             <Navigator />
           </div>
         )}
+
+        {!selBlock && <RevisionPanel doc={doc} canSave={!draftBlocked} canRestore={!draftBlocked && saveStatus !== "saving" && !saveFailed}
+          onRestore={(version, expected) => {
+            if (currentDocRef.current !== expected) { setRevisionConflict(true); return false; }
+            setDoc(current => current === expected ? version : current);
+            return true;
+          }} />}
+
+        {!selBlock && <ProjectPanel doc={doc} setDoc={setDoc} onChangeProject={() => { setSelId(null); setTargetCell(null); }}
+          onExportProject={onExportProject} onImportProject={() => importProjectInputRef.current?.click()} />}
+        {!selBlock && <PagePanel doc={doc} setDoc={setDoc} onChangePage={() => { setSelId(null); setTargetCell(null); }} />}
 
         {/* Чек-лист качества */}
         <div className="rounded-lg border border-[#2a2f45] p-3">
@@ -1231,6 +1495,7 @@ export default function SiteBuilder({
             accept="application/json"
             onChange={onImportJsonChange}
           />
+          <input ref={importProjectInputRef} className="hidden" type="file" accept="application/json" onChange={onImportProjectChange} />
           <button
             className="px-3 py-2 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4]"
             onClick={resetDoc}
@@ -1252,12 +1517,22 @@ export default function SiteBuilder({
         onClick={() => setSelId(null)}
       >
         <Topbar
+          title={doc.title}
           bp={bp}
           onChangeBp={setBp}
           mode={iframeMode}
           onChangeMode={setIframeMode}
           right={
             <div className="flex items-center gap-3">
+              <button type="button" className="builder-theme-toggle" onClick={toggleEditorTheme}
+                aria-label={editorTheme === "dark" ? "Включить светлую тему конструктора" : "Включить тёмную тему конструктора"}
+                title={editorTheme === "dark" ? "Светлая тема" : "Тёмная тема"}>
+                <span aria-hidden="true">{editorTheme === "dark" ? "☀" : "☾"}</span>
+              </button>
+              <button type="button" title="Отменить (Ctrl+Z)" aria-label="Отменить изменение" disabled={!history.past.length}
+                onClick={() => dispatchHistory({ type: "undo" })} className="px-3 py-1.5 rounded-md border border-[#2a2f45] text-[#e6e9f4] disabled:opacity-40">↶</button>
+              <button type="button" title="Вернуть (Ctrl+Shift+Z)" aria-label="Вернуть изменение" disabled={!history.future.length}
+                onClick={() => dispatchHistory({ type: "redo" })} className="px-3 py-1.5 rounded-md border border-[#2a2f45] text-[#e6e9f4] disabled:opacity-40">↷</button>
               {onClose && (
                 <button
                   type="button"
@@ -1332,9 +1607,9 @@ export default function SiteBuilder({
                 }
                 onClick={onPublishAlt}
                 title="Сохранить на этом устройстве и открыть в .alt-браузере"
-                disabled={isExporting}
+                disabled={isExporting || publishing}
               >
-                Публиковать
+                {publishing ? "Сохраняем…" : "Публиковать"}
               </button>
 
               {isExporting ? (
@@ -1357,14 +1632,14 @@ export default function SiteBuilder({
                   </button>
                 </>
               )}
-              <label className="ml-2 inline-flex items-center gap-2 text-xs text-[#cfd5e6]">
+              <label className="ml-2 inline-flex items-center gap-2 text-xs text-[#cfd5e6]" title="Автообновление отдельного предпросмотра">
                 <input
                   type="checkbox"
                   className="h-4 w-4 rounded border-[#2a2f45] bg-[#0f1420]"
                   checked={autoPreview}
                   onChange={(e) => setAutoPreview(e.target.checked)}
                 />
-                Автопревью
+                Автообновление
               </label>
             </div>
           }
@@ -1374,7 +1649,7 @@ export default function SiteBuilder({
           className="mx-auto w-full grid gap-4 p-2"
           style={
             canvasTargetWidth
-              ? { maxWidth: canvasTargetWidth, width: canvasTargetWidth }
+              ? { maxWidth: canvasTargetWidth, width: "100%" }
               : undefined
           }
         >
@@ -1384,10 +1659,10 @@ export default function SiteBuilder({
               onInsert={(type) => {
                 const pos = doc.blocks.findIndex((b) => b.id === selId);
                 const index = pos >= 0 ? pos + 1 : doc.blocks.length;
+                const nb = createDefaultBlock(type);
                 setDoc((d) => {
                   const blocks = [...d.blocks];
                   const clamped = Math.max(0, Math.min(index, blocks.length));
-                  const nb = createDefaultBlock(type);
                   blocks.splice(clamped, 0, nb);
                   return { ...d, blocks };
                 });
@@ -1396,7 +1671,7 @@ export default function SiteBuilder({
           </div>
 
           {/* Внутренняя сетка: канвас + панель «Структура» справа */}
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_260px] items-start">
+          <div className={`grid gap-4 items-start ${bp === "desktop" ? "xl:grid-cols-[minmax(0,1fr)_260px]" : ""}`}>
             {/* Канвас + структура под ним на узких экранах */}
             <div>
               {/* Фон канваса (лист сайта), отделённый от темы приложения */}
@@ -1456,29 +1731,25 @@ export default function SiteBuilder({
                           {/* Верхний таб секции à la Elementor */}
                           {isSectionish && (
                             <div className="pointer-events-auto absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full border border-[#f9a8ff] bg-[#fdf2ff] px-3 py-0.5 shadow-sm text-[11px] text-[#6b21a8]">
-                              {/* + добавить секцию ниже (пока без логики) */}
+                              {/* Добавить секцию непосредственно после текущей */}
                               <button
                                 type="button"
                                 className="h-6 w-6 rounded-full border border-[#f9a8ff] bg-white flex items-center justify-center text-base leading-none hover:bg-[#fdf2ff] hover:text-[#4c1d95] transition"
-                                title="Добавить секцию ниже (скоро)"
+                                title="Добавить секцию ниже"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  // TODO: позже привяжем к onInsertAt
+                                  const nextBlock = createDefaultBlock("section", [1]);
+                                  setDoc(d => {
+                                    const index = d.blocks.findIndex(item => item.id === b.id);
+                                    if (index < 0) return d;
+                                    const blocks = d.blocks.slice();
+                                    blocks.splice(index + 1, 0, nextBlock);
+                                    return { ...d, blocks };
+                                  });
+                                  setSelId(nextBlock.id);
                                 }}
                               >
                                 +
-                              </button>
-
-                              {/* «ручка» перетаскивания, чисто визуальная иконка */}
-                              <button
-                                type="button"
-                                className="h-6 w-6 rounded-full flex items-center justify-center text-xs leading-none hover:bg-[#fdf2ff] transition cursor-move"
-                                title="Перетащить секцию (скоро)"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                }}
-                              >
-                                ⋮⋮
                               </button>
 
                               {/* крестик — удаление секции/hero */}
@@ -1486,14 +1757,10 @@ export default function SiteBuilder({
                                 type="button"
                                 className="h-6 w-6 rounded-full flex items-center justify-center hover:bg-[#fee2e2] transition"
                                 title="Удалить секцию"
+                                disabled={"locked" in b && Boolean(b.locked)}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setDoc((d) => ({
-                                    ...d,
-                                    blocks: d.blocks.filter(
-                                      (blk: any) => blk.id !== b.id,
-                                    ),
-                                  }));
+                                  removeBlock(b.id);
                                 }}
                               >
                                 ✕
@@ -1506,10 +1773,11 @@ export default function SiteBuilder({
                             onClick={(e) => {
                               e.stopPropagation();
                               setSelId(b.id);
+                              if (window.matchMedia?.("(max-width: 767px)").matches) setSidebarCollapsed(false);
                             }}
                             className={`${baseClasses} ${stateClasses}`}
                           >
-                            {isActive ? previewOf(b) : renderBlockView(b)}
+                            {renderEditorBlock(b, isActive)}
                           </div>
                         </div>
                       );
@@ -1517,20 +1785,19 @@ export default function SiteBuilder({
                     onReorder={(next) =>
                       setDoc((d) => ({ ...d, blocks: next as any }))
                     }
+                    onMoveToRoot={(index, id) => setDoc(d => ({ ...d, blocks: moveToRoot(d.blocks, id, index) }))}
                     onInsertAt={(index, type, preset) => {
+                      const nb = createDefaultBlock(type as BlockType, preset as any);
                       setDoc((d) => {
                         const blocks = [...d.blocks];
                         const clamped = Math.max(
                           0,
                           Math.min(index, blocks.length),
                         );
-                        const nb = createDefaultBlock(
-                          type as BlockType,
-                          preset as any,
-                        );
                         blocks.splice(clamped, 0, nb);
                         return { ...d, blocks };
                       });
+                      setSelId(nb.id);
                     }}
                   />
 

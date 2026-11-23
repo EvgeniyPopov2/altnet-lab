@@ -1,0 +1,183 @@
+#!/usr/bin/env python3
+"""Run the AltNet UI and bridge recovery for one local installation."""
+import argparse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import hmac
+import json
+import mimetypes
+import os
+from pathlib import Path
+import secrets
+import select
+import shutil
+import socket
+import socketserver
+import threading
+from urllib.parse import urlsplit
+
+from bridge_manager import Manager
+from bridge_power import Budget
+from bridge_sources import Sources, catalog
+
+
+class HTTP(BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass  # Never log manual bridge strings, session tokens, or peer requests.
+
+    def reply(self, status, body=b"", mime="application/json"):
+        size = body.stat().st_size if isinstance(body, Path) else len(body)
+        self.send_response(status)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(size))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        try:
+            if isinstance(body, Path):
+                with body.open("rb") as file:
+                    shutil.copyfileobj(file, self.wfile)
+            else:
+                self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+
+class Mirror(HTTP):
+    def do_GET(self):
+        manager = getattr(self.server, "manager", None)
+        content = None if manager and manager.paused else self.server.sources.mirror_file(self.path)
+        self.reply(200 if content is not None else 404, content or b"", "application/octet-stream")
+
+
+class LocalUI(HTTP):
+    def local(self):
+        return self.headers.get("Host") == self.server.authority
+
+    def authorized(self):
+        return hmac.compare_digest(self.headers.get("X-AltNet-Session", "").encode(), self.server.token.encode())
+
+    def do_GET(self):
+        if not self.local():
+            return self.reply(403)
+        route = urlsplit(self.path).path
+        if route == "/api/bridges/status":
+            if not self.authorized():
+                return self.reply(403)
+            return self.reply(200, json.dumps(self.server.manager.public_status()).encode())
+        if route in ("/", "/index.html"):
+            doc = (self.server.dist / "index.html").read_bytes()
+            tag = f'<meta name="altnet-session" content="{self.server.token}">'
+            return self.reply(200, doc.replace(b"</head>", tag.encode() + b"</head>"), "text/html; charset=utf-8")
+        file = (self.server.dist / route.lstrip("/")).resolve()
+        if self.server.dist not in file.parents or not file.is_file():
+            return self.reply(404)
+        self.reply(200, file, mimetypes.guess_type(file.name)[0] or "application/octet-stream")
+
+    def do_POST(self):
+        if (not self.local() or self.headers.get("Origin") != "http://" + self.server.authority
+                or not self.authorized() or self.headers.get_content_type() != "application/json"):
+            return self.reply(403)
+        allowed = {"/api/bridges/" + a: a for a in ("refresh", "switch", "manual", "pause", "resume")}
+        if self.path not in allowed:
+            return self.reply(404)
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 32768:
+                return self.reply(413)
+            self.connection.settimeout(5)
+            body = json.loads(self.rfile.read(size))
+            if not isinstance(body, dict):
+                raise ValueError()
+        except (ValueError, OSError):
+            return self.reply(400)
+        try:
+            self.server.manager.request(allowed[self.path], body.get("lines"))
+        except ValueError as error:
+            # Parsing libraries may include private bridge fields in their exceptions.
+            msg = "Проверьте формат строки obfs4 или дождитесь завершения текущей проверки." if allowed[self.path] == "manual" else str(error)
+            return self.reply(409, json.dumps({"error": msg}).encode())
+        self.reply(202, json.dumps(self.server.manager.public_status()).encode())
+
+
+class Forward(socketserver.BaseRequestHandler):
+    def handle(self):
+        manager = self.server.manager
+        port = manager.active_port
+        if not port:
+            return
+        try:
+            with socket.create_connection(("127.0.0.1", port), 3) as upstream:
+                self.request.settimeout(10)
+                upstream.settimeout(10)
+                while not manager.stop.is_set() and not manager.paused:
+                    ready, _, _ = select.select([self.request, upstream], [], [], 2)
+                    for source in ready:
+                        data = source.recv(65536)
+                        if not data:
+                            return
+                        (upstream if source is self.request else self.request).sendall(data)
+        except OSError:
+            return
+
+
+class SOCKS(socketserver.ThreadingTCPServer):
+    daemon_threads = True
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ("state", "keyring", "dist", "tor", "transport"):
+        parser.add_argument("--" + name, type=Path, required=True)
+    parser.add_argument("--seed", type=Path)
+    parser.add_argument("--snowflake", type=Path, help="Optional Snowflake-capable managed transport executable")
+    parser.add_argument("--gpgv", default="gpgv")
+    parser.add_argument("--peer", action="append", default=[])
+    parser.add_argument("--no-official", action="store_true")
+    parser.add_argument("--no-lan", action="store_true", help="Skip local multicast discovery on source failure")
+    parser.add_argument("--mirror-host", help="Interface for distributing signed public catalog files")
+    parser.add_argument("--mirror-port", type=int, default=17862)
+    parser.add_argument("--port", type=int, default=17860)
+    parser.add_argument("--parallel-probes", choices=(1, 2), type=int, default=2)
+    parser.add_argument("--socks-port", type=int, default=17861)
+    args = parser.parse_args()
+    os.umask(0o077)
+    state = args.state.resolve()
+    state.mkdir(mode=0o700, parents=True, exist_ok=True)
+    dist = args.dist.resolve()
+    if not (dist / "index.html").is_file() or not all(p.is_file() for p in (args.tor, args.transport, args.keyring)):
+        parser.error("Нужны сборка интерфейса, Tor, транспорт obfs4 и доверенный ключ")
+    with ThreadingHTTPServer(("127.0.0.1", args.port), LocalUI) as ui, SOCKS(("127.0.0.1", args.socks_port), Forward) as proxy:
+        with catalog.catalog_lock(state / "client"):
+            sources = Sources(state / "public", args.keyring.resolve(), args.gpgv, official=not args.no_official)
+            sources.bootstrap(args.seed)
+            manager = Manager(state, sources, args.tor.resolve(), args.transport.resolve(),
+                              snowflake=args.snowflake.resolve() if args.snowflake else None,
+                              budget=Budget(args.parallel_probes))
+            sources.route = lambda: manager.active_port if not manager.paused else 0
+            ui.dist, ui.authority = dist, f"127.0.0.1:{ui.server_port}"
+            ui.token = secrets.token_urlsafe(32)
+            ui.manager = proxy.manager = manager
+            if args.peer or args.mirror_host:
+                print("Обмен каталогом с соседями отключён до интеграции сетевых профилей.", flush=True)
+            worker = threading.Thread(target=manager.run)
+            try:
+                worker.start()
+                for service in [proxy]:
+                    threading.Thread(target=service.serve_forever, daemon=True).start()
+                print("AltNet http://" + ui.authority, flush=True)
+                ui.serve_forever()
+            except KeyboardInterrupt:
+                pass
+            finally:
+                manager.stop.set()
+                manager.fetch.set()
+                manager.wake.set()
+                worker.join()
+                proxy.shutdown()
+
+
+if __name__ == "__main__":
+    main()
+

@@ -21,10 +21,10 @@ export default function SectionView({ block }: { block: SectionBlock }) {
     block.align === "center" ? "text-center" :
     block.align === "right"  ? "text-right"  : "text-left";
   // Если секция создана через мастер Flex, layoutPreset содержит массив flex-значений колонок
-  const layoutPreset = (block as any).layoutPreset as number[] | undefined;
+  const layoutPreset = Array.isArray(block.layoutPreset) ? block.layoutPreset : undefined;
   return (
     <section className={`${theme} ${pad} ${bg}`}>
-      
+
       {/* Визуальные колонки, выбранные в мастере Flex */}
       {layoutPreset && layoutPreset.length > 0 && (
         <div className="mb-4 flex gap-4">
@@ -37,8 +37,7 @@ export default function SectionView({ block }: { block: SectionBlock }) {
                 rounded-lg border border-dashed border-[#e5e7eb] bg-[#f9fafb]
               "
             >
-              {/* Пока что только визуальный +, логика дропа будет позже */}
-              <span className="text-2xl text-[#c4b5fd]">+</span>
+              <span className="px-2 text-center text-xs text-[#57536b]">Нажмите «Сделать ячейки редактируемыми» под секцией</span>
             </div>
           ))}
         </div>

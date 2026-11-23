@@ -3,8 +3,10 @@ import { DndContext, PointerSensor, useSensor, useSensors, useDroppable } from "
 import type { DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { BLOCK_DRAG_TYPE, WIDGET_DRAG_TYPE, readWidgetType } from "../screens/SiteBuilder/palette/drag";
+import { moveBlockToSlot } from "./slotOrder";
 
-type SortableLike = { id: string };
+type SortableLike = { id: string; locked?: boolean };
 
 export type InsertChoice =
   | "h1" | "heading" | "p" | "btn" | "img"
@@ -27,6 +29,7 @@ type Props<T extends SortableLike> = {
   onReorder: (next: T[]) => void;
   /** Вставка нового блока в индекс (0..N). Вызывается при клике «+» и выборе типа. */
   onInsertAt?: (index: number, type: InsertChoice, preset?: any) => void;
+  onMoveToRoot?: (index: number, id: string) => void;
 };
 
 type InsertSlotVariant = "default" | "section";
@@ -35,13 +38,15 @@ type InsertSlotProps = {
   id: string;
   variant?: InsertSlotVariant;
   onInsert?: (type: InsertChoice, preset?: any) => void;
+  onMoveExisting?: (id: string) => void;
 };
 
 function DragHandle(props: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       {...props}
-      className="absolute -left-2 -top-2 opacity-0 group-hover:opacity-100 transition
+      aria-label="Переместить блок стрелками вверх и вниз"
+      className="sb-sort-handle absolute left-2 top-2 z-20 opacity-0 group-hover:opacity-100 focus:opacity-100 transition
                  text-xs px-1.5 py-0.5 rounded bg-[#151a2e] border border-[#2a2f45] text-[#e6e9f4] cursor-grab"
     >
       ⠿
@@ -52,11 +57,15 @@ function DragHandle(props: React.HTMLAttributes<HTMLDivElement>) {
 function SortableItem({
   id,
   children,
+  onMove,
+  locked,
 }: {
   id: string;
   children: React.ReactNode;
+  onMove: (direction: -1 | 1) => void;
+  locked?: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: locked });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -65,31 +74,64 @@ function SortableItem({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="group relative">
-      <DragHandle {...attributes} {...listeners} />
+    <div ref={setNodeRef} style={style} data-canvas-block={id} className={`group relative col-span-full ${locked ? "" : "sb-sortable-block"}`}>
+      {!locked && <DragHandle {...attributes} {...listeners} onKeyDown={(event) => {
+        if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+        event.preventDefault();
+        onMove(event.key === "ArrowUp" ? -1 : 1);
+      }} />}
+      <button type="button" draggable={!locked} disabled={locked} title="Перетащить блок в ячейку"
+        className="absolute right-2 top-2 z-20 rounded border border-[#2a2f45] bg-[#151a2e] px-2 text-xs text-white opacity-0 group-hover:opacity-100 focus:opacity-100"
+        onDragStart={(event) => {
+          event.stopPropagation();
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData(BLOCK_DRAG_TYPE, id);
+        }}
+        onClick={(event) => event.stopPropagation()}>В ячейку</button>
       {children}
     </div>
   );
 }
 
-function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
+function InsertSlot({ id, onInsert, onMoveExisting, variant }: InsertSlotProps) {
   const { setNodeRef, isOver } = useDroppable({ id });
-  
+  const [widgetOver, setWidgetOver] = useState(false);
+
 
   // Состояние мастера для слота секции
   const [stage, setStage] = useState<"root" | "layout" | "flex" | "grid">("root");
 
-  const isSectionMaster = variant === "section";
+  const isSectionMaster = variant === "section" || stage !== "root";
 
   return (
     <div className="col-span-full">
       <div
         ref={setNodeRef}
+        data-insert-slot={id}
+        onDragOver={(event) => {
+          const types = Array.from(event.dataTransfer.types);
+          if (!types.includes(WIDGET_DRAG_TYPE) && !types.includes(BLOCK_DRAG_TYPE)) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = types.includes(BLOCK_DRAG_TYPE) ? "move" : "copy";
+          setWidgetOver(true);
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setWidgetOver(false);
+        }}
+        onDrop={(event) => {
+          const type = readWidgetType(event.dataTransfer);
+          const existing = event.dataTransfer.getData(BLOCK_DRAG_TYPE);
+          setWidgetOver(false);
+          if (!type && !existing) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (type) onInsert?.(type);
+          else onMoveExisting?.(existing);
+        }}
         className={[
-          "my-6 rounded-lg border border-dashed border-[#d4d4d8] shadow-sm",
-          isOver ? "border-[#6E59F2] shadow-[0_0_0_1px_rgba(110,89,242,0.4)]" : "",
+          "my-2 rounded-lg border border-dashed border-[#a1a1aa]",
+          isOver || widgetOver ? "border-[#6E59F2] bg-[#eeeafe] shadow-[0_0_0_2px_rgba(110,89,242,0.4)]" : "bg-white",
         ].join(" ")}
-        style={{ backgroundColor: "#ffffff" }}
       >
         <div className="p-2 flex items-center justify-center">
           {isSectionMaster ? (
@@ -119,8 +161,8 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
                     </button>
                   </div>
 
-                  <div className="text-xs text-[#9aa3b2] text-center">
-                    Добавьте секцию, библиотеку (скоро) или выберите структуру колонок
+                  <div className="text-xs text-[#57536b] text-center">
+                    {widgetOver ? "Отпустите виджет здесь" : "Перетащите виджет сюда или добавьте секцию"}
                   </div>
                 </>
               )}
@@ -146,7 +188,7 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
                   {/* Подпояснение под заголовком */}
                   <div className="mb-8 text-center text-xs text-[#6b7280]">
                     <span className="font-semibold text-[#6E59F2]">Flexbox</span> — одна строка колонок;&nbsp;
-                    <span className="font-semibold text-[#6E59F2]">CSS Grid</span> — полноценная сетка из строк и колонок.
+                    <span className="font-semibold text-[#6E59F2]">Сетка</span> — раскладка ячеек по колонкам.
                   </div>
 
                   {/* Две большие карточки Flexbox / Grid */}
@@ -187,7 +229,7 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
                       </div>
                       <div className="text-sm font-semibold">CSS Grid</div>
                       <div className="text-[11px] leading-snug text-center text-[#6b7280]">
-                        Полноценная сетка: строки и колонки, гибкая компоновка.
+                        Ячейки с выбранными пропорциями колонок.
                       </div>
                     </button>
                   </div>
@@ -216,7 +258,7 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
                       <div className="text-[11px] text-[#6b7280]">
                         {stage === "flex"
                           ? "Колонки в одну строку, поведение задаётся flex-контейнером"
-                          : "Двумерная сетка: строки и колонки, больше контроля по вертикали"}
+                          : "Выберите количество и пропорции колонок"}
                       </div>
                     </div>
 
@@ -233,8 +275,8 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
                   <div
                     className={
                       stage === "flex"
-                        ? "grid grid-cols-4 gap-4"
-                        : "grid grid-cols-3 gap-4"
+                        ? "grid grid-cols-2 sm:grid-cols-4 gap-2"
+                        : "grid grid-cols-2 sm:grid-cols-3 gap-2"
                     }
                   >
                     {(
@@ -265,6 +307,7 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
                       <button
                         key={idx}
                         type="button"
+                        aria-label={`Макет: ${cols.length} ${cols.length === 1 ? "колонка" : "колонки"}, пропорции ${cols.join(" к ")}`}
                         onClick={() => {
                           // Передаём выбранную структуру колонок как preset (пока без жёсткого типа)
                           onInsert?.(
@@ -275,17 +318,18 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
                           );
                           setStage("root");
                         }}
-                        className="flex flex-col items-center gap-2 rounded-lg border border-transparent bg-transparent p-1 hover:border-[#6E59F2] hover:bg-[#0b1020] transition"
+                        className="flex flex-col items-center gap-1 rounded-lg border border-[#e5e2f1] bg-[#fbfaff] px-2 py-2 hover:border-[#6E59F2] hover:bg-[#f1eeff] transition focus-visible:outline-2 focus-visible:outline-[#6E59F2]"
                       >
-                        <div className="h-16 w-full max-w-[120px] rounded-md border border-dashed border-[#2a2f45] bg-[#020617] flex overflow-hidden">
+                        <div data-layout-preview={cols.join("-")} aria-hidden="true" className="h-12 w-full max-w-[120px] rounded-md border border-[#c8bfee] bg-white flex gap-1 p-1 overflow-hidden">
                           {cols.map((flexValue, i) => (
                             <div
                               key={i}
-                              className="border-r border-[#111827] last:border-r-0 bg-[#111827]"
-                              style={{ flex: flexValue }}
+                              className="min-w-0 rounded-sm border border-[#8979dd] bg-[#c9c1f5]"
+                              style={{ flex: `${flexValue} 1 0%` }}
                             />
                           ))}
                         </div>
+                        <span className="text-[11px] font-semibold text-[#40365f]">{cols.length} {cols.length === 1 ? "колонка" : "колонки"} · {cols.join(" : ")}</span>
                       </button>
                     ))}
                   </div>
@@ -296,8 +340,10 @@ function InsertSlot({ id, onInsert, variant }: InsertSlotProps) {
            // ─────────────────────────────────────
             // Обычный слот — только зона дропа без мини-палитры
             // ─────────────────────────────────────
-            <div className="py-3 text-xs text-center text-[#9aa3b2]">
-              Перетащите виджет из левой панели сюда
+            <div className="flex items-center justify-center gap-3 py-2 text-xs text-center text-[#57536b]">
+              {widgetOver || isOver ? "Отпустите здесь" : "Место вставки виджета"}
+              <button type="button" title="Выбрать макет секции" aria-label="Выбрать макет секции" onClick={(event) => { event.stopPropagation(); setStage("layout"); }}
+                className="grid h-7 w-7 place-items-center rounded-full border border-[#bcb1eb] bg-[#f5f2ff] text-base text-[#5946b5] hover:bg-[#e8e1ff]">+</button>
             </div>
           )}
         </div>
@@ -315,6 +361,7 @@ export default function SortableCanvas<T extends SortableLike>({
   renderBlock,
   onReorder,
   onInsertAt,
+  onMoveToRoot,
 }: Props<T>) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const ids = useMemo(() => blocks.map((b) => b.id), [blocks]);
@@ -322,13 +369,16 @@ export default function SortableCanvas<T extends SortableLike>({
   const onDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over) return;
-    // Перестановка блоков по карточкам
-    if (!String(over.id).startsWith("slot-") && active.id !== over.id) {
+    const slot = /^slot-(\d+)$/.exec(String(over.id));
+    if (slot) {
+      const oldIndex = ids.indexOf(String(active.id));
+      const next = moveBlockToSlot(blocks, oldIndex, Number(slot[1]));
+      if (next !== blocks) onReorder(next);
+    } else if (active.id !== over.id) {
       const oldIndex = ids.indexOf(String(active.id));
       const newIndex = ids.indexOf(String(over.id));
       if (oldIndex !== -1 && newIndex !== -1) onReorder(arrayMove(blocks, oldIndex, newIndex));
     }
-    // Перетаскивание внешних блоков (если нужно) добавим позже во внешнем DndContext.
   };
 
   return (
@@ -346,13 +396,17 @@ export default function SortableCanvas<T extends SortableLike>({
           {/* Начальный слот: всегда мастер Flex/Grid, даже когда уже есть секции */}
           <InsertSlot
             id="slot-0"
-            variant="section"
+            variant={blocks.length === 0 ? "section" : "default"}
             onInsert={(t, preset) => onInsertAt?.(0, t, preset)}
+            onMoveExisting={(id) => onMoveToRoot?.(0, id)}
           />
           {blocks.map((b, i) => (
             <React.Fragment key={b.id}>
-              <SortableItem id={b.id}>{renderBlock(b)}</SortableItem>
-              <InsertSlot id={`slot-${i + 1}`} onInsert={(t, preset) => onInsertAt?.(i + 1, t, preset)} />
+              <SortableItem id={b.id} locked={b.locked} onMove={(direction) => {
+                const target = i + direction;
+                if (target >= 0 && target < blocks.length) onReorder(arrayMove(blocks, i, target));
+              }}>{renderBlock(b)}</SortableItem>
+              <InsertSlot id={`slot-${i + 1}`} onInsert={(t, preset) => onInsertAt?.(i + 1, t, preset)} onMoveExisting={(id) => onMoveToRoot?.(i + 1, id)} />
             </React.Fragment>
           ))}
         </div>

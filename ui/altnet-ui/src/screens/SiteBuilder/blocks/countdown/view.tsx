@@ -16,8 +16,20 @@ function leftParts(targetIso: string) {
 export default function CountdownView({ block }: { block: CountdownBlock }) {
   const [val, setVal] = React.useState(() => leftParts(block.target));
   React.useEffect(() => {
-    const id = setInterval(() => setVal(leftParts(block.target)), 1000);
-    return () => clearInterval(id);
+    let id: ReturnType<typeof setInterval> | undefined;
+    const update = () => {
+      setVal(leftParts(block.target));
+      const remaining = Date.parse(block.target) - Date.now();
+      if (!Number.isFinite(remaining) || remaining <= 0) { if (id) clearInterval(id); id = undefined; }
+    };
+    const start = () => {
+      if (id) clearInterval(id);
+      id = undefined;
+      if (!document.hidden) { update(); if (Date.parse(block.target) > Date.now()) id = setInterval(update, 1000); }
+    };
+    document.addEventListener("visibilitychange", start);
+    start();
+    return () => { if (id) clearInterval(id); document.removeEventListener("visibilitychange", start); };
   }, [block.target]);
 
   if (!val) return <div className="text-sm text-[#9aa3b2]">Неверная дата</div>;
@@ -31,8 +43,8 @@ export default function CountdownView({ block }: { block: CountdownBlock }) {
         ["Сек", val.s],
       ].map(([label, num]) => (
         <div key={label} className="grid">
-          <div className="text-2xl font-extrabold text-[#e6e9f4]">{String(num).padStart(2, "0")}</div>
-          <div className="text-[11px] text-[#9aa3b2]">{label as string}</div>
+          <div className="text-2xl font-extrabold text-[#1d2440]">{String(num).padStart(2, "0")}</div>
+          <div className="text-[11px] text-[#535d75]">{label as string}</div>
         </div>
       ))}
     </div>

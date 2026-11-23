@@ -11,6 +11,19 @@ export default function GridView({ block }: { block: GridBlock }) {
     colsCount === 3 ? "grid-cols-3" :
     colsCount === 2 ? "grid-cols-2" : "grid-cols-1";
 
+  if (Array.isArray(layoutPreset) && layoutPreset.length > 0 && block.items.length === 0) {
+    return (
+      <div>
+        <div className="grid gap-3" style={{ gridTemplateColumns: layoutPreset.map(value => `${Math.max(1, Number(value) || 1)}fr`).join(" ") }}>
+          {layoutPreset.map((_, index) => (
+            <div key={index} className="min-h-28 rounded-lg border border-dashed border-[#8b82b8] bg-[#f6f4ff]" />
+          ))}
+        </div>
+        <p className="mt-2 text-xs text-[#57536b]">Нажмите «Сделать ячейки редактируемыми» под сеткой.</p>
+      </div>
+    );
+  }
+
   return (
     <div className={`grid ${cols} gap-3`}>
       {block.items.map((it) => (

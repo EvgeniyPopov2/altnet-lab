@@ -11,7 +11,7 @@ export default function SearchView({ block }: { block: SearchBlock }) {
   const action = safeAction(block.action);
   const method = block.method || "GET";
   return (
-    <form role="search" action={action} method={method} className="flex gap-2">
+    <form role="search" action={action} method={method} className="flex gap-2" onSubmit={event => event.preventDefault()}>
       <input
         type="search"
         className="min-w-[240px] px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
