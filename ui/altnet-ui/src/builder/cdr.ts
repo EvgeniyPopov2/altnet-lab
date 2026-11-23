@@ -12,6 +12,7 @@ export function sanitizeHref(raw: string): string {
   const v = (raw ?? "").trim();
   if (!v) return "#";
   // Обратная косая черта и управляющие символы меняют трактовку URL браузером.
+  // eslint-disable-next-line no-control-regex
   if (/[\\\x00-\x1f\x7f]/.test(v) || v.startsWith("//")) return "#";
   const lower = v.toLowerCase();
 
