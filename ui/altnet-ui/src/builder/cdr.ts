@@ -62,31 +62,40 @@ export function makeNameFromHash(hashHex: string, prefix: string, ext: string) {
   return `${prefix}-${hashHex.slice(0, 8)}.${ext}`;
 }
 
-/** Перекодировать Blob->PNG через canvas, срезая EXIF (если возможно). */
+/** Перекодировать изображение в PNG; при ошибке исходный файл не возвращается. */
 export async function tryReencodeToPng(blob: Blob): Promise<Blob> {
+  let bmp: ImageBitmap | undefined;
   try {
-    const bmp = await createImageBitmap(blob);
+    bmp = await createImageBitmap(blob);
     const canvas = document.createElement("canvas");
     canvas.width = bmp.width;
     canvas.height = bmp.height;
     const ctx = canvas.getContext("2d");
-    if (!ctx) return blob;
+    if (!ctx) throw new Error("Canvas 2D недоступен.");
     ctx.drawImage(bmp, 0, 0);
-    const out = await new Promise<Blob>((resolve) => canvas.toBlob(b => resolve(b || blob), "image/png", 0.92));
-    return out || blob;
-  } catch {
-    return blob; // CORS/другие ошибки — вернём как есть
+    const out = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!out || out.type !== "image/png" || out.size === 0) {
+      throw new Error("Пустой или неподходящий результат перекодирования.");
+    }
+    return out;
+  } catch (error) {
+    throw new Error("Не удалось очистить изображение: исходный файл не используется.", { cause: error });
+  } finally {
+    bmp?.close();
   }
 }
 
 type FetchOpts = { timeoutMs?: number; toPng?: boolean; preferredExt?: string };
-const DEFAULT_FETCH_OPTS: FetchOpts = { timeoutMs: 10000, toPng: true, preferredExt: "png" };
+const DEFAULT_FETCH_OPTS: FetchOpts = { timeoutMs: 10000 };
 
 /**
- * Скачивает картинку, по возможности перекодирует в PNG, считает SHA-256 и возвращает {name, blob}.
+ * Скачивает картинку, перекодирует в PNG, считает SHA-256 и возвращает {name, blob}.
  * Дедуп делается на уровне вызывающего кода по хэшам.
  */
 export async function fetchAndCleanImage(url: string, opts: FetchOpts = DEFAULT_FETCH_OPTS): Promise<{ name: string; blob: Blob; hash: string; }> {
+  if (opts.toPng === false) {
+    throw new Error("Отключить очистку изображения нельзя.");
+  }
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_FETCH_OPTS.timeoutMs!);
   let resp: Response;
@@ -98,18 +107,13 @@ export async function fetchAndCleanImage(url: string, opts: FetchOpts = DEFAULT_
   }
 
   if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${url}`);
-  let blob = await resp.blob();
-
-  if (opts.toPng) {
-    blob = await tryReencodeToPng(blob);
-  }
+  const blob = await tryReencodeToPng(await resp.blob());
 
   const buf = await blob.arrayBuffer();
   const hash = await sha256Hex(buf);
 
-  // Определяем расширение
-  const ext = (opts.preferredExt || guessExtFromType(blob.type) || "bin");
-  const name = makeNameFromHash(hash, "img", ext);
+  // Результат всегда PNG, независимо от расширения исходного файла.
+  const name = makeNameFromHash(hash, "img", "png");
   return { name, blob, hash };
 }
 
