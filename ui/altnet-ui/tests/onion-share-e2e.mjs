@@ -38,6 +38,12 @@ try {
   assert.match(onion, /^[a-z2-7]{56}\.onion$/);
   assert.match(cid, /^bafy[a-z2-7]+$/);
   assert.equal(shareLink, `alt://onion/${onion}/${cid}`);
+  await page.evaluate(() => Object.defineProperty(navigator, "clipboard", {
+    configurable: true, value: { writeText: async value => { window.__altnetCopiedLink = value; } },
+  }));
+  await panel.getByRole("button", { name: "Копировать ссылку Alt" }).click();
+  assert.equal(await page.evaluate(() => window.__altnetCopiedLink), shareLink);
+  await panel.getByText("Ссылка Alt скопирована.").waitFor();
   for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
     const reader = await browser.newContext({ viewport });
     await reader.route("**/*", allowLocal);
