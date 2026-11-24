@@ -14,6 +14,9 @@ PREFIX = "AltNet/ui/"
 root = Path(__file__).resolve().parents[1]
 ui = root / "ui/altnet-ui"
 parser = argparse.ArgumentParser()
+parser.add_argument("--engine", choices=("chromium", "firefox", "webkit"), default="chromium")
+parser.add_argument("--focus", help="Проверить отдельный шаблон по названию")
+parser.add_argument("--full-export", action="store_true", help="Проверить экспорт и повторный импорт CAR")
 parser.add_argument("archives", nargs="+", type=Path)
 args = parser.parse_args()
 
@@ -54,7 +57,12 @@ for archive in args.archives:
         worker.start()
         try:
             url = f"http://127.0.0.1:{server.server_port}/"
-            subprocess.run(["node", "tests/showcase-gallery-ui.mjs", "--url", url, "--engine", "chromium"], cwd=ui, check=True, timeout=300)
+            command = ["node", "tests/showcase-gallery-ui.mjs", "--url", url, "--engine", args.engine]
+            if args.focus:
+                command.extend(["--focus", args.focus])
+            if args.full_export:
+                command.append("--full-export")
+            subprocess.run(command, cwd=ui, check=True, timeout=300)
         finally:
             server.shutdown()
             worker.join()

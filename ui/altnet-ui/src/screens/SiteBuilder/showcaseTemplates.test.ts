@@ -7,16 +7,32 @@ import { validateDraft } from "./storage";
 import type { Doc } from "./types";
 
 const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/ZKkAAAAASUVORK5CYII=";
+const documentOf = (spec: typeof SHOWCASE_TEMPLATES[number]) => createShowcaseDocument(spec, pixel, (spec.extraImages ?? []).map(() => pixel));
 
 describe("галерея готовых сайтов", () => {
   it("содержит разные тематики и имена", () => {
-    expect(SHOWCASE_TEMPLATES.length).toBeGreaterThanOrEqual(18);
+    expect(SHOWCASE_TEMPLATES.length).toBeGreaterThanOrEqual(21);
     expect(new Set(SHOWCASE_TEMPLATES.map(item => item.id)).size).toBe(SHOWCASE_TEMPLATES.length);
     expect(new Set(SHOWCASE_TEMPLATES.map(item => item.category)).size).toBe(SHOWCASE_TEMPLATES.length);
   });
 
+  it("содержит отдельные редакционные композиции вместо вариаций одной структуры", () => {
+    const featured = SHOWCASE_TEMPLATES.filter(item => item.showcaseStyle);
+    expect(featured.map(item => item.showcaseStyle)).toEqual(["magazine", "cinema", "playful"]);
+    const docs = featured.map(documentOf);
+    expect(new Set(docs.map(doc => doc.blocks.length)).size).toBe(3);
+    expect(docs.every(doc => doc.blocks.length > 6)).toBe(true);
+  });
+
+  it.each(["art-journal", "film-studio"])("сохраняет раскрытие изображений в экспорте %s", async id => {
+    const spec = SHOWCASE_TEMPLATES.find(item => item.id === id)!;
+    const html = await (await exportSingleHtml(adaptFromSiteBuilderDoc(documentOf(spec)), { bundleAssets: true, restrictExternalMedia: true })).text();
+    expect(html).toContain("data-lightbox-open");
+    expect(html).toContain("script-src 'sha256-");
+  });
+
   it.each(SHOWCASE_TEMPLATES)("создаёт, сохраняет и безопасно экспортирует «$name»", async spec => {
-    const doc = createShowcaseDocument(spec, pixel);
+    const doc = documentOf(spec);
     expect(validateDraft(doc).status).toBe("loaded");
     const model = adaptFromSiteBuilderDoc(doc);
     expect(unsupportedBlockTypes(model)).toEqual([]);
@@ -47,6 +63,9 @@ describe("галерея готовых сайтов", () => {
   it("не принимает внешние или исполняемые адреса изображений", () => {
     for (const input of ["https://example.com/x.png", "data:image/svg+xml;base64,PHN2Zz4=", "javascript:alert(1)"])
       expect(() => createShowcaseDocument(SHOWCASE_TEMPLATES[0], input)).toThrow();
+    const featured = SHOWCASE_TEMPLATES.find(item => item.id === "film-studio")!;
+    expect(() => createShowcaseDocument(featured, pixel, [pixel, "https://example.com/x.png"])).toThrow();
+    expect(() => createShowcaseDocument(featured, pixel, [pixel])).toThrow();
   });
 
   it("проверяет цвета темы перед вставкой в CSS и не меняет заголовок старых документов", async () => {

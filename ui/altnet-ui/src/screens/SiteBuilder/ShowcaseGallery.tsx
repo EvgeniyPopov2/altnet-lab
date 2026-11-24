@@ -17,9 +17,15 @@ import florist from "./template-assets/florist.jpg";
 import movement from "./template-assets/movement.jpg";
 import animals from "./template-assets/animals.jpg";
 import science from "./template-assets/science.jpg";
+import editorialArt from "./template-assets/editorial-art.jpg";
+import cinema from "./template-assets/cinema.jpg";
+import playful from "./template-assets/playful.jpg";
+import editorialDetail from "./template-assets/editorial-detail.jpg";
+import cinemaMountain from "./template-assets/cinema-mountain.jpg";
+import cinemaCoast from "./template-assets/cinema-coast.jpg";
 import "./showcaseGallery.css";
 
-const images = { architecture, landscape, bakery, studio, books, digital, photography, restaurant, florist, movement, animals, science };
+const images = { architecture, landscape, bakery, studio, books, digital, photography, restaurant, florist, movement, animals, science, editorialArt, cinema, playful, editorialDetail, cinemaMountain, cinemaCoast };
 const cache = new Map<string, string>();
 
 async function localImage(src: string): Promise<string> {
@@ -46,7 +52,8 @@ type Props = { doc: Doc; setDoc: Dispatch<SetStateAction<Doc>>; onChangeProject:
 export default function ShowcaseGallery({ doc, setDoc, onChangeProject, theme }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<ShowcaseTemplate>(SHOWCASE_TEMPLATES[0]);
+  const [featuredOnly, setFeaturedOnly] = useState(false);
+  const [selected, setSelected] = useState<ShowcaseTemplate>(() => SHOWCASE_TEMPLATES.find(item => item.showcaseStyle) ?? SHOWCASE_TEMPLATES[0]);
   const [ready, setReady] = useState<{ id: string; doc: Doc; html: string } | null>(null);
   const [error, setError] = useState("");
   const [device, setDevice] = useState<"desktop" | "mobile">(() => typeof window !== "undefined" && window.matchMedia?.("(max-width: 767px)").matches ? "mobile" : "desktop");
@@ -73,8 +80,8 @@ export default function ShowcaseGallery({ doc, setDoc, onChangeProject, theme }:
     setReady(null);
     setError("");
     void (async () => {
-      const image = await localImage(images[selected.image]);
-      const document = createShowcaseDocument(selected, image);
+      const [image, ...extraImages] = await Promise.all([selected.image, ...(selected.extraImages ?? [])].map(name => localImage(images[name])));
+      const document = createShowcaseDocument(selected, image, extraImages);
       const html = await (await exportSingleHtml(adaptFromSiteBuilderDoc(document), { bundleAssets: true, restrictExternalMedia: true, deterministic: true })).text();
       // В уменьшенном iframe отложенная загрузка может не считать первый экран видимым.
       const safe = await prepareLocalSite(html.replaceAll('loading="lazy"', 'loading="eager"'));
@@ -100,10 +107,11 @@ export default function ShowcaseGallery({ doc, setDoc, onChangeProject, theme }:
   const scale = Math.min(1, Math.max(0.1, (previewSize.width - 16) / viewport));
   const previewHeight = Math.max(100, previewSize.height - 16);
   const terms = query.trim().toLocaleLowerCase("ru-RU").split(/\s+/).filter(Boolean);
-  const matching = SHOWCASE_TEMPLATES.filter(item => terms.every(term => `${item.name} ${item.category} ${item.brand}`.toLocaleLowerCase("ru-RU").includes(term)));
+  const matching = SHOWCASE_TEMPLATES.filter(item => (!featuredOnly || item.showcaseStyle) && terms.every(term => `${item.name} ${item.category} ${item.brand}`.toLocaleLowerCase("ru-RU").includes(term)))
+    .sort((a, b) => Number(Boolean(b.showcaseStyle)) - Number(Boolean(a.showcaseStyle)));
 
   return <>
-    <button type="button" onClick={() => { setQuery(""); setOpen(true); }} className="w-full rounded-lg border border-[#6e59f2] bg-[#221d3d] px-3 py-2 text-left text-sm text-white hover:bg-[#302751]">Готовые сайты · {SHOWCASE_TEMPLATES.length}</button>
+    <button type="button" onClick={() => { setQuery(""); setFeaturedOnly(false); setOpen(true); }} className="w-full rounded-lg border border-[#6e59f2] bg-[#221d3d] px-3 py-2 text-left text-sm text-white hover:bg-[#302751]">Готовые сайты · {SHOWCASE_TEMPLATES.length}</button>
     {typeof document !== "undefined" && createPortal(<dialog ref={dialog} onCancel={() => setOpen(false)} onClose={() => setOpen(false)} aria-labelledby="showcase-title" data-theme={theme}
       className="showcase-dialog m-auto max-h-[94vh] w-[min(1280px,96vw)] max-w-none overflow-hidden rounded-2xl border border-[#3d3854] bg-[#14131c] p-0 text-[#f7f5ff] shadow-2xl backdrop:bg-black/70">
       <div className="sg-header flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
@@ -114,6 +122,7 @@ export default function ShowcaseGallery({ doc, setDoc, onChangeProject, theme }:
         <div className="min-w-0 p-4">
           <label className="sg-muted block text-xs" htmlFor="showcase-search">Найти тематику или название</label>
           <input id="showcase-search" type="search" value={query} onChange={event => setQuery(event.target.value)} autoComplete="off" maxLength={120} placeholder="Например, фотография" className="sg-search mt-1 w-full rounded-lg border border-white/20 bg-[#211f2b] px-3 py-2 text-sm text-white" />
+          <div className="mt-2 flex flex-wrap gap-2" aria-label="Подборка шаблонов"><button type="button" aria-pressed={!featuredOnly} onClick={() => setFeaturedOnly(false)} className="sg-outline rounded border border-white/20 px-2 py-1 text-xs">Все сайты</button><button type="button" aria-pressed={featuredOnly} onClick={() => setFeaturedOnly(true)} className="sg-outline rounded border border-white/20 px-2 py-1 text-xs">Авторская витрина</button></div>
           <p className="sg-muted mt-1 text-xs" role="status">Найдено: {matching.length}</p>
           <div className="mt-3 flex content-start gap-3 overflow-x-auto pb-2 lg:grid lg:grid-cols-3 lg:overflow-x-visible" aria-label="Тематики сайтов">
           {matching.map((template, index) => <button type="button" key={template.id} aria-pressed={selected.id === template.id}
@@ -128,7 +137,7 @@ export default function ShowcaseGallery({ doc, setDoc, onChangeProject, theme }:
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">{selected.name}</h3><p className="sg-muted text-xs text-[#b5afc4]">{selected.category} · демонстрационные материалы</p></div>
             <div className="flex gap-1" aria-label="Размер предпросмотра"><button type="button" aria-pressed={device === "desktop"} onClick={() => setDevice("desktop")} className="sg-outline rounded border border-white/20 px-2 py-1 text-xs">Десктоп</button><button type="button" aria-pressed={device === "mobile"} onClick={() => setDevice("mobile")} className="sg-outline rounded border border-white/20 px-2 py-1 text-xs">Телефон</button></div>
           </div>
-          {terms.length > 0 && !matching.some(item => item.id === selected.id) && <p className="sg-muted mt-2 text-xs">В предпросмотре ранее выбранный шаблон. Выберите результат поиска, чтобы посмотреть его.</p>}
+          {!matching.some(item => item.id === selected.id) && <p className="sg-muted mt-2 text-xs">В предпросмотре ранее выбранный шаблон. Выберите вариант из списка, чтобы посмотреть его.</p>}
           <div ref={preview} className="mt-3 flex h-[min(430px,43dvh)] justify-center overflow-hidden rounded-lg bg-[#25232e] p-2 lg:h-[430px]">
             {ready?.id === selected.id ? <div style={{ width: viewport * scale, height: previewHeight, overflow: "hidden" }}>
               <iframe title={`Предпросмотр: ${selected.name}`} sandbox="allow-scripts" srcDoc={ready.html} className="border-0 bg-white"

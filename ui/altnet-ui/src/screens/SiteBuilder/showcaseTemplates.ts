@@ -1,13 +1,17 @@
 import { createDefaultBlock } from "./registry";
+import { createArtDirectedDocument } from "./showcaseArtDirected";
 import type { Block, Doc } from "./types";
 
+export type ShowcaseImage = "architecture" | "landscape" | "bakery" | "studio" | "books" | "digital" | "photography" | "restaurant" | "florist" | "movement" | "animals" | "science" | "editorialArt" | "cinema" | "playful" | "editorialDetail" | "cinemaMountain" | "cinemaCoast";
 export type ShowcaseTemplate = {
-  id: string; category: string; name: string; brand: string; image: "architecture" | "landscape" | "bakery" | "studio" | "books" | "digital" | "photography" | "restaurant" | "florist" | "movement" | "animals" | "science";
+  id: string; category: string; name: string; brand: string; image: ShowcaseImage;
   imageAlt: string; eyebrow: string; headline: string; intro: string; action: string; section: string;
   features: [string, string, string]; descriptions: [string, string, string]; story: string; storyText: string; closing: string;
   bg: string; fg: string; muted: string; accent: string; card: string; buttonText: string;
   layout: "left" | "right" | "center" | "editorial" | "image-first";
   faq?: [string, string][];
+  showcaseStyle?: "magazine" | "cinema" | "playful";
+  extraImages?: ShowcaseImage[];
 };
 
 /** Демонстрационные тексты и названия можно изменить после создания проекта. */
@@ -74,6 +78,31 @@ export const SHOWCASE_TEMPLATES: ShowcaseTemplate[] = [
     bg:"#0d1a25", fg:"#edf7fa", muted:"#b0c7cd", accent:"#8adbd5", card:"#18303d", buttonText:"#102a2b", layout:"editorial",
     faq:[["Что можно найти в журнале?", "Опишите направления, авторов и форматы материалов вашего проекта."], ["Как связаться с редакцией?", "Укажите актуальные контакты и правила отправки материалов."]]
   },
+  {
+    id:"art-journal", category:"Витрина · журнал об искусстве", name:"Форма и смысл", brand:"ФОРМА / СМЫСЛ", image:"editorialArt",
+    imageAlt:"Синяя бумажная скульптура и красная сфера в студийном свете", eyebrow:"НЕЗАВИСИМЫЙ ЖУРНАЛ · ИСКУССТВО · ИДЕИ", headline:"Искусство смотреть иначе.",
+    intro:"Журнал о людях, объектах и идеях, которые меняют привычный взгляд на мир.", action:"Открыть выпуск", section:"В этом выпуске",
+    features:["Новая форма", "Люди и идеи", "Личный взгляд"], descriptions:["Как простые материалы становятся произведениями.", "Разговоры с теми, кто ищет собственный язык.", "Истории, детали и открытия повседневности."],
+    story:"Хороший вопрос открывает больше, чем готовый ответ.", storyText:"Здесь можно разместить авторские материалы, рубрики, интервью и рассказы о выставках.", closing:"Создадим новую историю вместе.",
+    bg:"#f7f2e7", fg:"#16264a", muted:"#465371", accent:"#db4934", card:"#e9e2d1", buttonText:"#ffffff", layout:"editorial", showcaseStyle:"magazine", extraImages:["editorialDetail"]
+  },
+  {
+    id:"film-studio", category:"Витрина · кино и визуальные истории", name:"Линия горизонта", brand:"HORIZON / STORIES", image:"cinema",
+    imageAlt:"Одинокий путешественник на тёмном берегу океана", eyebrow:"ИСТОРИИ · КИНО · ПУТЕШЕСТВИЯ", headline:"Истории, которые остаются с нами.",
+    intro:"Независимая студия визуальных историй. Пространства, люди и моменты, которые невозможно повторить.", action:"Смотреть историю", section:"Выбранные истории",
+    features:["Побережье", "Северный свет", "Тихие голоса"], descriptions:["Там, где земля встречается с океаном.", "Путешествие сквозь тишину и холодный свет.", "История людей, которые умеют слушать."],
+    story:"Иногда достаточно остановиться и посмотреть.", storyText:"Здесь можно представить проекты, команду и подход к созданию визуальных историй.", closing:"Расскажите нам свою историю.",
+    bg:"#101315", fg:"#f7f4ed", muted:"#c4c2ba", accent:"#d14d42", card:"#222627", buttonText:"#ffffff", layout:"image-first", showcaseStyle:"cinema", extraImages:["cinemaMountain", "cinemaCoast"]
+  },
+  {
+    id:"little-world", category:"Витрина · детское творчество", name:"Мир больших идей", brand:"БОЛЬШИЕ / ИДЕИ", image:"playful",
+    imageAlt:"Солнце, горы и птица в технике яркой бумажной аппликации", eyebrow:"ТВОРЧЕСТВО · ИГРА · ОТКРЫТИЯ", headline:"Большие идеи начинаются с игры!",
+    intro:"Пространство для любопытных детей и взрослых, которые любят создавать, экспериментировать и удивляться.", action:"Найти идею", section:"Что будем придумывать?",
+    features:["Рисуем", "Мастерим", "Исследуем"], descriptions:["Цвета, линии и целые придуманные миры.", "Бумага, ножницы и немного воображения.", "Задаём вопросы и ищем свои ответы."],
+    story:"Нет неправильных идей — есть новые открытия.", storyText:"Расскажите о занятиях, материалах и о том, как присоединиться. Демонстрационную информацию можно заменить.", closing:"Давайте придумывать вместе!",
+    bg:"#fff9ec", fg:"#172b63", muted:"#3c4e70", accent:"#1d49be", card:"#ffe28b", buttonText:"#ffffff", layout:"left", showcaseStyle:"playful",
+    faq:[["Для кого это пространство?", "Добавьте возраст участников и описание ваших занятий."], ["Как присоединиться?", "Укажите проверенный способ связи и актуальное расписание."]]
+  },
 ];
 
 const wrap = (extra: Record<string, string | number> = {}) => ({ pt: 0, pb: 0, bs: "none", ...extra });
@@ -97,8 +126,10 @@ function section(cells: Block[][], weights: number[], style: Record<string, stri
 }
 
 /** Создаёт документ из обычных блоков редактора; картинка уже локальная data URL. */
-export function createShowcaseDocument(spec: ShowcaseTemplate, imageData: string): Doc {
-  if (!/^data:image\/(png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i.test(imageData)) throw new Error("Не удалось загрузить локальное изображение шаблона.");
+export function createShowcaseDocument(spec: ShowcaseTemplate, imageData: string, extraImages: string[] = []): Doc {
+  const validImage = (value: string) => /^data:image\/(png|jpeg|webp|gif);base64,[a-z0-9+/=]+$/i.test(value);
+  if (!validImage(imageData) || extraImages.length !== (spec.extraImages?.length ?? 0) || !extraImages.every(validImage)) throw new Error("Не удалось загрузить локальные изображения шаблона.");
+  if (spec.showcaseStyle) return createArtDirectedDocument(spec, imageData, extraImages);
   const mark = paragraph(spec.brand, spec.fg, 13);
   mark.style = wrap({ fs: 13, fw: 700, tc: spec.fg, letterSpacing: 1.5 });
   const nav = section([[mark], [button("Контакты", "#contacts", spec, "right")]], [3, 2]);
