@@ -10,6 +10,81 @@ const { values } = parseArgs({
     report: { type: "string" },
   },
 });
+async function verifyDownloadedPage(browser, url) {
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  try {
+    const page = await context.newPage();
+    await page.goto(url);
+    await page.evaluate(() =>
+      localStorage.setItem(
+        "altnet.sitebuilder.v1",
+        JSON.stringify({
+          title: "Журнал",
+          blocks: [
+            {
+              id: "body",
+              type: "p",
+              text: "Книга месяца",
+              richRuns: [{ text: "Книга", bold: true }, { text: " месяца" }],
+            },
+            { id: "arc", type: "textpath", text: "По дуге", shape: "arc" },
+            { id: "open", type: "btn", label: "Контакты", href: "#popup-6d5ja5" },
+          ],
+          sitePages: {
+            version: 1,
+            activeId: "home",
+            pages: [
+              { id: "home", path: "index.html" },
+              {
+                id: "popup",
+                path: "contact.html",
+                template: { kind: "popup", enabled: true, priority: 1 },
+                document: { title: "Редакция", blocks: [{ id: "note", type: "p", text: "Связаться с редакцией" }] },
+              },
+            ],
+          },
+        })
+      )
+    );
+    await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
+    await page.getByRole("button", { name: "Создать сайт", exact: true }).click();
+    await page.locator('[data-styled-block="open"]').waitFor();
+    const [file] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Экспорт HTML", exact: true }).click(),
+    ]);
+    assert.ok(file.suggestedFilename().endsWith(".html"));
+    const stream = await file.createReadStream(),
+      parts = [];
+    for await (const chunk of stream) parts.push(chunk);
+    const html = Buffer.concat(parts),
+      published = await context.newPage(),
+      href = new URL("builder-export-check.html", url).href;
+    await published.route(href, (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: html }));
+    await published.goto(href);
+    assert.equal(await published.locator("main strong").first().textContent(), "Книга");
+    const textPath = published.locator("svg textPath");
+    assert.ok(await textPath.evaluate((e) => e.getComputedTextLength() > 10));
+    const opener = published.getByRole("link", { name: "Контакты", exact: true }),
+      modal = published.getByRole("dialog", { name: "Редакция" });
+    await opener.click();
+    await modal.waitFor();
+    assert.ok(await modal.getByText("Связаться с редакцией").isVisible());
+    await published.keyboard.press("Escape");
+    await modal.waitFor({ state: "hidden" });
+    await published.waitForFunction(() => document.activeElement?.textContent === "Контакты");
+    return {
+      download: file.suggestedFilename(),
+      bytes: html.length,
+      richText: true,
+      textPath: true,
+      popupKeyboard: true,
+    };
+  } finally {
+    await context.close();
+  }
+}
+
 const engines = { firefox, webkit, chromium },
   reports = [];
 for (const name of values.engines.split(",")) {
@@ -100,6 +175,9 @@ for (const name of values.engines.split(",")) {
         await context.close();
       }
     }
+    const outcome = await verifyDownloadedPage(browser, values.url);
+    reports.find((row) => row.engine === name && row.width === 1440 && row.theme === "dark").publishedHtml = outcome;
+    console.log(name, "downloaded HTML · typography, SVG, dialog and focus PASS");
   } finally {
     await browser.close();
   }

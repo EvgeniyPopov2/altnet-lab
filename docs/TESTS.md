@@ -241,7 +241,7 @@ python -B tests/sitebuilder-regression.py 'C:\Program Files\Google\Chrome\Applic
 python -B tests/sitebuilder-regression.py "C:/Program Files/Google/Chrome/Application/chrome.exe" --url http://127.0.0.1:5179/ --report "H:/CodexData/Temp/altnet-builder-acceptance.json"
 ```
 
-Из каталога `ui/altnet-ui` выполняются проверки Firefox и WebKit на ширинах 320, 390, 768, 1024, 1440 и 1920 CSS-пикселей. Они открывают конструктор через навигацию приложения и измеряют нарисованные строки и пропорции колонок в обеих темах. Параметр `--url` позволяет проверять запущенную сборку клиента.
+Из каталога `ui/altnet-ui` выполняются проверки Firefox и WebKit на ширинах 320, 390, 768, 1024, 1440 и 1920 CSS-пикселей. Они открывают конструктор через навигацию приложения и измеряют нарисованные строки и пропорции колонок в обеих темах. Каждый движок также нажимает «Экспорт HTML», открывает скачанный файл, проверяет оформление текста и SVG, вызывает окно по ссылке, закрывает его клавишей Escape и проверяет возврат фокуса. Параметр `--url` позволяет проверять запущенную сборку клиента.
 
 ```powershell
 $env:PLAYWRIGHT_BROWSERS_PATH = "H:/CodexData/Cache/ms-playwright"
