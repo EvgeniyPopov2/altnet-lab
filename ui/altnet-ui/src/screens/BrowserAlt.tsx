@@ -410,7 +410,7 @@ export default function BrowserAlt({
           </label>
           <button type="button" disabled={carLoading || !carFile || !carCid.trim()} onClick={() => void importCar("file")} className="mt-3 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">{carLoading ? "Проверяем…" : "Проверить и открыть"}</button>
           <div className="mt-4 border-t border-white/10 pt-3">
-            <p className="text-sm text-white/70">Или получите CAR от известного onion-шлюза IPFS через подключённый Tor. Автоматический поиск участников и сетевая публикация пока не подключены.</p>
+            <p className="text-sm text-white/70">Или получите CAR от известного onion-шлюза IPFS через подключённый Tor. Автоматический поиск участников и постоянная сетевая публикация пока не подключены.</p>
             <label className="mt-3 block text-sm">Адрес onion-шлюза
               <input aria-label="Адрес onion-шлюза" value={onionAddress} onChange={event => setOnionAddress(event.target.value)} disabled={carLoading} autoComplete="off" spellCheck={false} placeholder="адрес.onion" className="mt-1 block w-full rounded border border-white/20 bg-[#0c0f1a] p-2 text-white" />
             </label>
