@@ -16,6 +16,7 @@ import { resolveResponsiveStyle } from "../screens/SiteBuilder/responsiveStyle";
 import { spacingStyle } from "../screens/SiteBuilder/boxDimensions";
 import { backgroundStyle } from "../screens/SiteBuilder/backgroundStyle";
 import { blockCornerStyle } from "../screens/SiteBuilder/blockCorners";
+import { blockBorderStyle } from "../screens/SiteBuilder/blockBorders";
 import { blockShadowStyle } from "../screens/SiteBuilder/blockShadowStyle";
 import { advancedLayoutStyle } from "../screens/SiteBuilder/advancedLayoutStyle";
 import { transformStyle } from "../screens/SiteBuilder/transforms";
@@ -397,7 +398,7 @@ function prepareStyleRules(model: SiteModel): string {
       values.push(key.replace(/[A-Z]/g, char => "-" + char.toLowerCase()) + ":" + value);
     }
     add("border-radius", style.br); add("border-width", style.bw);
-    for (const [key, value] of Object.entries(blockCornerStyle(style)))
+    for (const [key, value] of Object.entries({ ...blockCornerStyle(style), ...blockBorderStyle(style) }))
       values.push(key.replace(/[A-Z]/g, char => "-" + char.toLowerCase()) + ":" + value);
     if (typeof style.w === "number" && Number.isFinite(style.w)) values.push(`width:${Math.max(1, Math.min(200, style.w))}%`);
     if (typeof style.minh === "number" && Number.isFinite(style.minh)) values.push(`min-height:${Math.max(0, Math.min(1200, style.minh))}px`);

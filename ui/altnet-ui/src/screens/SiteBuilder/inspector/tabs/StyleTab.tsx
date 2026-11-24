@@ -3,6 +3,8 @@ import { blendModes } from "../../textAppearance";
 import SpacingControl from "./SpacingControl";
 import CornerControl from "./CornerControl";
 import BlockCorners from "./BlockCorners";
+import BlockBorders from "./BlockBorders";
+import { blockBorderKeys } from "../../blockBorders";
 import { blockCornerKeys } from "../../blockCorners";
 import { corners } from "../../corners";
 import type { Block, StyleLayer } from "../../types";
@@ -60,6 +62,9 @@ export default function StyleTab({ block, onPatch, device }: Props) {
     onPatch((latest) => {
       const all = collection === "styleByBp" ? latest.styleByBp || {} : collection === "buttonStyleByBp" && latest.type === "btn" ? latest.buttonStyleByBp || {} : collection === "imageStyleByBp" && latest.type === "img" ? latest.imageStyleByBp || {} : {};
       const next: StyleLayer = { ...all[device] };
+      if (collection === "styleByBp" && key === "bw" && parsed !== undefined) {
+        for (const side of blockBorderKeys) delete next[side];
+      }
       if (collection === "styleByBp" && key === "br" && parsed !== undefined) {
         for (const corner of blockCornerKeys) delete next[corner];
       }
@@ -258,7 +263,7 @@ export default function StyleTab({ block, onPatch, device }: Props) {
       </>}
     </div></details>
     {slider("styleByBp", "br", "Скругление, px", 0, 512)}
-    <BlockCorners key={block.id + device} block={block} device={device} onPatch={onPatch} />
+    <BlockCorners key={"corners-" + block.id + device} block={block} device={device} onPatch={onPatch} />
     {slider("styleByBp", "w", "Ширина блока, %", 1, 200, 100)}
     {slider("styleByBp", "minh", "Минимальная высота блока, px", 0, 1200)}
     {slider("styleByBp", "op", "Непрозрачность блока, %", 0, 100, 100)}
@@ -279,6 +284,7 @@ export default function StyleTab({ block, onPatch, device }: Props) {
       </>}
     </div></details>
     {slider("styleByBp", "bw", "Ширина рамки, px", 0, 512)}
+    <BlockBorders key={"borders-" + block.id + device} block={block} device={device} onPatch={onPatch} />
     <Field label="Стиль рамки"><select className={input} value={current.bs ?? ""} onChange={e => change("bs", e.target.value)}>
       <option value="">Наследовать</option><option value="none">Без рамки</option><option value="solid">Сплошная</option><option value="dashed">Штриховая</option><option value="dotted">Точечная</option>
     </select></Field>

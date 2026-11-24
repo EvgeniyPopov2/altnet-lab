@@ -71,18 +71,36 @@ def run(case, js, wait, call, directory, screenshot=None):
         js("[...document.querySelectorAll('.builder-inspector summary')].find(e=>e.textContent==='Тень блока').click()")
         js("editorQA.change(editorQA.field('Тип тени блока'),'outer')")
         js("editorQA.change(editorQA.field('Смещение тени блока по X, px'),5)")
-        js("document.querySelector('[aria-label=\"Углы блока — связать\"]').click()")
+        wait("editorQA.saved().blocks[0].styleByBp?.desktop?.blockShadowX===5")
+        js("(()=>{const b=document.querySelector('[aria-label=\"Углы блока — связать\"]');if(b.getAttribute('aria-pressed')==='true')b.click()})()")
+        wait("document.querySelector('[aria-label=\"Углы блока — связать\"]').getAttribute('aria-pressed')==='false'")
         js("editorQA.change(document.querySelector('[aria-label=\"Угол блока — верхний левый\"]'),28)")
         js("editorQA.change(document.querySelector('[aria-label=\"Угол блока — верхний правый\"]'),8)")
-        wait("editorQA.saved().blocks[0].styleByBp?.desktop?.blockCornerTopLeft===28 && editorQA.saved().blocks[0].styleByBp?.desktop?.blockCornerTopRight===8")
+        js("editorQA.change(editorQA.field('Стиль рамки'),'solid')")
+        js("(()=>{const b=document.querySelector('[aria-label=\"Стороны рамки — связать\"]');if(b.getAttribute('aria-pressed')==='true')b.click()})()")
+        wait("document.querySelector('[aria-label=\"Стороны рамки — связать\"]').getAttribute('aria-pressed')==='false'")
+        js("editorQA.change(document.querySelector('[aria-label=\"Рамка блока — сверху\"]'),6)")
+        js("editorQA.change(document.querySelector('[aria-label=\"Рамка блока — справа\"]'),2)")
+        wait("editorQA.saved().blocks[0].styleByBp?.desktop?.blockBorderTop===6")
+        assert js("document.querySelectorAll('[aria-label=\"Углы блока — связать\"]').length")==1
+        assert js("document.querySelectorAll('[aria-label=\"Стороны рамки — связать\"]').length")==1
+        assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).borderTopWidth")=="6px"
+        try:
+            wait("editorQA.saved().blocks[0].styleByBp?.desktop?.blockCornerTopLeft===28 && editorQA.saved().blocks[0].styleByBp?.desktop?.blockCornerTopRight===8")
+        except RuntimeError:
+            print("Saved styles:",js("editorQA.saved().blocks[0].styleByBp"),flush=True)
+            raise
         assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).borderTopLeftRadius")=="28px"
         wait("editorQA.saved().blocks[0].styleByBp?.desktop?.gradientAngle===90")
         assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).backgroundImage").startswith('linear-gradient(90deg, rgb(255, 0, 0)')
         assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).boxShadow").startswith('rgba(0, 0, 0, 0.25) 5px')
         if screenshot:
+            js("document.querySelector('[aria-label=\"Стороны рамки — связать\"]').scrollIntoView({block:'center'})")
             Path(screenshot).write_bytes(base64.b64decode(call("Page.captureScreenshot", {"format":"png"})["data"]))
         js("[...document.querySelectorAll('.builder-inspector button')].find(e=>e.textContent==='Mobile').click()")
         assert js("document.querySelector('[aria-label=\"Выбрать: Первый цвет градиента (HEX)\"]').value")=="#ff0000"
+        js("editorQA.change(editorQA.field('Ширина рамки, px'),3)")
+        wait("getComputedStyle(document.querySelector('[data-styled-block=para]')).borderTopWidth==='3px'")
         js("editorQA.change(editorQA.field('Скругление, px'),12)")
         wait("getComputedStyle(document.querySelector('[data-styled-block=para]')).borderTopLeftRadius==='12px'")
         js("editorQA.change(editorQA.field('Тип градиента'),'radial')")
@@ -95,9 +113,12 @@ def run(case, js, wait, call, directory, screenshot=None):
         assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).boxShadow").startswith('rgba(0, 0, 0, 0.25) 5px')
         assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).borderTopLeftRadius")=="28px"
         assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).borderTopRightRadius")=="8px"
+        assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).borderTopWidth")=="6px"
+        assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).borderRightWidth")=="2px"
         js("document.getElementById('export-check').style.width='375px'")
         wait("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).backgroundImage.startsWith('radial-gradient')")
         assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).borderTopLeftRadius")=="12px"
+        assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).borderTopWidth")=="3px"
     elif case == "popup":
         js("editorQA.export(true)")
         wait("!!editorQA.doc()?.querySelector('dialog[data-popup-options]')")

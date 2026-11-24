@@ -54,10 +54,15 @@ async function verifyDownloadedPage(browser, url) {
     await page.getByLabel('Углы блока — связать').click();
     await page.getByLabel('Угол блока — верхний левый').fill('28');
     await page.getByLabel('Угол блока — верхний правый').fill('8');
+    await page.locator('label').filter({has:page.getByText('Стиль рамки',{exact:true})}).locator('select').selectOption('solid');
+    await page.getByLabel('Стороны рамки — связать').click();
+    await page.getByLabel('Рамка блока — сверху').fill('6');
+    await page.getByLabel('Рамка блока — справа').fill('2');
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-styled-block="body"]')).borderTopLeftRadius === '28px');
     assert.equal(await page.locator('[data-styled-block="body"]').evaluate(e => getComputedStyle(e).borderTopRightRadius), '8px');
     await page.getByRole('button', {name:'Mobile', exact:true}).click();
     await page.locator('label').filter({hasText:'Скругление, px'}).locator('input[type=number]').fill('12');
+    await page.locator('label').filter({hasText:'Ширина рамки, px'}).locator('input[type=number]').fill('3');
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-styled-block="body"]')).borderTopLeftRadius === '12px');
     const [file] = await Promise.all([
       page.waitForEvent("download"),
@@ -75,8 +80,11 @@ async function verifyDownloadedPage(browser, url) {
     assert.equal(await published.locator("main strong").first().textContent(), "Книга");
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopLeftRadius), '28px');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopRightRadius), '8px');
+    assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopWidth), '6px');
+    assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderRightWidth), '2px');
     await published.setViewportSize({width:375,height:800});
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopLeftRadius), '12px');
+    assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopWidth), '3px');
     await published.setViewportSize({width:1440,height:900});
     const textPath = published.locator("svg textPath");
     assert.ok(await textPath.evaluate((e) => e.getComputedTextLength() > 10));
@@ -95,6 +103,7 @@ async function verifyDownloadedPage(browser, url) {
       textPath: true,
       popupKeyboard: true,
       responsiveCorners: true,
+      responsiveBorders: true,
     };
   } finally {
     await context.close();
