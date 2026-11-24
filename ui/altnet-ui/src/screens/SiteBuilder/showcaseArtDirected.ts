@@ -107,8 +107,72 @@ function playful(spec: ShowcaseTemplate, image: string): Block[] {
   return [navigation(spec), opening, header, tiles, story, ...accordion(spec), contact];
 }
 
+function future(spec: ShowcaseTemplate, image: string, extra: string[]): Block[] {
+  const artwork = photo(image, spec.imageAlt, 430, 24);
+  artwork.style = base({ clipShape: "ellipse" });
+  const opening = section([[text("НЕЗАВИСИМАЯ СТУДИЯ / 01", spec.accent, 12, { fw: 750, letterSpacing: 1.6 }),
+    title(spec.headline, spec.fg, 76, "h1", "system-ui", 44), text(spec.intro, spec.muted, 18), button(spec.action, "#offer", spec.accent, spec.buttonText, 50)],
+    [artwork]], [4, 5], { mt: 28, pl: 32, pr: 32, pt: 36, pb: 36, br: 28, backgroundType: "linear", gradientFrom: "#121d42", gradientTo: "#29305d", gradientAngle: 125 });
+  const metrics = section([[text("01 / СМЫСЛ", spec.accent, 12, { letterSpacing: 1 }), title("Ясность", spec.fg, 31, "h2", "system-ui", 26)],
+    [text("02 / ФОРМА", spec.accent, 12, { letterSpacing: 1 }), title("Характер", spec.fg, 31, "h2", "system-ui", 26)],
+    [text("03 / ДЕЙСТВИЕ", spec.accent, 12, { letterSpacing: 1 }), title("Польза", spec.fg, 31, "h2", "system-ui", 26)]], [1, 1, 1], { mt: 22 });
+  const intro = section([[text("ПРИНЦИПЫ / ПОДХОД", spec.accent, 12, { letterSpacing: 1 }), title(spec.section, spec.fg, 48, "h2", "system-ui", 34)],
+    [text("Технология становится ценнее, когда помогает человеку. Мы начинаем с задачи и оставляем место неожиданным решениям.", spec.muted, 18)]], [3, 2], { mt: 64 }, "offer");
+  const panels = section(spec.features.map((feature, index) => [section([[text(`0${index + 1} /`, spec.accent, 13, { fw: 750 }),
+    title(feature, spec.fg, 28, "h3", "system-ui", 25), text(spec.descriptions[index], spec.muted, 15)]], [1],
+    { bg: index === 1 ? "#27344e" : "#19263a", br: 18, pl: 22, pr: 22, pt: 24, pb: 24 })]), [1, 1, 1]);
+  const story = section([[photo(extra[0], "Абстрактная световая форма на тёмном фоне", 350, 18, true)],
+    [text("ПРОСТРАНСТВО ДЛЯ ИДЕЙ", spec.accent, 12, { letterSpacing: 1 }), title(spec.story, spec.fg, 43, "h2", "system-ui", 32), text(spec.storyText, spec.muted, 17)]], [3, 2], { mt: 64 });
+  const contact = section([[text("НАЧНЁМ С ВОПРОСА", spec.accent, 12, { letterSpacing: 1 }), title(spec.closing, spec.fg, 44, "h2", "system-ui", 32)],
+    [text("Добавьте свои контакты и расскажите, как начать сотрудничество.", spec.muted, 16), button("Контакты", "#contacts", spec.accent, spec.buttonText, 50)]], [3, 2],
+    { mt: 64, mb: 28, bg: "#19263a", br: 24, pl: 30, pr: 30, pt: 30, pb: 30 }, "contacts");
+  return [navigation(spec), opening, metrics, intro, panels, story, contact];
+}
+
+function dining(spec: ShowcaseTemplate, image: string, extra: string[]): Block[] {
+  const heading = section([[text("СЕЗОННАЯ КУХНЯ / НЕСПЕШНЫЕ ВСТРЕЧИ", spec.accent, 12, { letterSpacing: 1.8 }),
+    title(spec.headline, spec.fg, 76, "h1", "Georgia", 45)],
+    [text(spec.intro, spec.muted, 18), button(spec.action, "#offer", spec.accent, spec.buttonText)]], [3, 2], { mt: 44 });
+  const cover = section([[photo(image, spec.imageAlt, 510)]], [1], { mt: 16 });
+  const intro = section([[text("О КУХНЕ", spec.accent, 12, { letterSpacing: 1.2 }), title(spec.story, spec.fg, 48, "h2", "Georgia", 34)],
+    [text(spec.storyText, spec.muted, 18), text("Продукты меняются вместе с сезоном, а внимание к гостям остаётся.", spec.muted, 16)]], [2, 3], { mt: 64 });
+  const menuTabs: Block = { ...createDefaultBlock("tabs"), active: 0, variant: "underline", size: "lg", align: "start", orientation: "horizontal", tabs: [
+    { id: "menu-start", label: "Начало", content: "Овощи, травы и маленькие открытия.\nЗамените этот текст своим меню." },
+    { id: "menu-main", label: "Главное", content: "Сезонный продукт, огонь и внимание к деталям.\nДобавьте ваши блюда." },
+    { id: "menu-dessert", label: "Десерт", content: "Неспешное завершение вечера.\nРасскажите о десертах и напитках." },
+  ] };
+  const menu = section([[text("МЕНЮ / ЗНАКОМСТВО", spec.accent, 12, { letterSpacing: 1.2 }), title(spec.section, spec.fg, 48, "h2", "Georgia", 34),
+    text("Названия и состав блюд в шаблоне демонстрационные.", spec.muted, 15)], [menuTabs]], [2, 3], { mt: 64 }, "offer");
+  const detail = section([[photo(extra[0], "Сезонное блюдо на керамической тарелке", 400, 0, true)],
+    [text("ВНИМАНИЕ К ДЕТАЛЯМ", spec.accent, 12, { letterSpacing: 1 }), title("Время остановиться и почувствовать вкус.", spec.fg, 40, "h2", "Georgia", 31),
+      text("Покажите ингредиенты, команду и атмосферу вашего места. Изображения можно заменить и открыть крупнее.", spec.muted, 17)]], [3, 2], { mt: 64 });
+  const contact = section([[text("АДРЕС / ВРЕМЯ / КОНТАКТЫ", "#69442a", 12, { letterSpacing: 1 }), title(spec.closing, "#2d211b", 44, "h2", "Georgia", 32)],
+    [text("Добавьте актуальный адрес, часы работы и удобный способ связи.", "#604c3e", 16)]], [3, 2], { mt: 64, mb: 28, bg: "#e3c49a", pl: 30, pr: 30, pt: 30, pb: 30 }, "contacts");
+  return [navigation(spec), heading, cover, intro, menu, detail, contact];
+}
+
+function botanical(spec: ShowcaseTemplate, image: string, extra: string[]): Block[] {
+  const opening = section([[photo(image, spec.imageAlt, 520, 28)],
+    [text("МАСТЕРСКАЯ / ОРАНЖЕРЕЯ", spec.accent, 12, { fw: 750, letterSpacing: 1.3 }), title(spec.headline, spec.fg, 66, "h1", "Georgia", 43),
+      text(spec.intro, spec.muted, 18), button(spec.action, "#offer", spec.accent, "#ffffff", 50)]], [5, 4], { mt: 35 });
+  const ribbon = section([[text("РАСТЕНИЯ", "#ffffff", 13, { letterSpacing: 1.4 })], [text("ПРОСТРАНСТВА", "#ffffff", 13, { letterSpacing: 1.4 })],
+    [text("ЖИВЫЕ ИСТОРИИ", "#ffffff", 13, { letterSpacing: 1.4 })]], [1, 1, 1], { mt: 40, bg: "#275d47", br: 20, pl: 24, pr: 24, pt: 20, pb: 20 });
+  const lead = section([[text("ПОДХОД / ЗАБОТА", spec.accent, 12, { fw: 750, letterSpacing: 1 }), title(spec.section, spec.fg, 48, "h2", "Georgia", 34)],
+    [text("Зелень делает пространство живым, а повседневные заботы — чуть более осознанными.", spec.muted, 19)]], [3, 2], { mt: 62 }, "offer");
+  const rows = spec.features.map((feature, index) => section([[text(`0${index + 1}`, spec.accent, 14, { fw: 750 })],
+    [title(feature, spec.fg, 32, "h3", "Georgia", 27)], [text(spec.descriptions[index], spec.muted, 16)]], [1, 3, 3], { mt: 8, mb: 8 }));
+  const detail = section([[text("ИСТОРИЯ МАСТЕРСКОЙ", spec.accent, 12, { fw: 750, letterSpacing: 1 }), title(spec.story, spec.fg, 45, "h2", "Georgia", 33),
+    text(spec.storyText, spec.muted, 17)], [photo(extra[0], "Цветы и листья в светлой мастерской", 370, 24, true)]], [2, 3], { mt: 62 });
+  const contact = section([[text("БУДЕМ НА СВЯЗИ", "#e4f0df", 12, { letterSpacing: 1 }), title(spec.closing, "#ffffff", 44, "h2", "Georgia", 32),
+    text("Добавьте ваши контакты, часы работы и адрес мастерской.", "#e4f0df", 16)]], [1], { mt: 60, mb: 28, bg: "#275d47", br: 24, pl: 30, pr: 30, pt: 30, pb: 30 }, "contacts");
+  return [navigation(spec), opening, ribbon, lead, ...rows, detail, ...accordion(spec), contact];
+}
+
 export function createArtDirectedDocument(spec: ShowcaseTemplate, image: string, extra: string[]): Doc {
   const blocks = spec.showcaseStyle === "magazine" ? magazine(spec, image, extra)
-    : spec.showcaseStyle === "cinema" ? cinema(spec, image, extra) : playful(spec, image);
+    : spec.showcaseStyle === "cinema" ? cinema(spec, image, extra)
+    : spec.showcaseStyle === "future" ? future(spec, image, extra)
+    : spec.showcaseStyle === "dining" ? dining(spec, image, extra)
+    : spec.showcaseStyle === "botanical" ? botanical(spec, image, extra) : playful(spec, image);
   return { title: spec.name, description: spec.intro, theme: { accent: spec.accent, background: spec.bg, foreground: spec.fg, container: 1200, showTitle: false }, blocks };
 }

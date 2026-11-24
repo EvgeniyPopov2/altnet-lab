@@ -23,9 +23,12 @@ import playful from "./template-assets/playful.jpg";
 import editorialDetail from "./template-assets/editorial-detail.jpg";
 import cinemaMountain from "./template-assets/cinema-mountain.jpg";
 import cinemaCoast from "./template-assets/cinema-coast.jpg";
+import futureStudio from "./template-assets/future-studio.jpg";
+import seasonTable from "./template-assets/season-table.jpg";
+import greenhouse from "./template-assets/greenhouse.jpg";
 import "./showcaseGallery.css";
 
-const images = { architecture, landscape, bakery, studio, books, digital, photography, restaurant, florist, movement, animals, science, editorialArt, cinema, playful, editorialDetail, cinemaMountain, cinemaCoast };
+const images = { architecture, landscape, bakery, studio, books, digital, photography, restaurant, florist, movement, animals, science, editorialArt, cinema, playful, editorialDetail, cinemaMountain, cinemaCoast, futureStudio, seasonTable, greenhouse };
 const cache = new Map<string, string>();
 
 async function localImage(src: string): Promise<string> {

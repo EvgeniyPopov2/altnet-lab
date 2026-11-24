@@ -2,7 +2,7 @@ import { createDefaultBlock } from "./registry";
 import { createArtDirectedDocument } from "./showcaseArtDirected";
 import type { Block, Doc } from "./types";
 
-export type ShowcaseImage = "architecture" | "landscape" | "bakery" | "studio" | "books" | "digital" | "photography" | "restaurant" | "florist" | "movement" | "animals" | "science" | "editorialArt" | "cinema" | "playful" | "editorialDetail" | "cinemaMountain" | "cinemaCoast";
+export type ShowcaseImage = "architecture" | "landscape" | "bakery" | "studio" | "books" | "digital" | "photography" | "restaurant" | "florist" | "movement" | "animals" | "science" | "editorialArt" | "cinema" | "playful" | "editorialDetail" | "cinemaMountain" | "cinemaCoast" | "futureStudio" | "seasonTable" | "greenhouse";
 export type ShowcaseTemplate = {
   id: string; category: string; name: string; brand: string; image: ShowcaseImage;
   imageAlt: string; eyebrow: string; headline: string; intro: string; action: string; section: string;
@@ -10,7 +10,7 @@ export type ShowcaseTemplate = {
   bg: string; fg: string; muted: string; accent: string; card: string; buttonText: string;
   layout: "left" | "right" | "center" | "editorial" | "image-first";
   faq?: [string, string][];
-  showcaseStyle?: "magazine" | "cinema" | "playful";
+  showcaseStyle?: "magazine" | "cinema" | "playful" | "future" | "dining" | "botanical";
   extraImages?: ShowcaseImage[];
 };
 
@@ -102,6 +102,31 @@ export const SHOWCASE_TEMPLATES: ShowcaseTemplate[] = [
     story:"Нет неправильных идей — есть новые открытия.", storyText:"Расскажите о занятиях, материалах и о том, как присоединиться. Демонстрационную информацию можно заменить.", closing:"Давайте придумывать вместе!",
     bg:"#fff9ec", fg:"#172b63", muted:"#3c4e70", accent:"#1d49be", card:"#ffe28b", buttonText:"#ffffff", layout:"left", showcaseStyle:"playful",
     faq:[["Для кого это пространство?", "Добавьте возраст участников и описание ваших занятий."], ["Как присоединиться?", "Укажите проверенный способ связи и актуальное расписание."]]
+  },
+  {
+    id:"future-lab", category:"Витрина · технологии и цифровая студия", name:"За пределами привычного", brand:"ORBIT / LAB", image:"futureStudio", extraImages:["digital"],
+    imageAlt:"Полупрозрачная стеклянная лента в сине-фиолетовом свете", eyebrow:"ИДЕИ · ДИЗАЙН · ТЕХНОЛОГИИ", headline:"Идеи, которым нужен простор.",
+    intro:"Независимая цифровая студия. Соединяем исследования, дизайн и технологии, чтобы создавать понятные людям вещи.", action:"Исследовать подход", section:"От вопроса к открытию",
+    features:["Исследуем", "Придумываем", "Создаём"], descriptions:["Находим смысл и задаём точные вопросы.", "Ищем выразительную форму для сложных идей.", "Проверяем решения в реальном использовании."],
+    story:"Будущее начинается с любопытства.", storyText:"Расскажите о ваших проектах, команде и принципах работы. Это демонстрационный текст, который можно изменить.", closing:"Какую идею исследуем вместе?",
+    bg:"#0a101f", fg:"#f5f8ff", muted:"#b9c9df", accent:"#95e5f4", card:"#19263a", buttonText:"#0c202d", layout:"left", showcaseStyle:"future"
+  },
+  {
+    id:"season-table", category:"Витрина · ресторан и гастрономия", name:"Тихий ужин", brand:"СЕЗОН / СТОЛ", image:"seasonTable", extraImages:["restaurant"],
+    imageAlt:"Блюдо из сезонных овощей на тёмной керамике", eyebrow:"СЕЗОН · ОГОНЬ · ВСТРЕЧИ", headline:"Вкус, к которому хочется вернуться.",
+    intro:"Небольшая кухня, сезонные продукты и неспешные вечера за одним столом. Место для разговоров и новых вкусов.", action:"Открыть меню", section:"На нашем столе",
+    features:["Начало", "Главное", "Десерт"], descriptions:["Овощи, травы и маленькие открытия.", "Сезонный продукт, огонь и внимание к деталям.", "Неспешное завершение вечера."],
+    story:"У каждого сезона свой голос.", storyText:"Мы собираем простые ингредиенты в истории о месте и людях. Добавьте описание вашей кухни и команды.", closing:"До встречи за нашим столом.",
+    bg:"#201816", fg:"#f8efdf", muted:"#d3c3ae", accent:"#dfb978", card:"#392923", buttonText:"#281b16", layout:"image-first", showcaseStyle:"dining"
+  },
+  {
+    id:"green-room", category:"Витрина · растения и природная студия", name:"Дом среди растений", brand:"ЗЕЛЁНАЯ / КОМНАТА", image:"greenhouse", extraImages:["florist"],
+    imageAlt:"Оранжерея с папоротниками и терракотовыми горшками в утреннем свете", eyebrow:"РАСТЕНИЯ · ПРОСТРАНСТВА · ЗАБОТА", headline:"Ближе к природе, ближе к себе.",
+    intro:"Мастерская растений и пространств, где можно замедлиться, научиться заботе и привнести больше зелени в свой дом.", action:"Войти в сад", section:"Маленькие ритуалы заботы",
+    features:["Выбирать", "Растить", "Делиться"], descriptions:["Находим растения, подходящие вашему пространству.", "Учимся замечать, что нужно живым вещам.", "Делимся опытом и вдохновением."],
+    story:"Дом растёт вместе с нами.", storyText:"Расскажите о мастерской, ваших растениях и встречах. Замените демонстрационные сведения своими.", closing:"Давайте создадим что-то живое.",
+    bg:"#eaf0e5", fg:"#18382d", muted:"#526c5b", accent:"#275d47", card:"#d3e1ce", buttonText:"#ffffff", layout:"right", showcaseStyle:"botanical",
+    faq:[["Как выбрать растение?", "Добавьте рекомендации, подходящие вашим условиям и растениям."], ["Как с вами связаться?", "Укажите проверенный адрес и актуальный способ связи."]]
   },
 ];
 
