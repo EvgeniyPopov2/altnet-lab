@@ -17,6 +17,9 @@ car = base64.b64decode(sys.stdin.readline().strip(), validate=True)
 if not 0 < len(car) < 1024 * 1024:
     raise ValueError("Unexpected fixture size")
 with module.Server(("127.0.0.1", 0), module.FakeSocks) as proxy, ThreadingHTTPServer(("127.0.0.1", 0), module.LocalUI) as ui:
+    proxy.method_reply = b"\x05\x02"
+    proxy.auth_reply = b"\x01\x00"
+    proxy.credentials = []
     proxy.response = (b"HTTP/1.1 200 OK\r\nContent-Type: application/vnd.ipld.car\r\nContent-Length: "
                       + str(len(car)).encode() + b"\r\n\r\n" + car)
     threading.Thread(target=proxy.serve_forever, daemon=True).start()
