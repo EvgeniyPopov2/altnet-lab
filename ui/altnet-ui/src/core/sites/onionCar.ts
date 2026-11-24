@@ -11,6 +11,7 @@ export async function fetchOnionCar(onion: string, cid: string): Promise<Uint8Ar
     headers: { "X-AltNet-Session": token, "Content-Type": "application/json" },
     body: JSON.stringify({ onion, cid }), signal: AbortSignal.timeout(135000),
   });
+  if (response.status === 404) throw new Error("Запущенный клиент не поддерживает загрузку сайтов. Перезапустите AltNet, чтобы применить обновление.");
   if (!response.ok) throw new Error("Не удалось получить пакет через Tor. Проверьте адреса, подключение и доступность узла.");
   const length = response.headers.get("content-length");
   if (!length || !/^\d+$/.test(length) || Number(length) < 1 || Number(length) > SITE_MAX_CAR_BYTES || !response.body) {

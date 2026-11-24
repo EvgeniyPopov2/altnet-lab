@@ -11,6 +11,7 @@ async function request(path: string, init: RequestInit): Promise<OnionShareStatu
     ...init, mode: "same-origin", cache: "no-store", redirect: "error", referrerPolicy: "same-origin",
     headers: { ...init.headers, "X-AltNet-Session": token }, signal: AbortSignal.timeout(30000),
   });
+  if (response.status === 404) throw new Error("Запущенный клиент не поддерживает раздачу сайтов. Перезапустите AltNet, чтобы применить обновление.");
   if (!response.ok) throw new Error("Локальный клиент не выполнил запрос. Проверьте подключение Tor и состояние раздачи.");
   const status: unknown = await response.json();
   if (!status || typeof status !== "object" || !("active" in status)) throw new Error("Некорректный ответ клиента.");
