@@ -5,6 +5,7 @@ export type BrowserAddress =
   | { kind: "home"; url: "alt://home" }
   | { kind: "site"; url: string; slug: string; path: string; fragment: string }
   | { kind: "ipfs"; url: string; root: string; path: string; fragment: string }
+  | { kind: "onion-share"; url: string; onion: string; root: string }
   | { kind: "external"; url: string };
 
 export type BrowserTab = { id: string; title: string; url: string; history: string[]; cursor: number; reloadToken: number };
@@ -15,6 +16,7 @@ export function browserTabTitle(url: string): string {
     if (address.kind === "home") return ".alt старт";
     if (address.kind === "site") return address.slug + (address.path === "index.html" ? "" : " · " + address.path);
     if (address.kind === "ipfs") return address.root.slice(0, 12) + "…" + (address.path === "index.html" ? "" : " · " + address.path);
+    if (address.kind === "onion-share") return "Сайт через Tor";
     return new URL(address.url).host;
   } catch { return ".alt"; }
 }
@@ -43,6 +45,11 @@ export function parseBrowserAddress(raw: string): BrowserAddress {
     const path = ipfs[2] || "index.html", fragment = ipfs[3] || "";
     return { kind: "ipfs", root, path, fragment, url: `ipfs://${root}${path !== "index.html" ? "/" + path : ""}${fragment ? "#" + fragment : ""}` };
   }
+  const share = /^alt:\/\/onion\/([a-z2-7]{56}\.onion)\/([a-z2-7]{1,120})$/.exec(value);
+  if (share) {
+    const onion = share[1], root = parseSiteRoot(share[2]).toString();
+    return { kind: "onion-share", onion, root, url: `alt://onion/${onion}/${root}` };
+  }
   if (/^http:\/\//i.test(value)) {
     throw new Error("Незащищённый HTTP не поддерживается. Используйте адрес HTTPS.");
   }
@@ -52,5 +59,5 @@ export function parseBrowserAddress(raw: string): BrowserAddress {
     if (!url.hostname || url.username || url.password) throw new Error("Адрес с логином или паролем не поддерживается.");
     return { kind: "external", url: url.href };
   }
-  throw new Error("Адрес не поддерживается. Используйте alt://home, alt://site/имя или ipfs://CID.");
+  throw new Error("Адрес не поддерживается. Используйте alt://home, alt://site/имя, ссылку раздачи Alt или ipfs://CID.");
 }

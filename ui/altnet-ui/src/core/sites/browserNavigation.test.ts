@@ -25,6 +25,16 @@ describe("адреса браузера Alt", () => {
     for (const bad of [`ipfs://${root}/../about.html`, `ipfs://${root}?x=1`, `ipfs://${root.toUpperCase()}`, "ipfs://example.com/", `ipfs://${root}/other.js`]) expect(() => parseBrowserAddress(bad)).toThrow();
   });
 
+  it("разбирает ссылку onion-раздачи без сетевого запроса", () => {
+    const root = "bafyreigtyjaoj5k2suhsp5ntybwqu6m7ljsn2dawfsvnctymnj4p3muv3i";
+    const onion = "a".repeat(56) + ".onion";
+    const url = `alt://onion/${onion}/${root}`;
+    expect(parseBrowserAddress(url)).toEqual({ kind: "onion-share", onion, root, url });
+    for (const bad of [url + "?x=1", url + "/index.html", url + "#x", url.toUpperCase(), `alt://onion/localhost/${root}`, `alt://onion/${onion}/bafy`]) {
+      expect(() => parseBrowserAddress(bad)).toThrow();
+    }
+  });
+
   it.each(["http://example.invalid/", "HTTP://example.invalid/", "http://127.0.0.1/"])("отклоняет незащищённый веб-адрес %s", input => {
     expect(() => parseBrowserAddress(input)).toThrow("Незащищённый HTTP не поддерживается");
   });

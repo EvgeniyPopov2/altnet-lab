@@ -380,6 +380,32 @@ export default function BrowserAlt({
     }
   };
 
+  const openOnionShare = async (address: Extract<NonNullable<typeof activeAddress>, { kind: "onion-share" }>) => {
+    if (carImportBusy.current) return;
+    const originalTab = activeTab;
+    carImportBusy.current = true;
+    setCarLoading(true);
+    setCarError("");
+    try {
+      const { fetchOnionCar } = await import("../core/sites/onionCar");
+      const bytes = await fetchOnionCar(address.onion, address.root);
+      const { cacheVerifiedSite } = await import("../core/sites/ipfsSiteCache");
+      await cacheVerifiedSite(bytes, address.root);
+      const nextUrl = `ipfs://${address.root}`;
+      setTabs(previous => previous.map(tab => {
+        // A completed download must not redirect a tab that the user has since navigated.
+        if (tab !== originalTab || tab.url !== address.url) return tab;
+        const history = tab.history.slice(0, tab.cursor + 1).concat(nextUrl);
+        return { ...tab, url: nextUrl, title: browserTabTitle(nextUrl), history, cursor: history.length - 1 };
+      }));
+    } catch (error) {
+      setCarError(error instanceof Error ? error.message : "Не удалось проверить пакет сайта.");
+    } finally {
+      carImportBusy.current = false;
+      setCarLoading(false);
+    }
+  };
+
   const renderHome = () => {
     return (
       <div className="space-y-4">
@@ -590,6 +616,17 @@ export default function BrowserAlt({
     const url = activeTab?.url || "alt://home";
     if (url === "alt://home") return renderHome();
     if (activeAddress?.kind === "ipfs") return renderIpfs(activeAddress);
+    if (activeAddress?.kind === "onion-share") {
+      const address = activeAddress;
+      return <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+        <h2 className="text-xl font-semibold text-white">Получить сайт через Tor</h2>
+        <p className="mt-2 text-sm">Ссылка указывает на временную раздачу. При загрузке узел увидит запрос к сайту; содержимое будет проверено по CID, но авторство не подтверждено.</p>
+        <p className="mt-3 break-all text-sm">Узел: <code>{address.onion}</code></p>
+        <p className="break-all text-sm">CID: <code>{address.root}</code></p>
+        <button type="button" disabled={carLoading} onClick={() => void openOnionShare(address)} className="mt-4 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">{carLoading ? "Загружаем и проверяем…" : "Получить и открыть"}</button>
+        {carError && <p role="alert" className="mt-3 text-amber-300">{carError}</p>}
+      </div>;
+    }
     if (url.startsWith("alt://site/")) {
       const slug = parseSiteSlug(url);
       if (!slug) return <div role="alert" className="p-6 text-amber-100">Некорректный адрес сайта.</div>;

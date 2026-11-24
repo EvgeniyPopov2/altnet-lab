@@ -1471,7 +1471,12 @@ export default function SiteBuilder({
           <p role="status" className="mt-2">Раздача запущена; доступность ещё не подтверждена.</p>
           <p className="mt-1 break-all">Onion: <code>{onionShare.onion}</code></p>
           <p className="break-all">CID: <code>{onionShare.cid}</code></p>
+          <p className="break-all">Ссылка Alt: <code>{`alt://onion/${onionShare.onion}/${onionShare.cid}`}</code></p>
           <div className="mt-2 flex flex-wrap gap-3">
+            <button type="button" className="underline" onClick={async () => {
+              try { await navigator.clipboard.writeText(`alt://onion/${onionShare.onion}/${onionShare.cid}`); setOnionCopyStatus("Ссылка Alt скопирована."); }
+              catch { setOnionCopyStatus("Не удалось скопировать. Выделите ссылку Alt вручную."); }
+            }}>Копировать ссылку Alt</button>
             <button type="button" className="underline" onClick={async () => {
               try { await navigator.clipboard.writeText(`${onionShare.onion}\n${onionShare.cid}`); setOnionCopyStatus("Адрес и CID скопированы."); }
               catch { setOnionCopyStatus("Не удалось скопировать. Выделите адрес и CID вручную."); }

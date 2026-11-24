@@ -79,6 +79,7 @@ def main():
     for name in ("tor", "transport", "public-cache", "dist", "keyring", "gpgv", "temp"):
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--last-good", type=Path, help="Use only confirmed public bridge fingerprints from a local connection state")
+    parser.add_argument("--ui-browser-test", action="store_true", help="Also open the share link in an isolated browser through the real test client")
     args = parser.parse_args()
     parent = args.temp.resolve(strict=True)
     directory = Path(tempfile.mkdtemp(prefix="altnet-real-onion-", dir=parent)).resolve()
@@ -138,6 +139,9 @@ def main():
             raise RuntimeError("Тестовый CAR не получен или отличается от исходного")
         (directory / "received.car").write_bytes(received)
         subprocess.run(["node", str(fixture), "verify", str(directory)], check=True, capture_output=True)
+        if args.ui_browser_test:
+            subprocess.run(["node", "tests/onion-real-browser.mjs", str(clients[1][1]), onion, cid],
+                           cwd=UI, check=True, timeout=360)
         status, body = request(clients[0][1], "/api/sites/share-stop", author_token, b"{}")
         if status != 200 or json.loads(body).get("active"):
             raise RuntimeError("Тестовая раздача не остановилась")

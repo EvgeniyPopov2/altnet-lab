@@ -27,9 +27,15 @@ class SocksRelay(module.socketserver.BaseRequestHandler):
         source = self.request
         source.settimeout(5)
         try:
-            if read_exact(source, 3) != b"\x05\x01\x00":
+            if read_exact(source, 3) != b"\x05\x01\x02":
                 return
-            source.sendall(b"\x05\x00")
+            source.sendall(b"\x05\x02")
+            version, length = read_exact(source, 2)
+            username = read_exact(source, length)
+            password = read_exact(source, read_exact(source, 1)[0])
+            if version != 1 or not username or not password:
+                return
+            source.sendall(b"\x01\x00")
             prefix = read_exact(source, 5)
             host = read_exact(source, prefix[4]).decode("ascii")
             port = read_exact(source, 2)

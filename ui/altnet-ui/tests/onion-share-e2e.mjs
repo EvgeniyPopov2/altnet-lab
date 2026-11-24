@@ -34,9 +34,10 @@ try {
   assert.equal(await start.isEnabled(), true);
   await start.click();
   await panel.getByText("Раздача запущена; доступность ещё не подтверждена.").waitFor();
-  const [onion, cid] = await panel.locator("code").allTextContents();
+  const [onion, cid, shareLink] = await panel.locator("code").allTextContents();
   assert.match(onion, /^[a-z2-7]{56}\.onion$/);
   assert.match(cid, /^bafy[a-z2-7]+$/);
+  assert.equal(shareLink, `alt://onion/${onion}/${cid}`);
   for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
     const reader = await browser.newContext({ viewport });
     await reader.route("**/*", allowLocal);
@@ -44,13 +45,66 @@ try {
     await visit.goto(readerUrl);
     if (viewport.width < 768) await visit.getByRole("button", { name: "Ещё", exact: true }).click();
     await visit.getByRole("button", { name: "Браузер .alt", exact: true }).click();
-    await visit.getByText("Открыть IPFS-пакет CAR с устройства", { exact: true }).click();
-    await visit.getByLabel("CID сайта для импорта").fill(cid);
-    await visit.getByLabel("Адрес onion-шлюза").fill(onion);
-    await visit.getByRole("button", { name: "Получить через Tor и открыть" }).click();
-    await visit.frameLocator('iframe[title="Сайт участника"]').getByText("Передача между участниками").waitFor();
+    if (viewport.width < 768) {
+      let requests = 0;
+      visit.on("request", request => { if (request.url().endsWith("/api/sites/onion-car")) requests++; });
+      await visit.getByLabel("Адрес сайта").fill(shareLink);
+      await visit.getByLabel("Адрес сайта").press("Enter");
+      await visit.getByRole("heading", { name: "Получить сайт через Tor" }).waitFor();
+      assert.equal(requests, 0, "A share link must not fetch before explicit user action");
+      await visit.getByRole("button", { name: "Получить и открыть" }).click();
+      await visit.frameLocator('iframe[title="Сайт участника"]').getByText("Передача между участниками").waitFor();
+      assert.equal(requests, 1);
+    } else {
+      await visit.getByText("Открыть IPFS-пакет CAR с устройства", { exact: true }).click();
+      await visit.getByLabel("CID сайта для импорта").fill(cid);
+      await visit.getByLabel("Адрес onion-шлюза").fill(onion);
+      await visit.getByRole("button", { name: "Получить через Tor и открыть" }).click();
+      await visit.frameLocator('iframe[title="Сайт участника"]').getByText("Передача между участниками").waitFor();
+    }
     await reader.close();
   }
+  const raceReader = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await raceReader.route("**/*", allowLocal);
+  let releaseRequest, requestArrived;
+  const held = new Promise(resolve => { releaseRequest = resolve; });
+  const arrived = new Promise(resolve => { requestArrived = resolve; });
+  await raceReader.route("**/api/sites/onion-car", async route => { requestArrived(); await held; await route.continue(); });
+  const racePage = await raceReader.newPage();
+  await racePage.goto(readerUrl);
+  await racePage.getByRole("button", { name: "Браузер .alt", exact: true }).click();
+  await racePage.getByLabel("Адрес сайта").fill(shareLink);
+  await racePage.getByLabel("Адрес сайта").press("Enter");
+  await racePage.getByRole("button", { name: "Получить и открыть" }).click();
+  await arrived;
+  await racePage.getByLabel("Адрес сайта").fill("alt://home");
+  await racePage.getByLabel("Адрес сайта").press("Enter");
+  await racePage.getByText("Домашняя .alt", { exact: true }).waitFor();
+  await racePage.getByLabel("Адрес сайта").fill(shareLink);
+  await racePage.getByLabel("Адрес сайта").press("Enter");
+  await racePage.getByRole("heading", { name: "Получить сайт через Tor" }).waitFor();
+  const response = racePage.waitForResponse(result => result.url().endsWith("/api/sites/onion-car"));
+  releaseRequest();
+  assert.equal((await response).status(), 200);
+  await racePage.waitForFunction(async root => {
+    const names = await indexedDB.databases();
+    if (!names.some(db => db.name === "altnet-ipfs-site-cache")) return false;
+    return new Promise(resolve => {
+      const request = indexedDB.open("altnet-ipfs-site-cache", 1);
+      request.onerror = () => resolve(false);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction("cars", "readonly");
+        const get = tx.objectStore("cars").get(root);
+        get.onsuccess = () => resolve(Boolean(get.result));
+        tx.oncomplete = () => db.close();
+      };
+    });
+  }, cid);
+  await racePage.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await racePage.getByRole("heading", { name: "Получить сайт через Tor" }).waitFor();
+  assert.equal(await racePage.getByLabel("Адрес сайта").inputValue(), shareLink);
+  await raceReader.close();
   await panel.getByRole("button", { name: "Остановить раздачу" }).click();
   await panel.getByRole("button", { name: "Начать открытую раздачу" }).waitFor();
   const lateReader = await browser.newContext({ viewport: { width: 1440, height: 900 } });
