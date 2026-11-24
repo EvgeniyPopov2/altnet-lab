@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,7 +21,17 @@ await writeFile(join(profile, "user.js"), [
   'user_pref("network.dns.disablePrefetch", true);',
   'user_pref("media.peerconnection.enabled", false);',
 ].join("\n"));
-const bundled = await build({ entryPoints: ["tests/tor-ipfs-fixture.ts"], bundle: true, platform: "browser", format: "esm", write: false });
+const bundled = await build({ entryPoints: ["tests/tor-ipfs-fixture.ts"], bundle: true, platform: "browser", format: "esm", write: false, plugins: [{
+  name: "vite-raw-imports",
+  setup(builder) {
+    builder.onResolve({ filter: /\?raw$/ }, async args => {
+      const result = await builder.resolve(args.path.slice(0, -4), { resolveDir: args.resolveDir, kind: args.kind });
+      if (result.errors.length) return { errors: result.errors };
+      return { path: result.path, namespace: "raw" };
+    });
+    builder.onLoad({ filter: /.*/, namespace: "raw" }, async args => ({ contents: await readFile(args.path, "utf8"), loader: "text" }));
+  },
+}] });
 let outcome = null;
 let resolveReport;
 const report = new Promise(resolve => { resolveReport = resolve; });
@@ -49,7 +59,7 @@ try {
     child.once("exit", code => { clearTimeout(timer); reject(new Error(`Tor Browser завершился до результата (${code}): ${stderr}`)); });
   });
   assert.equal(outcome?.result, "pass", `Локальная проверка не прошла (${requested.join(", ")}): ${outcome?.detail || stderr}`);
-  console.log("PASS: Tor Browser, локальный CAR, проверка CID, повторное чтение и отказ при повреждении");
+  console.log("PASS: Tor Browser, локальный CAR, проверка CID, повреждённый кэш и изоляция недоверенного кода");
   console.log("Тест без соединения Tor; изолированный профиль:", scratch);
 } finally {
   if (child.exitCode === null) child.kill();

@@ -1,5 +1,6 @@
 import { createSitePackage } from "../src/core/sites/ipfsSitePackage";
 import { cacheVerifiedSite, readCachedSite } from "../src/core/sites/ipfsSiteCache";
+import { prepareLocalPreviewHtml } from "../src/core/sites/localPreview";
 
 async function run(): Promise<void> {
   const html = "<!doctype html><h1>AltNet Tor test</h1>";
@@ -32,6 +33,20 @@ async function run(): Promise<void> {
   rejected = false;
   try { await readCachedSite(pack.root); } catch { rejected = true; }
   if (!rejected) throw new Error("Повреждённый кэш не отклонён");
+  let attacked = false;
+  const onMessage = (event: MessageEvent) => { if (event.data === "altnet-test-attack") attacked = true; };
+  window.addEventListener("message", onMessage);
+  const frame = document.createElement("iframe");
+  frame.setAttribute("sandbox", "allow-scripts");
+  frame.srcdoc = prepareLocalPreviewHtml('<p>Тест</p><script>parent.postMessage("altnet-test-attack","*")</script><img src="https://example.invalid/pixel" onerror="parent.postMessage(\'altnet-test-attack\',\'*\')">');
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("Изолированная страница не открылась")), 5000);
+    frame.onload = () => { clearTimeout(timer); setTimeout(resolve, 300); };
+    document.body.appendChild(frame);
+  });
+  frame.remove();
+  window.removeEventListener("message", onMessage);
+  if (attacked) throw new Error("Недоверенный код выполнился в песочнице");
   document.body.textContent = "PASS: проверенный CAR, повторное чтение и отклонение повреждения";
 }
 
