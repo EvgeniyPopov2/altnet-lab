@@ -3,10 +3,10 @@ import { chromium } from "playwright";
 
 // Invoked by site-share-network.py while two isolated test Tor clients are running.
 // The browser connects only to the test client on loopback; Tor is used by that client.
-const [port, onion, cid] = process.argv.slice(2);
+const [port, onion, cid, executablePath] = process.argv.slice(2);
 if (!/^\d{1,5}$/.test(port || "") || !/^[a-z2-7]{56}\.onion$/.test(onion || "") || !/^b[a-z2-7]{58}$/.test(cid || "")) throw new Error("Invalid test parameters");
 const base = `http://127.0.0.1:${port}/`;
-const browser = await chromium.launch({ executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe" });
+const browser = await chromium.launch(executablePath ? { executablePath } : {});
 try {
   for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 }]) {
     const context = await browser.newContext({ viewport });

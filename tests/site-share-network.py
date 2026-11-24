@@ -80,6 +80,7 @@ def main():
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--last-good", type=Path, help="Use only confirmed public bridge fingerprints from a local connection state")
     parser.add_argument("--ui-browser-test", action="store_true", help="Also open the share link in an isolated browser through the real test client")
+    parser.add_argument("--ui-browser", type=Path, help="Optional Chromium executable; otherwise use Playwright's installed browser")
     args = parser.parse_args()
     parent = args.temp.resolve(strict=True)
     directory = Path(tempfile.mkdtemp(prefix="altnet-real-onion-", dir=parent)).resolve()
@@ -140,7 +141,8 @@ def main():
         (directory / "received.car").write_bytes(received)
         subprocess.run(["node", str(fixture), "verify", str(directory)], check=True, capture_output=True)
         if args.ui_browser_test:
-            subprocess.run(["node", "tests/onion-real-browser.mjs", str(clients[1][1]), onion, cid],
+            browser_args = [str(args.ui_browser.resolve(strict=True))] if args.ui_browser else []
+            subprocess.run(["node", "tests/onion-real-browser.mjs", str(clients[1][1]), onion, cid, *browser_args],
                            cwd=UI, check=True, timeout=360)
         status, body = request(clients[0][1], "/api/sites/share-stop", author_token, b"{}")
         if status != 200 or json.loads(body).get("active"):
