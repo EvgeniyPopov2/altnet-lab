@@ -10,6 +10,8 @@ describe("изоляция локальной публикации", () => {
   it("без DOM показывает исходный HTML только как текст", () => {
     const html = prepareLocalPreviewHtml('<script>bad()</script><img src="https://example.org/a">');
     expect(html).toContain(`script-src 'sha256-${SITE_RUNTIME_HASH}'`);
+    expect(html).toContain("style-src-attr 'none'");
+    expect(html).not.toContain("unsafe-inline");
     expect(html).toContain("&lt;script&gt;bad()&lt;/script&gt;");
     expect(html).not.toContain('<img src="https://example.org/a">');
   });
