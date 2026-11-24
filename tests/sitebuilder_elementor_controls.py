@@ -193,12 +193,18 @@ def run(case, js, wait, call, directory):
         js("editorQA.change(document.querySelector('[aria-label=\"Внутренний отступ сверху\"]'),1.5)")
         js("document.querySelector('.sb-transform-controls summary').click()")
         js("editorQA.change(document.querySelector('[aria-label=\"Поворот Z (deg)\"]'),5)")
-        wait("editorQA.saved().blocks[0].styleByBp?.desktop.rotate===5")
+        js("[...document.querySelectorAll('.builder-inspector summary')].find(e=>e.textContent==='Расположение и переполнение').click()")
+        js("editorQA.change(document.querySelector('[aria-label=\"Переполнение\"]'),'hidden')")
+        js("editorQA.change(document.querySelector('[aria-label=\"Указатель мыши\"]'),'pointer')")
+        js("editorQA.change(document.querySelector('[aria-label=\"Порядок наложения\"]'),3)")
+        wait("editorQA.saved().blocks[0].styleByBp?.desktop.rotate===5 && editorQA.saved().blocks[0].styleByBp.desktop.layerOrder===3")
+        assert js("getComputedStyle(document.querySelector('[data-styled-block=row]')).overflow==='hidden' && getComputedStyle(document.querySelector('[data-styled-block=row]')).zIndex==='3'")
         assert js("['Top','Right','Bottom','Left'].every(x=>document.querySelector('[data-styled-block=row]').style['padding'+x]==='1.5em')")
         js("editorQA.export()")
         wait("!!editorQA.doc()?.querySelector('.layout-cell')")
         assert js("""(()=>{const doc=editorQA.doc(),cell=doc.querySelector('.layout-cell'),row=getComputedStyle(cell.parentElement);
-          return row.display==='flex' && row.flexDirection==='row-reverse' && row.justifyContent==='space-evenly' && getComputedStyle(cell).flexBasis==='120px' && getComputedStyle(doc.querySelector('.sb-style-0')).transform!=='none'})()""")
+          const block=getComputedStyle(doc.querySelector('.sb-style-0'));
+          return row.display==='flex' && row.flexDirection==='row-reverse' && row.justifyContent==='space-evenly' && getComputedStyle(cell).flexBasis==='120px' && block.transform!=='none' && block.overflow==='hidden' && block.zIndex==='3' && block.cursor==='pointer'})()""")
     elif case == "library":
         js("editorQA.block('picture')")
         wait("!!document.querySelector('.builder-inspector input[type=file]')")

@@ -1,5 +1,6 @@
 import type { Block } from "../../types";
 import TransformControls from "./TransformControls";
+import LayoutEffects from "./LayoutEffects";
 import SpacingControl from "./SpacingControl";
 import type { BlockPatch } from "../patch";
 import Field from "../../ui/Field";
@@ -18,6 +19,7 @@ export default function AdvancedTab({ block, onPatch, device }: Props) {
       <SpacingControl block={block} device={device} kind="padding" onPatch={onPatch} />
       <SpacingControl block={block} device={device} kind="margin" onPatch={onPatch} />
       <TransformControls block={block} device={device} onPatch={onPatch} />
+      <LayoutEffects block={block} device={device} onPatch={onPatch} />
       <Field label="CSS class">
         <input
           className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751]"

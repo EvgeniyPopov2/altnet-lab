@@ -11,6 +11,7 @@ import Palette from "./SiteBuilder/palette/Palette";
 import { renderBlockView } from "./SiteBuilder/blocks";
 import { createInsertedBlock, editableLegacyLayout } from "./SiteBuilder/registry";
 import { spacingStyle } from "./SiteBuilder/boxDimensions";
+import { advancedLayoutStyle } from "./SiteBuilder/advancedLayoutStyle";
 import { transformStyle } from "./SiteBuilder/transforms";
 import MediaLibraryButton from "./SiteBuilder/MediaLibraryButton";
 import { MediaLibraryContext } from "./SiteBuilder/mediaLibraryContext";
@@ -621,6 +622,7 @@ export default function SiteBuilder({
         ...(typeof s.minh === "number" && Number.isFinite(s.minh) ? { minHeight: Math.max(0, Math.min(1200, s.minh)) } : {}),
         ...(typeof s.op === "number" && Number.isFinite(s.op) ? { opacity: Math.max(0, Math.min(100, s.op)) / 100 } : {}),
         ...spacingStyle(s),
+        ...advancedLayoutStyle(s),
         ...transformStyle(s),
 
         ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
