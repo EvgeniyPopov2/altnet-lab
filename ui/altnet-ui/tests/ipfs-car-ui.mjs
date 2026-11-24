@@ -144,6 +144,26 @@ try {
   assert.equal(await isolated.locator('img').getAttribute('onerror'),null);
   assert.equal(await isolated.locator('body').getAttribute('data-attacked'),null);
   assert.deepEqual(forbidden,[]);
+
+  const mobile = await browser.newContext({viewport:{width:390,height:844},isMobile:values.engine !== 'firefox'});
+  await mobile.route('**/*',denyExternal);
+  const phone = await mobile.newPage();
+  await phone.goto(values.url);
+  await phone.getByRole('button',{name:'Ещё',exact:true}).click();
+  await phone.getByRole('button',{name:'Браузер .alt',exact:true}).click();
+  await phone.getByText('Открыть IPFS-пакет CAR с устройства',{exact:true}).click();
+  await phone.getByLabel('CID сайта для импорта').fill(root);
+  await phone.getByLabel('Файл CAR').setInputFiles(filename);
+  await phone.getByRole('button',{name:'Проверить и открыть'}).click();
+  await phone.frameLocator('iframe[title="Проверка CAR"]').getByText('Привет из редактора').waitFor();
+  const mobileAddress = phone.getByRole('textbox',{name:'Адрес сайта'});
+  await mobileAddress.fill(`ipfs://${root}`);
+  await mobileAddress.press('Enter');
+  await phone.frameLocator('iframe[title="Проверка CAR"]').getByText('Привет из редактора').waitFor();
+  const size = await phone.locator('html').evaluate(element => ({width:element.clientWidth,scroll:element.scrollWidth}));
+  assert.ok(size.scroll <= size.width + 1, JSON.stringify(size));
+  assert.deepEqual(forbidden,[]);
+  await mobile.close();
   console.log(values.engine, 'PASS: CAR export/import, wrong CID and tampering rejected, hostile HTML isolated');
   await author.close();
   await reader.close();
