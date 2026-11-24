@@ -8,6 +8,7 @@ import StyleTab from "./StyleTab";
 import TransformControls from "./TransformControls";
 import LayoutEffects from "./LayoutEffects";
 import BlockFilterControls from "./BlockFilterControls";
+import BlockClipControls from "./BlockClipControls";
 import EntranceControls from "./EntranceControls";
 
 function representative(rule: StyleClass): Block {
@@ -138,6 +139,7 @@ export default function StyleClassPanel({
           <TransformControls block={representative(rule)} device={device} onPatch={patchRule} />
           <LayoutEffects block={representative(rule)} device={device} onPatch={patchRule} />
           <BlockFilterControls block={representative(rule)} device={device} onPatch={patchRule} />
+          <BlockClipControls block={representative(rule)} device={device} onPatch={patchRule} />
           <EntranceControls block={representative(rule)} device={device} onPatch={patchRule} previewBlockId={block.id} />
           <button
             type="button"

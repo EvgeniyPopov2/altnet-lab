@@ -2,6 +2,7 @@ import type { Block } from "../../types";
 import TransformControls from "./TransformControls";
 import LayoutEffects from "./LayoutEffects";
 import BlockFilterControls from "./BlockFilterControls";
+import BlockClipControls from "./BlockClipControls";
 import EntranceControls from "./EntranceControls";
 import SpacingControl from "./SpacingControl";
 import type { BlockPatch } from "../patch";
@@ -23,6 +24,7 @@ export default function AdvancedTab({ block, onPatch, device }: Props) {
       <TransformControls block={block} device={device} onPatch={onPatch} />
       <LayoutEffects block={block} device={device} onPatch={onPatch} />
       <BlockFilterControls block={block} device={device} onPatch={onPatch} />
+      <BlockClipControls block={block} device={device} onPatch={onPatch} />
       <EntranceControls block={block} device={device} onPatch={onPatch} />
       <Field label="CSS class">
         <input

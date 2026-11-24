@@ -120,6 +120,14 @@ def run(case, js, wait, call, directory, screenshot=None):
         assert js("getComputedStyle(document.querySelector('[data-styled-block=nested]')).left")=="14px"
         assert js("getComputedStyle(document.querySelector('[data-layout-block=nested]')).overflow")=="visible"
         assert js("getComputedStyle(document.querySelector('[data-layout-cell]')).overflow")=="visible"
+        js("[...document.querySelectorAll('.builder-inspector summary')].find(e=>e.textContent==='Форма обрезки').click()")
+        js("editorQA.change(document.querySelector('[aria-label=\"Форма обрезки блока\"]'),'hexagon')")
+        wait("editorQA.saved().blocks[1].layoutCells[0][0].styleByBp?.desktop?.clipShape==='hexagon'")
+        assert js("getComputedStyle(document.querySelector('[data-styled-block=nested]')).clipPath").startswith('polygon(')
+        js("[...document.querySelectorAll('.builder-inspector button')].find(b=>b.textContent==='Mobile').click()")
+        js("editorQA.change(document.querySelector('[aria-label=\"Форма обрезки блока\"]'),'none')")
+        wait("getComputedStyle(document.querySelector('[data-styled-block=nested]')).clipPath==='none'")
+        js("[...document.querySelectorAll('.builder-inspector button')].find(b=>b.textContent==='Desktop').click()")
         js("[...document.querySelectorAll('.builder-inspector summary')].find(e=>e.textContent==='Появление при прокрутке').click()")
         js("editorQA.change(document.querySelector('[aria-label=\"Анимация появления\"]'),'up')")
         js("editorQA.change(document.querySelector('[aria-label=\"Длительность появления, мс\"]'),300)")
@@ -131,6 +139,7 @@ def run(case, js, wait, call, directory, screenshot=None):
         js("editorQA.export(true)")
         wait("!!editorQA.doc()?.querySelector('.sb-style-0')")
         wait("editorQA.doc()?.querySelector('[data-entrance]')?.dataset.entranceState==='shown'")
+        assert js("getComputedStyle(editorQA.doc().querySelector('[data-entrance]')).clipPath").startswith('polygon(')
         assert js("getComputedStyle(editorQA.doc().querySelector('[data-entrance]')).animationName")=="sb-entry-up"
         js("(()=>{const d=editorQA.doc(),s=d.createElement('div');s.id='test-spacer';s.style.height='1400px';d.querySelector('main').prepend(s);d.defaultView.scrollTo(0,0)})()")
         wait("editorQA.doc().querySelector('[data-entrance]').dataset.entranceState==='waiting'")
@@ -151,6 +160,7 @@ def run(case, js, wait, call, directory, screenshot=None):
         js("document.querySelector('#export-check').style.width='375px'")
         wait("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).position==='static'")
         wait("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).filter==='none'")
+        assert js("getComputedStyle(editorQA.doc().querySelector('[data-entrance]')).clipPath")=="none"
     elif case == "gradient":
         js("editorQA.block('para')")
         wait("!!document.querySelector('.builder-inspector')")

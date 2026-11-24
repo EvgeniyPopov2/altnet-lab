@@ -106,7 +106,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
     const networks: string[] = Array.isArray(block.networks) ? block.networks : [];
     return <div className="grid gap-3">
       <Field label="Ссылка для публикации"><input className="w-full rounded-lg border border-[#1f2751] bg-[#0c0f1a] px-3 py-2" value={block.url || ""} onChange={e => onPatch({ url: e.target.value })} placeholder="Текущая страница" /></Field>
-      <p className="text-xs text-[#c9d0e9]">Если поле пустое, посетитель поделится адресом текущей страницы. Передача ссылки происходит только после его нажатия.</p>
+      <p className="text-xs text-[#c9d0e9]">В локальном пространстве Alt передача и копирование ссылки из виджета недоступны: сетевой публикации ещё нет. В обычном экспорте передача происходит после нажатия.</p>
       {([ ["copy", "Копировать ссылку"], ["telegram", "Telegram"], ["vk", "ВКонтакте"], ["twitter", "X / Twitter"], ["facebook", "Facebook"] ] as const).map(([id, label]) =>
         <label key={id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={networks.includes(id)} onChange={e => onPatch({ networks: e.target.checked ? [...networks, id] : networks.filter(n => n !== id) })} />{label}</label>)}
     </div>;
@@ -164,7 +164,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
       <Field label="Подсказка в поле поиска"><input className={input} value={block.placeholder || ""} onChange={e => onPatch({ placeholder: e.target.value })} /></Field>
       <Field label="Путь обработчика поиска"><input className={input} value={block.action || ""} onChange={e => onPatch({ action: e.target.value })} placeholder="/search" /></Field>
       <Field label="Метод"><select className={input} value={block.method || "GET"} onChange={e => onPatch({ method: e.target.value })}><option value="GET">GET</option><option value="POST">POST</option></select></Field>
-      <p className="text-xs text-[#c9d0e9]">Форма отправляет запрос обработчику на этом же сайте. Индекс и сервер поиска необходимо подключить отдельно.</p>
+      <p className="text-xs text-amber-300">В пространстве Alt поиск пока не работает: безопасный индекс и обработчик не подключены. В обычном экспорте форма требует отдельного обработчика.</p>
     </div>;
   }
 
@@ -654,7 +654,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
       <LocalImageInput onLoad={poster => onPatch({ poster })} />
       {([ ["controls", "Показывать управление", true], ["muted", "Без звука", false], ["loop", "Повторять", false] ] as const).map(([key, label, initial]) =>
         <label key={key} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={block[key] ?? initial} onChange={e => onPatch({ [key]: e.target.checked })} />{label}</label>)}
-      <p className="text-xs text-[#c9d0e9]">Видео подключается по указанному адресу. Файл видео не включается в экспорт автоматически.</p>
+      <p className="text-xs text-[#c9d0e9]">В локальном пространстве Alt внешние адреса видео не загружаются; файл по адресу не включается в экспорт автоматически.</p>
     </div>;
   }
 

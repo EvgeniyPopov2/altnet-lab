@@ -19,6 +19,7 @@ import { backgroundStyle } from "../screens/SiteBuilder/backgroundStyle";
 import { blockCornerStyle } from "../screens/SiteBuilder/blockCorners";
 import { blockBorderStyle } from "../screens/SiteBuilder/blockBorders";
 import { blockFilterStyle, filterTransition } from "../screens/SiteBuilder/blockFilters";
+import { blockClipStyle } from "../screens/SiteBuilder/blockClip";
 import { blockShadowStyle } from "../screens/SiteBuilder/blockShadowStyle";
 import { advancedLayoutStyle } from "../screens/SiteBuilder/advancedLayoutStyle";
 import { transformStyle } from "../screens/SiteBuilder/transforms";
@@ -407,7 +408,7 @@ function prepareStyleRules(model: SiteModel): string {
       if (typeof raw !== "number" || !Number.isFinite(raw)) return;
       values.push(`${property}:${Math.max(negative ? -512 : 0, Math.min(512, raw))}px`);
     };
-    for (const [key, value] of Object.entries({ ...spacingStyle(style), ...transformStyle(style), ...advancedLayoutStyle(style), ...backgroundStyle(style), ...blockShadowStyle(style), ...blockFilterStyle(style), ...filterTransition(style) })) {
+    for (const [key, value] of Object.entries({ ...spacingStyle(style), ...transformStyle(style), ...advancedLayoutStyle(style), ...backgroundStyle(style), ...blockShadowStyle(style), ...blockFilterStyle(style), ...blockClipStyle(style), ...filterTransition(style) })) {
       values.push(key.replace(/[A-Z]/g, char => "-" + char.toLowerCase()) + ":" + value);
     }
     add("border-radius", style.br); add("border-width", style.bw);

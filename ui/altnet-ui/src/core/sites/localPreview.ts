@@ -37,6 +37,15 @@ export function prepareLocalPreviewHtml(html: string, pagePaths: readonly string
     } catch { node.removeAttribute("data-alt-animation"); }
   });
   template.content.querySelectorAll("meta[http-equiv],meta[name=altnet-local-fragment],base,link,iframe,object,embed,portal").forEach(element => element.remove());
+  template.content.querySelectorAll("form").forEach(form => {
+    form.querySelectorAll("button,input,select,textarea").forEach(control => control.setAttribute("disabled", ""));
+    const notice = document.createElement("p");
+    notice.setAttribute("role", "status");
+    notice.textContent = form.matches(".site-search")
+      ? "Поиск пока недоступен в локальном пространстве Alt."
+      : "Отправка формы пока недоступна в локальном пространстве Alt.";
+    form.appendChild(notice);
+  });
   template.content.querySelectorAll("*").forEach(element => {
     if (element.hasAttribute("data-soundcloud-player")) {
       element.removeAttribute("data-soundcloud-player");element.setAttribute("disabled","");
@@ -66,11 +75,12 @@ export function prepareLocalPreviewHtml(html: string, pagePaths: readonly string
         }
       }
     }
-    if (element.tagName.toLowerCase() === "a" && element.hasAttribute("data-share-action")) {
+    if (element.hasAttribute("data-share-action")) {
       element.removeAttribute("data-share-action");
       element.removeAttribute("href");
       element.setAttribute("aria-disabled", "true");
-      element.setAttribute("title", "Внешние ссылки недоступны до подключения защищённого маршрута");
+      if (element.tagName.toLowerCase() === "button") element.setAttribute("disabled", "");
+      element.setAttribute("title", "Публикация и передача ссылки другим участникам пока недоступны");
     }
   });
   if (validAnimations && animationEngine) {

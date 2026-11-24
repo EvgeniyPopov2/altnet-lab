@@ -15,6 +15,7 @@ import { backgroundStyle } from "./SiteBuilder/backgroundStyle";
 import { blockCornerStyle } from "./SiteBuilder/blockCorners";
 import { blockBorderStyle } from "./SiteBuilder/blockBorders";
 import { blockFilterStyle, filterTransition } from "./SiteBuilder/blockFilters";
+import { blockClipStyle } from "./SiteBuilder/blockClip";
 import { blockShadowStyle } from "./SiteBuilder/blockShadowStyle";
 import { advancedLayoutStyle } from "./SiteBuilder/advancedLayoutStyle";
 import { transformStyle } from "./SiteBuilder/transforms";
@@ -632,6 +633,7 @@ export default function SiteBuilder({
         ...advancedLayoutStyle(s),
         ...transformStyle(s),
         ...blockFilterStyle(s),
+        ...blockClipStyle(s),
         ...filterTransition(s),
 
         ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
@@ -875,12 +877,14 @@ export default function SiteBuilder({
     setPublishError("");
     try {
       const sitePages = pagesForBuild(doc);
+      for (const page of sitePages) {
+        const unsupported = unsupportedBlockTypes(adaptFromSiteBuilderDoc(page.document));
+        if (unsupported.length) throw new Error(`Страница «${page.document.title}»: неподдерживаемые виджеты ${unsupported.join(", ")}.`);
+      }
       const pages: PublishedPage[] | undefined = sitePages.length > 1 ? [] : undefined;
       if (pages) {
         for (const page of sitePages) {
           const model = adaptFromSiteBuilderDoc(page.document);
-          const unsupported = unsupportedBlockTypes(model);
-          if (unsupported.length) throw new Error(`Страница «${page.document.title}»: неподдерживаемые виджеты ${unsupported.join(", ")}.`);
           const blob = await exportSingleHtml(model, { bundleAssets: true, restrictExternalMedia: true });
           pages.push({ path: page.path, title: page.document.title, html: await blob.text() });
         }
@@ -900,7 +904,7 @@ export default function SiteBuilder({
         severity: "info",
         code: "SITE_PUBLISHED",
         title: "Сайт опубликован локально",
-        message: `Адрес: ${url}`,
+        message: `Сайт доступен только на этом устройстве. Сетевая публикация ещё не подключена. Адрес: ${url}`,
         actions: [
           {
             label: "Открыть в .alt",
@@ -908,7 +912,7 @@ export default function SiteBuilder({
             onClick: () => onPublished?.(url),
           },
           {
-            label: "Скопировать адрес",
+            label: "Скопировать локальный адрес",
             kind: "secondary",
             onClick: async () => {
               try {
@@ -1649,6 +1653,7 @@ export default function SiteBuilder({
               >
                 {publishing ? "Сохраняем…" : "Публиковать"}
               </button>
+              <span className="text-xs text-[#aab3c8]" title="Сетевая публикация через IPFS ещё не подключена">Только на этом устройстве</span>
 
               {isExporting ? (
                 <div className="px-3 py-1.5 rounded-md border border-[#6E59F2] bg-[#15192c] text-[#e6e9f4] text-xs">

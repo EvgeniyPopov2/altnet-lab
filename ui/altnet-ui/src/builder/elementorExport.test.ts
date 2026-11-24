@@ -30,6 +30,11 @@ async function exported(blocks: unknown[], format: string, restrict = false) {
   return { html: await zip.file("index.html")!.async("string"), css: await zip.file("styles.css")!.async("string") };
 }
 describe("HTML и ZIP", () => {
+  it.each(["html", "zip"])("выводит адаптивную геометрическую обрезку в %s", async (format) => {
+    const {css} = await exported([{type:"p", text:"Тест", styleByBp:{desktop:{clipShape:"hexagon"}, mobile:{clipShape:"none"}}}], format);
+    expect(css).toContain("clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%)");
+    expect(css).toContain("clip-path:none");
+  });
   it.each(["html", "zip"])("сохраняет адаптивное появление и настройки доступности в %s", async (format) => {
     const { html, css } = await exported([{type:"p", text:"Привет", styleByBp:{desktop:{entranceType:"up", entranceDuration:350, entranceDistance:45, entranceRepeat:"repeat", op:60}, mobile:{entranceType:"none"}}}], format);
     expect(html).toContain("data-entrance");

@@ -77,8 +77,11 @@ async function verifyDownloadedPage(browser, url) {
     await page.locator('summary').filter({hasText:'Появление при прокрутке'}).click();
     await page.getByLabel('Анимация появления').selectOption('up');
     await page.getByLabel('Длительность появления, мс').fill('100');
+    await page.locator('summary').filter({hasText:'Форма обрезки'}).click();
+    await page.getByLabel('Форма обрезки блока').selectOption('hexagon');
     await page.getByRole('button', {name:'Mobile', exact:true}).click();
     await page.getByLabel('Анимация появления').selectOption('none');
+    await page.getByLabel('Форма обрезки блока').selectOption('none');
     await page.getByLabel('Позиция блока').selectOption('normal');
     await page.getByRole('group',{name:'Состояние эффектов'}).getByRole('button',{name:'Обычное'}).click();
     await page.getByLabel('Фильтры блока').selectOption('none');
@@ -99,6 +102,7 @@ async function verifyDownloadedPage(browser, url) {
     await published.goto(href);
     await published.locator('[data-entrance][data-entrance-state="shown"]').waitFor();
     assert.equal(await published.locator('[data-entrance]').evaluate(e => getComputedStyle(e).animationName), 'sb-entry-up');
+    assert.ok((await published.locator('[data-entrance]').evaluate(e => getComputedStyle(e).clipPath)).startsWith('polygon('));
     assert.equal(await published.locator("main strong").first().textContent(), "Книга");
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopLeftRadius), '28px');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopRightRadius), '8px');
@@ -110,6 +114,7 @@ async function verifyDownloadedPage(browser, url) {
     assert.ok((await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).filter)).includes('contrast(1.4)'));
     await published.setViewportSize({width:375,height:800});
     assert.equal(await published.locator('[data-entrance]').evaluate(e => getComputedStyle(e).animationName), 'none');
+    assert.equal(await published.locator('[data-entrance]').evaluate(e => getComputedStyle(e).clipPath), 'none');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopLeftRadius), '12px');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopWidth), '3px');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).position), 'static');
