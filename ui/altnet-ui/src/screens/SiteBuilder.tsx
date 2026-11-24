@@ -4,6 +4,7 @@ import React, { useCallback, useMemo, useRef, useState, useEffect, useReducer } 
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc, unsupportedBlockTypes } from "../builder/exporter";
 import { upsertPublishedSite } from "../core/sites/published";
 import type { PublishedPage } from "../core/sites/publishedDb";
+import { shareStatus, startOnionShare, stopOnionShare, type OnionShareStatus } from "../core/sites/onionShare";
 import { pushSecurityEvent } from "../core/security/bus";
 import Canvas from "./SiteBuilder/canvas/Canvas";
 import Outline from "./SiteBuilder/outline/Outline";
@@ -557,6 +558,30 @@ export default function SiteBuilder({
   const [exportError, setExportError] = useState("");
   const [carRoot, setCarRoot] = useState("");
   const [carCopyStatus, setCarCopyStatus] = useState("");
+  const [onionPanel, setOnionPanel] = useState(false);
+  const [onionShare, setOnionShare] = useState<OnionShareStatus | null>(null);
+  const [onionError, setOnionError] = useState("");
+  const [onionBusy, setOnionBusy] = useState(false);
+  const [onionCopyStatus, setOnionCopyStatus] = useState("");
+  const onionEpoch = useRef(0);
+
+  useEffect(() => {
+    if (!onionPanel) return;
+    let running = true;
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      const epoch = onionEpoch.current;
+      try {
+        const status = await shareStatus();
+        if (running && epoch === onionEpoch.current) setOnionShare(status);
+      } catch {
+        if (running && epoch === onionEpoch.current) setOnionShare(null);
+      }
+      if (running) timer = setTimeout(poll, document.hidden ? 15000 : 5000);
+    };
+    void poll();
+    return () => { running = false; clearTimeout(timer); };
+  }, [onionPanel]);
 
   // Для live-preview (отдельная вкладка)
   const importJsonInputRef = useRef<HTMLInputElement>(null);
@@ -872,9 +897,11 @@ export default function SiteBuilder({
     await runExport("html");
   }, [runExport]);
 
-  const onExportCar = useCallback(async () => {
+  const onExportCar = useCallback(async (mode: "download" | "share") => {
     if (isExporting || publishingRef.current) return;
+    if (mode === "share" && onionShare?.active) return;
     setExportError("");
+    setOnionError("");
     setCarRoot("");
     setCarCopyStatus("");
     setExportState({format:"car",phase:"pages",done:0,total:0});
@@ -898,12 +925,35 @@ export default function SiteBuilder({
       setExportState({format:"car",phase:"build",done:0,total:0});
       const result = await createSitePackage(doc.title || "Сайт", pages);
       await verifySitePackage(result.car, result.root);
-      downloadBlob(new Blob([new Uint8Array(result.car).buffer], {type:"application/vnd.ipld.car"}), prettyFileName(doc.title || "site", "car"));
-      setCarRoot(result.root);
+      if (mode === "download") {
+        downloadBlob(new Blob([new Uint8Array(result.car).buffer], {type:"application/vnd.ipld.car"}), prettyFileName(doc.title || "site", "car"));
+        setCarRoot(result.root);
+      } else {
+        onionEpoch.current++;
+        const status = await startOnionShare(result.root, result.car);
+        onionEpoch.current++;
+        setOnionShare(status);
+      }
     } catch (error) {
-      setExportError(error instanceof Error ? error.message : "Не удалось создать пакет сайта.");
+      const message = error instanceof Error ? error.message : "Не удалось создать пакет сайта.";
+      if (mode === "share") setOnionError(message);
+      else setExportError(message);
     } finally { setExportState(null); }
-  }, [doc,isExporting]);
+  }, [doc,isExporting,onionShare]);
+
+  const onStopOnionShare = useCallback(async () => {
+    if (onionBusy) return;
+    setOnionBusy(true);
+    setOnionError("");
+    onionEpoch.current++;
+    try {
+      const status = await stopOnionShare();
+      onionEpoch.current++;
+      setOnionShare(status);
+    } catch (error) {
+      setOnionError(error instanceof Error ? error.message : "Не удалось остановить раздачу.");
+    } finally { setOnionBusy(false); }
+  }, [onionBusy]);
 
   const onPublishAlt = useCallback(async () => {
     if (isExporting || publishingRef.current) return;
@@ -1412,6 +1462,29 @@ export default function SiteBuilder({
         <button type="button" className="underline" onClick={() => setCarRoot("")}>Закрыть</button>
         {carCopyStatus && <span> {carCopyStatus}</span>}
       </div>}
+      {onionPanel && <section aria-label="Временная раздача через Tor" className="col-span-full rounded-lg border border-[#6E59F2] bg-[#121528] p-3 text-sm text-[#e6e9f4]">
+        <div className="flex flex-wrap items-center justify-between gap-2"><strong>Временная раздача сайта через Tor</strong><button type="button" className="underline" onClick={() => setOnionPanel(false)}>Скрыть</button></div>
+        <p className="mt-2">Сайт сможет получить каждый, кому известны адрес onion и CID. Не размещайте здесь приватные данные. Доступность с другого устройства пока не проверяется автоматически.</p>
+        <p className="mt-1 text-[#c2c7db]">Адрес временный: раздача остановится при выключении приложения, потере Tor или смене моста. Это передача CAR через Tor, а не поиск сайтов в сети IPFS.</p>
+        {onionShare?.active ? <>
+          <p role="status" className="mt-2">Раздача запущена; доступность ещё не подтверждена.</p>
+          <p className="mt-1 break-all">Onion: <code>{onionShare.onion}</code></p>
+          <p className="break-all">CID: <code>{onionShare.cid}</code></p>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <button type="button" className="underline" onClick={async () => {
+              try { await navigator.clipboard.writeText(`${onionShare.onion}\n${onionShare.cid}`); setOnionCopyStatus("Адрес и CID скопированы."); }
+              catch { setOnionCopyStatus("Не удалось скопировать. Выделите адрес и CID вручную."); }
+            }}>Копировать адрес и CID</button>
+            <button type="button" disabled={onionBusy} className="underline disabled:opacity-50" onClick={() => void onStopOnionShare()}>Остановить раздачу</button>
+          </div>
+          {onionCopyStatus && <p role="status">{onionCopyStatus}</p>}
+        </> : <>
+          {onionShare?.reason === "route_lost" && <p role="status" className="mt-2 text-amber-300">Раздача остановлена из-за изменения маршрута Tor.</p>}
+          {!onionShare && <p className="mt-2 text-amber-300">Проверяем локальный клиент. Если состояние не появилось, обновите клиент.</p>}
+          <button type="button" disabled={isExporting || publishing || !onionShare || onionBusy} onClick={() => void onExportCar("share")} className="mt-2 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">Начать открытую раздачу</button>
+        </>}
+        {onionError && <p role="alert" className="mt-2 text-amber-300">{onionError}</p>}
+      </section>}
       {previewError && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{previewError}</div>}
       {revisionConflict && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Страница изменилась во время чтения версии. Восстановление отменено, текущие изменения не заменены. <button type="button" className="underline" onClick={() => setRevisionConflict(false)}>Закрыть</button></div>}
       {importConflict && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Документ изменился во время чтения файла. Импорт отменён, текущие изменения сохранены. <button type="button" className="underline" onClick={() => setImportConflict(false)}>Закрыть</button></div>}
@@ -1717,8 +1790,11 @@ export default function SiteBuilder({
                   >
                     Экспорт ZIP
                   </button>
-                  <button type="button" className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]" onClick={onExportCar} title="Подготовить файл для IPFS без сетевой публикации">
+                  <button type="button" className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]" onClick={() => void onExportCar("download")} title="Подготовить файл для IPFS без сетевой публикации">
                     IPFS-пакет CAR
+                  </button>
+                  <button type="button" className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]" onClick={() => setOnionPanel(true)} title="Раздать сайт через временный onion-сервис Tor">
+                    Раздача через Tor
                   </button>
                 </>
               )}

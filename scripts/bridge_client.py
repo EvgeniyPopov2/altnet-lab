@@ -19,7 +19,8 @@ from urllib.parse import urlsplit
 from bridge_manager import Manager
 from bridge_power import Budget
 from bridge_sources import Sources, catalog
-from site_onion import fetch_car
+from site_onion import fetch_car, MAX_CAR
+from site_share import Share
 
 
 class HTTP(BaseHTTPRequestHandler):
@@ -68,6 +69,10 @@ class LocalUI(HTTP):
             if not self.authorized():
                 return self.reply(403)
             return self.reply(200, json.dumps(self.server.manager.public_status()).encode())
+        if route == "/api/sites/share":
+            if not self.authorized():
+                return self.reply(403)
+            return self.reply(200, json.dumps(self.server.site_share.status()).encode())
         if route in ("/", "/index.html"):
             doc = (self.server.dist / "index.html").read_bytes()
             tag = f'<meta name="altnet-session" content="{self.server.token}">'
@@ -79,10 +84,14 @@ class LocalUI(HTTP):
 
     def do_POST(self):
         if (not self.local() or self.headers.get("Origin") != "http://" + self.server.authority
-                or not self.authorized() or self.headers.get_content_type() != "application/json"):
+                or not self.authorized()):
+            return self.reply(403)
+        if self.path == "/api/sites/share":
+            return self.publish_car()
+        if self.headers.get_content_type() != "application/json":
             return self.reply(403)
         allowed = {"/api/bridges/" + a: a for a in ("refresh", "switch", "manual", "pause", "resume")}
-        if self.path not in allowed and self.path != "/api/sites/onion-car":
+        if self.path not in allowed and self.path not in ("/api/sites/onion-car", "/api/sites/share-stop"):
             return self.reply(404)
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -94,6 +103,9 @@ class LocalUI(HTTP):
                 raise ValueError()
         except (ValueError, OSError):
             return self.reply(400)
+        if self.path == "/api/sites/share-stop":
+            self.server.site_share.stop()
+            return self.reply(200, json.dumps(self.server.site_share.status()).encode())
         if self.path == "/api/sites/onion-car":
             if not self.server.site_fetch.acquire(blocking=False):
                 return self.reply(429, json.dumps({"error": "Дождитесь окончания текущей загрузки."}).encode())
@@ -115,6 +127,30 @@ class LocalUI(HTTP):
             msg = "Проверьте формат строки obfs4 или дождитесь завершения текущей проверки." if allowed[self.path] == "manual" else str(error)
             return self.reply(409, json.dumps({"error": msg}).encode())
         self.reply(202, json.dumps(self.server.manager.public_status()).encode())
+
+    def publish_car(self):
+        if (self.headers.get_content_type() != "application/vnd.ipld.car" or self.headers.get("Transfer-Encoding")
+                or len(self.headers.get_all("Content-Length", [])) != 1):
+            return self.reply(400)
+        try:
+            length = int(self.headers["Content-Length"])
+            if not 0 < length <= MAX_CAR:
+                return self.reply(413)
+        except ValueError:
+            return self.reply(400)
+        if not self.server.site_publish.acquire(blocking=False):
+            return self.reply(429)
+        try:
+            self.connection.settimeout(10)
+            car = self.rfile.read(length)
+            if len(car) != length:
+                return self.reply(400)
+            result = self.server.site_share.start(self.headers.get("X-AltNet-Site-CID"), car)
+            return self.reply(202, json.dumps(result).encode())
+        except (ValueError, OSError, RuntimeError):
+            return self.reply(503, json.dumps({"error": "Не удалось запустить временную раздачу. Проверьте подключение Tor и состояние текущей раздачи."}).encode())
+        finally:
+            self.server.site_publish.release()
 
 
 class Forward(socketserver.BaseRequestHandler):
@@ -177,6 +213,8 @@ def main():
             ui.manager = proxy.manager = manager
             ui.socks_port = proxy.server_address[1]
             ui.site_fetch = threading.BoundedSemaphore(1)
+            ui.site_share = Share(manager)
+            ui.site_publish = threading.BoundedSemaphore(1)
             if args.peer or args.mirror_host:
                 print("Обмен каталогом с соседями отключён до интеграции сетевых профилей.", flush=True)
             worker = threading.Thread(target=manager.run)
@@ -189,6 +227,7 @@ def main():
             except KeyboardInterrupt:
                 pass
             finally:
+                ui.site_share.stop()
                 manager.stop.set()
                 manager.fetch.set()
                 manager.wake.set()

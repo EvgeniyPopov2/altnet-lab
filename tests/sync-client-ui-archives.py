@@ -59,19 +59,21 @@ class SyncArchivesTests(unittest.TestCase):
     def test_includes_site_transport_without_changing_other_files(self):
         scripts = self.root / "scripts"
         scripts.mkdir()
-        for name in ("bridge_client.py", "site_onion.py"):
+        for name in ("bridge_client.py", "site_onion.py", "site_share.py"):
             (scripts / name).write_text("new " + name, encoding="utf-8")
         result = self.run_sync("--site-transport-dir", str(scripts))
         self.assertEqual(result.returncode, 0, result.stderr)
         with zipfile.ZipFile(self.output / "AltNet-Client-windows-x86_64.zip") as archive:
             self.assertEqual(archive.read("AltNet/scripts/site_onion.py"), b"new site_onion.py")
             self.assertEqual(archive.read("AltNet/scripts/bridge_client.py"), b"new bridge_client.py")
+            self.assertEqual(archive.read("AltNet/scripts/site_share.py"), b"new site_share.py")
             self.assertEqual(archive.read("AltNet/scripts/client.py"), b"trusted base")
         with tarfile.open(self.output / "AltNet-Client-linux-x86_64.tar.gz") as archive:
             self.assertEqual(archive.extractfile("AltNet/scripts/site_onion.py").read(), b"new site_onion.py")
             self.assertEqual(archive.extractfile("AltNet/scripts/bridge_client.py").read(), b"new bridge_client.py")
+            self.assertEqual(archive.extractfile("AltNet/scripts/site_share.py").read(), b"new site_share.py")
         manifest = json.loads((self.output / "SHA256.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(manifest["replaced_scripts"]), 2)
+        self.assertEqual(len(manifest["replaced_scripts"]), 3)
 
 
 if __name__ == "__main__":

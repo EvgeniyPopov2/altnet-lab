@@ -103,14 +103,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("windows", "linux", "dist", "output"):
         parser.add_argument("--" + name, required=True, type=Path)
-    parser.add_argument("--site-transport-dir", type=Path, help="Replace the two site transport scripts as well as the UI")
+    parser.add_argument("--site-transport-dir", type=Path, help="Replace site transport scripts as well as the UI")
     args = parser.parse_args()
     if args.output.exists():
         parser.error("Output directory already exists")
     ui = collect_ui(args.dist)
     replacements = {}
     if args.site_transport_dir:
-        for name in ("bridge_client.py", "site_onion.py"):
+        for name in ("bridge_client.py", "site_onion.py", "site_share.py"):
             path = args.site_transport_dir / name
             if path.is_symlink() or not path.is_file():
                 raise ValueError("Missing site transport script: " + name)
