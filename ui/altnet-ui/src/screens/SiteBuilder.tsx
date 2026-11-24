@@ -548,13 +548,15 @@ export default function SiteBuilder({
 
   type ExportPhase = "cdr" | "build" | "pages";
   const [exportState, setExportState] = useState<{
-    format: "html" | "zip";
+    format: "html" | "zip" | "car";
     phase: ExportPhase;
     done: number;
     total: number;
   } | null>(null);
   const isExporting = exportState !== null;
   const [exportError, setExportError] = useState("");
+  const [carRoot, setCarRoot] = useState("");
+  const [carCopyStatus, setCarCopyStatus] = useState("");
 
   // Для live-preview (отдельная вкладка)
   const importJsonInputRef = useRef<HTMLInputElement>(null);
@@ -870,6 +872,39 @@ export default function SiteBuilder({
     await runExport("html");
   }, [runExport]);
 
+  const onExportCar = useCallback(async () => {
+    if (isExporting || publishingRef.current) return;
+    setExportError("");
+    setCarRoot("");
+    setCarCopyStatus("");
+    setExportState({format:"car",phase:"pages",done:0,total:0});
+    try {
+      const entries = pagesForBuild(doc);
+      if (entries.length < 1 || entries.length > 500) throw new Error("Недопустимое число страниц сайта.");
+      const {createSitePackage,verifySitePackage,SITE_MAX_PAGE_BYTES,SITE_MAX_TOTAL_BYTES} = await import("../core/sites/ipfsSitePackage");
+      const pages: PublishedPage[] = [];
+      let totalBytes = 0;
+      for (const [index, entry] of entries.entries()) {
+        const model = adaptFromSiteBuilderDoc(entry.document);
+        const unsupported = unsupportedBlockTypes(model);
+        if (unsupported.length) throw new Error(`Страница «${entry.document.title}»: неподдерживаемые виджеты ${unsupported.join(", ")}.`);
+        const blob = await exportSingleHtml(model, {bundleAssets:true, restrictExternalMedia:true, deterministic:true});
+        totalBytes += blob.size;
+        if (blob.size > SITE_MAX_PAGE_BYTES || totalBytes > SITE_MAX_TOTAL_BYTES) throw new Error("Сайт превышает допустимый размер пакета.");
+        const html = await blob.text();
+        pages.push({path:entry.path,title:entry.document.title,html});
+        setExportState({format:"car",phase:"pages",done:index+1,total:entries.length});
+      }
+      setExportState({format:"car",phase:"build",done:0,total:0});
+      const result = await createSitePackage(doc.title || "Сайт", pages);
+      await verifySitePackage(result.car, result.root);
+      downloadBlob(new Blob([new Uint8Array(result.car).buffer], {type:"application/vnd.ipld.car"}), prettyFileName(doc.title || "site", "car"));
+      setCarRoot(result.root);
+    } catch (error) {
+      setExportError(error instanceof Error ? error.message : "Не удалось создать пакет сайта.");
+    } finally { setExportState(null); }
+  }, [doc,isExporting]);
+
   const onPublishAlt = useCallback(async () => {
     if (isExporting || publishingRef.current) return;
     publishingRef.current = true;
@@ -950,7 +985,7 @@ export default function SiteBuilder({
       ? "Сборка файла…"
       : "";
 
-  const exportFormatLabel = exportState?.format === "zip" ? "ZIP" : "HTML";
+  const exportFormatLabel = exportState?.format === "zip" ? "ZIP" : exportState?.format === "car" ? "CAR" : "HTML";
 
   const buildLiveShellHtml = (id: string) => `<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"/>
@@ -1368,6 +1403,15 @@ export default function SiteBuilder({
       {leaseStatus === "unsupported" && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Этот браузер не поддерживает блокировку черновика между вкладками. Не редактируйте одну страницу одновременно в нескольких вкладках.</div>}
       {publishError && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{publishError}</div>}
       {exportError && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Экспорт не выполнен: {exportError}</div>}
+      {carRoot && <div role="status" className="col-span-full rounded-lg border border-[#6E59F2] bg-[#121528] p-3 text-sm text-[#e6e9f4]">
+        Пакет CAR сохранён на устройство. Он ещё не опубликован в сети. CID: <code>{carRoot}</code>{" "}
+        <button type="button" className="underline" onClick={async () => {
+          try { await navigator.clipboard.writeText(carRoot); setCarCopyStatus("CID скопирован."); }
+          catch { setCarCopyStatus("Не удалось скопировать CID. Выделите и скопируйте его вручную."); }
+        }}>Копировать CID</button>{" "}
+        <button type="button" className="underline" onClick={() => setCarRoot("")}>Закрыть</button>
+        {carCopyStatus && <span> {carCopyStatus}</span>}
+      </div>}
       {previewError && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{previewError}</div>}
       {revisionConflict && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Страница изменилась во время чтения версии. Восстановление отменено, текущие изменения не заменены. <button type="button" className="underline" onClick={() => setRevisionConflict(false)}>Закрыть</button></div>}
       {importConflict && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Документ изменился во время чтения файла. Импорт отменён, текущие изменения сохранены. <button type="button" className="underline" onClick={() => setImportConflict(false)}>Закрыть</button></div>}
@@ -1672,6 +1716,9 @@ export default function SiteBuilder({
                     onClick={onExportZip}
                   >
                     Экспорт ZIP
+                  </button>
+                  <button type="button" className="px-3 py-1.5 rounded-md border border-[#2a2f45] bg-[#0f1420] text-[#e6e9f4] hover:border-[#6E59F2]" onClick={onExportCar} title="Подготовить файл для IPFS без сетевой публикации">
+                    IPFS-пакет CAR
                   </button>
                 </>
               )}

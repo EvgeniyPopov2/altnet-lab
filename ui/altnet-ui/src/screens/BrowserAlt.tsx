@@ -5,6 +5,7 @@ import {
   deletePublishedSite,
   getPublishedSite,
   listPublishedSites,
+  upsertPublishedSite,
   type PublishedSiteMeta,
   type PublishedSite,
 } from "../core/sites/published";
@@ -101,6 +102,11 @@ export default function BrowserAlt({
   const [publishedLoading, setPublishedLoading] = useState(true);
   const [publishedError, setPublishedError] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
+  const [carCid, setCarCid] = useState("");
+  const [carFile, setCarFile] = useState<File | null>(null);
+  const [carLoading, setCarLoading] = useState(false);
+  const [carError, setCarError] = useState("");
+  const carImportBusy = useRef(false);
   const [siteState, setSiteState] = useState<{ slug: string; loading: boolean; site: PublishedSite | null; error: string } | null>(null);
   const siteFrameRef = useRef<HTMLIFrameElement>(null);
   const deletingSites = useRef(new Set<string>());
@@ -313,6 +319,31 @@ export default function BrowserAlt({
     }
   };
 
+  const importCar = async () => {
+    if (carImportBusy.current || !carFile) return;
+    carImportBusy.current = true;
+    setCarLoading(true);
+    setCarError("");
+    try {
+      const {parseSiteRoot,verifySitePackage,SITE_MAX_CAR_BYTES} = await import("../core/sites/ipfsSitePackage");
+      const root = parseSiteRoot(carCid.trim()).toString();
+      if (!carFile.size || carFile.size > SITE_MAX_CAR_BYTES) throw new Error("Некорректный размер файла CAR.");
+      const site = await verifySitePackage(new Uint8Array(await carFile.arrayBuffer()), root);
+      const home = site.pages.find(page => page.path === "index.html");
+      if (!home) throw new Error("В пакете нет главной страницы.");
+      const meta = await upsertPublishedSite({title:site.title || home.title || "Сайт",html:home.html,...(site.pages.length > 1 ? {pages:site.pages} : {})});
+      setPublishedToken(Date.now());
+      setCarFile(null);
+      setCarCid("");
+      setActiveUrl(`alt://site/${meta.slug}`);
+    } catch (error) {
+      setCarError(error instanceof Error ? error.message : "Не удалось проверить пакет сайта.");
+    } finally {
+      carImportBusy.current = false;
+      setCarLoading(false);
+    }
+  };
+
   const renderHome = () => {
     return (
       <div className="space-y-4">
@@ -339,6 +370,19 @@ export default function BrowserAlt({
             </button>
           </div>
         </div>
+
+        <details className="rounded-2xl border border-white/10 bg-white/5 p-4 text-white/80">
+          <summary className="cursor-pointer font-semibold">Открыть IPFS-пакет CAR с устройства</summary>
+          <p className="mt-2 text-sm text-white/70">Пакет проверяется по CID и открывается локально. Сверьте CID с адресом, полученным от автора по доверенному каналу: CID подтверждает содержимое, но не личность автора. Загрузка из сети Alt пока не подключена.</p>
+          <label className="mt-3 block text-sm">CID сайта
+            <input aria-label="CID сайта для импорта" value={carCid} onChange={event => setCarCid(event.target.value)} disabled={carLoading} autoComplete="off" spellCheck={false} className="mt-1 block w-full rounded border border-white/20 bg-[#0c0f1a] p-2 text-white" />
+          </label>
+          <label className="mt-3 block text-sm">Файл CAR
+            <input aria-label="Файл CAR" type="file" accept=".car,application/vnd.ipld.car" disabled={carLoading} onChange={event => setCarFile(event.target.files?.[0] ?? null)} className="mt-1 block w-full text-sm" />
+          </label>
+          <button type="button" disabled={carLoading || !carFile || !carCid.trim()} onClick={() => void importCar()} className="mt-3 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">{carLoading ? "Проверяем…" : "Проверить и открыть"}</button>
+          {carError && <p role="alert" className="mt-2 text-sm text-amber-300">{carError}</p>}
+        </details>
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
           <div className="flex items-center justify-between gap-3">

@@ -61,6 +61,8 @@ export type ExportOptions = {
   /** Только адаптер с подтверждённым маршрутом; обычный browser fetch не используется по умолчанию. */
   imageLoader?: (url: string) => Promise<{ name: string; blob: Blob; hash: string }>;
   restrictExternalMedia?: boolean;
+  /** Без текущего времени в HTML: неизменённый сайт сохраняет один CID. */
+  deterministic?: boolean;
 };
 
 const esc = (html: string = "") =>
@@ -744,7 +746,7 @@ function ensureRelOnLinks(html: string): string {
   });
 }
 
-async function buildIndexHtml(model: SiteModel, ogImage?: string, restrictExternalMedia = false): Promise<string> {
+async function buildIndexHtml(model: SiteModel, ogImage?: string, restrictExternalMedia = false, deterministic = false): Promise<string> {
   const title = esc(model.title || "AltNet Site");
   const desc = esc(model.description || "") || "Статический экспорт сайта, созданного в AltNet Конструкторе.";
   const blocks = flattenBlockTree(model.blocks || []);
@@ -816,7 +818,7 @@ ${ogImage ? `<meta name="twitter:image" content="${esc(ogImage)}"/>` : ""}
     ${body}
   </main>
   ${popups}
-  ${pageFooter !== undefined ? `<footer class="container" data-site-template="footer">${pageFooter}</footer>` : `<footer>Сгенерировано в AltNet · ${new Date().toISOString()}</footer>`}
+  ${pageFooter !== undefined ? `<footer class="container" data-site-template="footer">${pageFooter}</footer>` : `<footer>Сгенерировано в AltNet${deterministic ? "" : " · " + new Date().toISOString()}</footer>`}
   ${runtimeNeeded ? `<script>${SITE_RUNTIME}</script>` : ""}
   ${animationRuntime ? `<script data-altnet-lottie>${animationRuntime}</script>` : ""}
 </body>
@@ -968,7 +970,7 @@ export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions)
 
   // 3) Файлы ZIP
   zip.file("favicon.svg", FAVICON_SVG);
-  zip.file("index.html", await buildIndexHtml(model, ogImage, opts.restrictExternalMedia));
+  zip.file("index.html", await buildIndexHtml(model, ogImage, opts.restrictExternalMedia, opts.deterministic));
   zip.file("styles.css", buildStylesCss(model.theme, styleRules));
   zip.file("manifest.json", buildManifest(model, assets));
   const sitemap = buildSitemap(model.seo?.index === false ? [] : [model.seo?.canonical || ""]);
@@ -1045,7 +1047,7 @@ export async function exportSingleHtml(modelIn: SiteModel, options?: ExportOptio
 
   // Готовый index.html → single-file: inline CSS, data:-favicon, CSP без script
   const styleRules = prepareStyleRules(model);
-  let html = await buildIndexHtml(model, model.ogImage || undefined, opts.restrictExternalMedia);
+  let html = await buildIndexHtml(model, model.ogImage || undefined, opts.restrictExternalMedia, opts.deterministic);
   html = html
     .replace(`<link rel="stylesheet" href="./styles.css"/>`, `<style>${buildStylesCss(model.theme, styleRules)}</style>`)
     .replace(`style-src 'self'`, `style-src 'unsafe-inline'`)
