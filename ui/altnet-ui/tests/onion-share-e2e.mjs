@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import { chromium, firefox, webkit } from "playwright";
 
@@ -57,6 +58,7 @@ try {
       await visit.getByLabel("Адрес сайта").fill(shareLink);
       await visit.getByLabel("Адрес сайта").press("Enter");
       await visit.getByRole("heading", { name: "Получить сайт через Tor" }).waitFor();
+      if (process.env.ALTNET_E2E_SCREENSHOT_DIR) await visit.screenshot({ path: join(process.env.ALTNET_E2E_SCREENSHOT_DIR, `share-${values.engine}-${viewport.width}.png`), fullPage: true });
       assert.equal(requests, 0, "A share link must not fetch before explicit user action");
       await visit.getByRole("button", { name: "Получить и открыть" }).click();
       await visit.frameLocator('iframe[title="Сайт участника"]').getByText("Передача между участниками").waitFor();
@@ -81,6 +83,8 @@ try {
   await racePage.getByRole("button", { name: "Браузер .alt", exact: true }).click();
   await racePage.getByLabel("Адрес сайта").fill(shareLink);
   await racePage.getByLabel("Адрес сайта").press("Enter");
+  await racePage.getByRole("heading", { name: "Получить сайт через Tor" }).waitFor();
+  if (process.env.ALTNET_E2E_SCREENSHOT_DIR) await racePage.screenshot({ path: join(process.env.ALTNET_E2E_SCREENSHOT_DIR, `share-${values.engine}-1440.png`), fullPage: true });
   await racePage.getByRole("button", { name: "Получить и открыть" }).click();
   await arrived;
   await racePage.getByLabel("Адрес сайта").fill("alt://home");
