@@ -104,6 +104,7 @@ def main():
     for name in ("windows", "linux", "dist", "output"):
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--site-transport-dir", type=Path, help="Replace site transport scripts as well as the UI")
+    parser.add_argument("--bridge-catalog", type=Path, help="Replace the Tor bridge catalog verifier")
     args = parser.parse_args()
     if args.output.exists():
         parser.error("Output directory already exists")
@@ -115,6 +116,10 @@ def main():
             if path.is_symlink() or not path.is_file():
                 raise ValueError("Missing site transport script: " + name)
             replacements["AltNet/scripts/" + name] = path
+    if args.bridge_catalog:
+        if args.bridge_catalog.is_symlink() or not args.bridge_catalog.is_file() or args.bridge_catalog.name != "tor-bridge-catalog.py":
+            raise ValueError("Expected the Tor bridge catalog verifier")
+        replacements["AltNet/scripts/tor-bridge-catalog.py"] = args.bridge_catalog
     expected_ui = {name: file_digest(path) for name, path in ui.items()}
     expected_replacements = {name: file_digest(path) for name, path in replacements.items()}
     original = {"windows": zip_hashes(args.windows), "linux": tar_hashes(args.linux)}

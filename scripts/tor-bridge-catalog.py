@@ -54,7 +54,7 @@ def load_catalog(bundle, signature, keyring, verifier="gpgv"):
         shutil.copyfile(signature, Path(private) / "bundle.asc")
         result = subprocess.run([verifier, "--homedir", ".", "--status-fd", "1", "--keyring",
                                  "./trusted.gpg", "./bundle.asc", "./bundle"], cwd=private,
-                                capture_output=True, text=True, timeout=90)
+                                stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=90)
         signatures = [line.split() for line in result.stdout.splitlines() if line.startswith("[GNUPG:] VALIDSIG ")]
         rejected = re.search(r"^\[GNUPG:\] (BADSIG|ERRSIG|REVKEYSIG|EXPKEYSIG|EXPSIG) ", result.stdout, re.M)
         if result.returncode or rejected or len(signatures) != 1 or SIGNER not in (signatures[0][2], signatures[0][-1]):

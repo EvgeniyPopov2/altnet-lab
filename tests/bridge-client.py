@@ -232,6 +232,49 @@ class ClientTests(unittest.TestCase):
 
 @unittest.skipUnless(all(os.environ.get(k) for k in ("ALTNET_SEED", "ALTNET_KEYRING")), "provide signed vendor fixture")
 class PeerTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == "nt", "Windows stdin inheritance regression")
+    def test_signed_catalog_verification_with_open_control_stdin(self):
+        import subprocess
+        import time
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "verified"
+            code = r'''import sys,threading
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from bridge_sources import Sources
+t = threading.Thread(target=lambda: sys.stdin.buffer.read(1), daemon=True)
+t.start()
+s = Sources(Path(sys.argv[2]), Path(sys.argv[3]), sys.argv[4], official=False)
+s.bootstrap(Path(sys.argv[5]))
+if not s.current: raise RuntimeError("catalog verification failed")
+Path(sys.argv[6]).write_text("ok")
+t.join(10)
+'''
+            command = [sys.executable, "-B", "-c", code, str(Path(__file__).resolve().parents[1] / "scripts"),
+                       str(Path(tmp) / "public"), os.environ["ALTNET_KEYRING"], os.environ.get("ALTNET_GPGV", "gpgv"),
+                       os.environ["ALTNET_SEED"], str(marker)]
+            child = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            try:
+                deadline = time.monotonic() + 20
+                while not marker.exists() and child.poll() is None and time.monotonic() < deadline:
+                    time.sleep(.1)
+                self.assertTrue(marker.exists(), "Catalog verification blocked while the control stream was open")
+            finally:
+                if child.poll() is None:
+                    try:
+                        child.stdin.write(b"x")
+                        child.stdin.flush()
+                    except BrokenPipeError:
+                        pass
+                try:
+                    child.wait(timeout=12)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+                child.stdin.close()
+            self.assertEqual(child.returncode, 0)
+
     def test_verified_cache_works_with_no_network(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

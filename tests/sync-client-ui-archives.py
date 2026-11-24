@@ -75,6 +75,18 @@ class SyncArchivesTests(unittest.TestCase):
         manifest = json.loads((self.output / "SHA256.json").read_text(encoding="utf-8"))
         self.assertEqual(len(manifest["replaced_scripts"]), 3)
 
+    def test_updates_catalog_verifier_in_both_formats(self):
+        catalog = self.root / "tor-bridge-catalog.py"
+        catalog.write_text("verified catalog", encoding="utf-8")
+        result = self.run_sync("--bridge-catalog", str(catalog))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.output / "AltNet-Client-windows-x86_64.zip") as archive:
+            self.assertEqual(archive.read("AltNet/scripts/tor-bridge-catalog.py"), b"verified catalog")
+            self.assertEqual(archive.read("AltNet/scripts/client.py"), b"trusted base")
+        with tarfile.open(self.output / "AltNet-Client-linux-x86_64.tar.gz") as archive:
+            self.assertEqual(archive.extractfile("AltNet/scripts/tor-bridge-catalog.py").read(), b"verified catalog")
+        self.assertIn("AltNet/scripts/tor-bridge-catalog.py", json.loads((self.output / "SHA256.json").read_text(encoding="utf-8"))["replaced_scripts"])
+
 
 if __name__ == "__main__":
     unittest.main()
