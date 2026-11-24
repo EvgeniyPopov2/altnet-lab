@@ -2,6 +2,7 @@
 """Run the AltNet UI and bridge recovery for one local installation."""
 import argparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.client import HTTPException
 import hmac
 import json
 import mimetypes
@@ -18,6 +19,7 @@ from urllib.parse import urlsplit
 from bridge_manager import Manager
 from bridge_power import Budget
 from bridge_sources import Sources, catalog
+from site_onion import fetch_car
 
 
 class HTTP(BaseHTTPRequestHandler):
@@ -80,7 +82,7 @@ class LocalUI(HTTP):
                 or not self.authorized() or self.headers.get_content_type() != "application/json"):
             return self.reply(403)
         allowed = {"/api/bridges/" + a: a for a in ("refresh", "switch", "manual", "pause", "resume")}
-        if self.path not in allowed:
+        if self.path not in allowed and self.path != "/api/sites/onion-car":
             return self.reply(404)
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -92,6 +94,20 @@ class LocalUI(HTTP):
                 raise ValueError()
         except (ValueError, OSError):
             return self.reply(400)
+        if self.path == "/api/sites/onion-car":
+            if not self.server.site_fetch.acquire(blocking=False):
+                return self.reply(429, json.dumps({"error": "Дождитесь окончания текущей загрузки."}).encode())
+            try:
+                def ready():
+                    manager = self.server.manager
+                    with manager.lock:
+                        return bool(manager.active_port and not manager.paused and not manager.stop.is_set())
+                car = fetch_car(self.server.socks_port, body.get("onion"), body.get("cid"), ready)
+                return self.reply(200, car, "application/vnd.ipld.car")
+            except (ValueError, OSError, HTTPException):
+                return self.reply(502, json.dumps({"error": "Не удалось получить пакет через Tor. Проверьте адреса, подключение и доступность узла."}).encode())
+            finally:
+                self.server.site_fetch.release()
         try:
             self.server.manager.request(allowed[self.path], body.get("lines"))
         except ValueError as error:
@@ -159,6 +175,8 @@ def main():
             ui.dist, ui.authority = dist, f"127.0.0.1:{ui.server_port}"
             ui.token = secrets.token_urlsafe(32)
             ui.manager = proxy.manager = manager
+            ui.socks_port = proxy.server_address[1]
+            ui.site_fetch = threading.BoundedSemaphore(1)
             if args.peer or args.mirror_host:
                 print("Обмен каталогом с соседями отключён до интеграции сетевых профилей.", flush=True)
             worker = threading.Thread(target=manager.run)

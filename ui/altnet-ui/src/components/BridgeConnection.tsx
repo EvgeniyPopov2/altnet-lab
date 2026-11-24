@@ -25,7 +25,7 @@ export default function BridgeConnection({ panic }: { panic: boolean }) {
   const request = useCallback(async (action: string, body?: object) => {
     if (!token) throw new Error("Откройте AltNet через локальный клиент.");
     const response = await fetch("/api/bridges/" + action, {
-      method: body ? "POST" : "GET", mode: "same-origin", cache: "no-store",
+      method: body ? "POST" : "GET", mode: "same-origin", cache: "no-store", referrerPolicy: "same-origin",
       headers: { "X-AltNet-Session": token, ...(body ? { "Content-Type": "application/json" } : {}) },
       body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(10000),
     });

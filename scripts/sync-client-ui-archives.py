@@ -73,24 +73,26 @@ def tar_hashes(archive):
         return result
 
 
-def make_zip(source_path, target_path, ui):
+def make_zip(source_path, target_path, ui, replacements):
     with zipfile.ZipFile(source_path) as source, zipfile.ZipFile(target_path, "w", zipfile.ZIP_DEFLATED, compresslevel=3) as target:
         for entry in source.infolist():
-            if entry.is_dir() or entry.filename.startswith(PREFIX):
+            if entry.is_dir() or entry.filename.startswith(PREFIX) or entry.filename in replacements:
                 continue
             with source.open(entry) as reader, target.open(entry, "w") as writer:
                 shutil.copyfileobj(reader, writer, 1024 * 1024)
         for name, path in ui.items():
             target.write(path, name, compress_type=zipfile.ZIP_DEFLATED, compresslevel=3)
+        for name, path in replacements.items():
+            target.write(path, name, compress_type=zipfile.ZIP_DEFLATED, compresslevel=3)
 
 
-def make_tar(source_path, target_path, ui):
+def make_tar(source_path, target_path, ui, replacements):
     with tarfile.open(source_path, "r:gz") as source, tarfile.open(target_path, "w:gz", compresslevel=3) as target:
         for entry in source:
-            if not entry.name.startswith(PREFIX):
+            if not entry.name.startswith(PREFIX) and entry.name not in replacements:
                 with source.extractfile(entry) as reader:
                     target.addfile(entry, reader)
-        for name, path in ui.items():
+        for name, path in (ui | replacements).items():
             info = target.gettarinfo(str(path), arcname=name)
             info.mode = 0o644
             with path.open("rb") as reader:
@@ -101,11 +103,20 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("windows", "linux", "dist", "output"):
         parser.add_argument("--" + name, required=True, type=Path)
+    parser.add_argument("--site-transport-dir", type=Path, help="Replace the two site transport scripts as well as the UI")
     args = parser.parse_args()
     if args.output.exists():
         parser.error("Output directory already exists")
     ui = collect_ui(args.dist)
+    replacements = {}
+    if args.site_transport_dir:
+        for name in ("bridge_client.py", "site_onion.py"):
+            path = args.site_transport_dir / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("Missing site transport script: " + name)
+            replacements["AltNet/scripts/" + name] = path
     expected_ui = {name: file_digest(path) for name, path in ui.items()}
+    expected_replacements = {name: file_digest(path) for name, path in replacements.items()}
     original = {"windows": zip_hashes(args.windows), "linux": tar_hashes(args.linux)}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="altnet-ui-sync-", dir=args.output.parent) as temporary:
@@ -113,13 +124,13 @@ def main():
         stage.mkdir()
         win_out = stage / "AltNet-Client-windows-x86_64.zip"
         linux_out = stage / "AltNet-Client-linux-x86_64.tar.gz"
-        make_zip(args.windows, win_out, ui)
-        make_tar(args.linux, linux_out, ui)
+        make_zip(args.windows, win_out, ui, replacements)
+        make_tar(args.linux, linux_out, ui, replacements)
         for platform, actual in (("windows", zip_hashes(win_out)), ("linux", tar_hashes(linux_out))):
-            expected = {name: sha for name, sha in original[platform].items() if not name.startswith(PREFIX)} | expected_ui
+            expected = {name: sha for name, sha in original[platform].items() if not name.startswith(PREFIX) and name not in replacements} | expected_ui | expected_replacements
             if actual != expected:
                 raise ValueError("Verification failed for " + platform)
-        manifest = {"description": "Experimental portable archives; only UI replaced, other files verified unchanged", "ui_index_sha256": expected_ui[PREFIX + "index.html"], "base_archives": {}, "archives": {}}
+        manifest = {"description": "Experimental portable archives; UI and listed scripts replaced, other files verified unchanged", "ui_index_sha256": expected_ui[PREFIX + "index.html"], "replaced_scripts": expected_replacements, "base_archives": {}, "archives": {}}
         for label, source, result in (("windows", args.windows, win_out), ("linux", args.linux, linux_out)):
             with source.open("rb") as stream:
                 manifest["base_archives"][label] = digest(stream)

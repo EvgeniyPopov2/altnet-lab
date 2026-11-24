@@ -6,6 +6,8 @@
   "scripts": {
     "test:browsers": "node tests/builder-browsers.mjs",
     "test:ipfs-ui": "node tests/ipfs-car-ui.mjs",
+    "test:onion-ui": "node tests/onion-car-ui.mjs",
+    "test:onion-integration": "node tests/onion-car-integration.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
