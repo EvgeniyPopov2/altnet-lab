@@ -1472,6 +1472,7 @@ export default function SiteBuilder({
           <p className="mt-1 break-all">Onion: <code>{onionShare.onion}</code></p>
           <p className="break-all">CID: <code>{onionShare.cid}</code></p>
           <p className="break-all">Ссылка Alt: <code>{`alt://onion/${onionShare.onion}/${onionShare.cid}`}</code></p>
+          <p className="mt-1 text-[#c2c7db]">Получатель может вставить ссылку в адресную строку браузера AltNet.</p>
           <div className="mt-2 flex flex-wrap gap-3">
             <button type="button" className="underline" onClick={async () => {
               try { await navigator.clipboard.writeText(`alt://onion/${onionShare.onion}/${onionShare.cid}`); setOnionCopyStatus("Ссылка Alt скопирована."); }
