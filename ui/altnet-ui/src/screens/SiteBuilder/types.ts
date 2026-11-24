@@ -758,6 +758,9 @@ export type Doc = {
   theme?: {
     accent?: string;   // HEX или css-цвет
     container?: number; // px
+    background?: string;
+    foreground?: string;
+    showTitle?: boolean;
   };
   blocks: Block[];
   /** Активная страница находится в корне документа, остальные — в workspace. */

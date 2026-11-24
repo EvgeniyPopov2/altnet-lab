@@ -51,6 +51,9 @@ export type SiteModel = {
   theme?: {
     accent?: string;       // HEX или css-цвет (напр. #5865F2)
     container?: number;    // ширина контейнера в px (напр. 960)
+    background?: string;
+    foreground?: string;
+    showTitle?: boolean;
   };
   blocks: BlockInstance[];
 };
@@ -139,15 +142,18 @@ function sanitizeSeo(value: SiteModel["seo"]): SiteModel["seo"] {
 }
 
 // -------- Стили (оффлайн) — с подстановкой темы --------
-function buildStylesCss(theme?: { accent?: string; container?: number }, extraCss = "") {
+function buildStylesCss(theme?: SiteModel["theme"], extraCss = "") {
   const rawAccent = (theme?.accent || "").trim();
   const accent = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(rawAccent) ? rawAccent : "#5865F2";
+  const safeColor = (value: unknown, fallback: string) => typeof value === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value) ? value : fallback;
+  const background = safeColor(theme?.background, "#0b0d12");
+  const foreground = safeColor(theme?.foreground, "#e7e9f0");
   const container = Number.isFinite(theme?.container) ? Math.max(320, Math.min(2560, Number(theme!.container))) : 960;
 
   return `
 :root{
-  --bg:#0b0d12;
-  --fg:#e7e9f0;
+  --bg:${background};
+  --fg:${foreground};
   --muted:#9aa3b2;
   --accent:${accent};
   --card:#12141c;
@@ -624,6 +630,16 @@ function prepareStyleRules(model: SiteModel): string {
       if (values[0]) rules.push(`.${cls}{${values[0]}}`);
       if (values[1]) rules.push(`@media(max-width:1024px){.${cls}{${values[1]}}}`);
       if (values[2]) rules.push(`@media(max-width:767px){.${cls}{${values[2]}}}`);
+      // Внешняя обёртка уже получила заданный отступ. Стандартные 40px
+      // внутренней секции иначе добавлялись к нему второй раз.
+      for (const [i, width] of [0, 1024, 767].entries()) {
+        const spacing = spacingStyle(layers[i]);
+        const reset = [spacing.paddingTop !== undefined ? "padding-top:0" : "", spacing.paddingBottom !== undefined ? "padding-bottom:0" : "", layers[i].bs === "none" ? "border-bottom:0" : ""].filter(Boolean).join(";");
+        if (reset) {
+          const css = `.${cls}>section.section{${reset}}`;
+          rules.push(width ? `@media(max-width:${width}px){${css}}` : css);
+        }
+      }
       if (typography) {
         const has = (key: string) => layers.some(layer => layer[key] !== undefined && layer[key] !== null);
         const inherit = [["ff", "font-family"], ["fs", "font-size"], ["fw", "font-weight"], ["lh", "line-height"], ["tc", "color"]].filter(([key]) => has(key)).map(([key, css]) => `${css}:inherit${key === "tc" ? "!important" : ""}`).join(";");
@@ -785,7 +801,7 @@ async function buildIndexHtml(model: SiteModel, ogImage?: string, restrictExtern
   ].join("; ");
 
   const header = pageHeader !== undefined ? `<header class="container" data-site-template="header">${pageHeader}</header>` :
-    model.title && model.title.trim()
+    model.theme?.showTitle !== false && model.title && model.title.trim()
       ? `<header class="container"><h1 class="site-title">${esc(model.title)}</h1></header>`
       : "";
 
@@ -1377,6 +1393,9 @@ export function adaptFromSiteBuilderDoc(document: unknown): SiteModel {
     theme: {
       accent: typeof theme.accent === "string" ? theme.accent : undefined,
       container: Number.isFinite(theme.container) ? Number(theme.container) : undefined,
+      background: typeof theme.background === "string" ? theme.background : undefined,
+      foreground: typeof theme.foreground === "string" ? theme.foreground : undefined,
+      showTitle: theme.showTitle !== false,
     },
     blocks,
   };

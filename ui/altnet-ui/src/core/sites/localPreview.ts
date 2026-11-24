@@ -5,8 +5,8 @@ import { cleanPreviewCss, dataResource } from "./previewResources";
 import { popupSettings } from "../../screens/SiteBuilder/popup";
 
 const localMedia = /^data:(?:image\/(?:png|jpeg|webp|gif)|video\/(?:mp4|webm)|audio\/(?:mpeg|ogg|wav));base64,/i;
-export const LOCAL_NAV_RUNTIME = "(()=>{const m=document.querySelector('meta[name=altnet-local-fragment]');if(m){const t=document.getElementById(m.content);if(t)t.scrollIntoView()}document.addEventListener('click',e=>{const a=e.target instanceof Element?e.target.closest('a[data-alt-local-page]'):null;if(!a)return;e.preventDefault();parent.postMessage({type:'altnet.local-page',path:a.dataset.altLocalPage,fragment:a.dataset.altLocalFragment||''},'*')})})();";
-export const LOCAL_NAV_HASH = "jYKam0UsSqvIFwju2RpDaig8K56CBNVT28/sdIkyrtU=";
+export const LOCAL_NAV_RUNTIME = "(()=>{const m=document.querySelector('meta[name=altnet-local-fragment]');if(m){const t=document.getElementById(m.content);if(t)t.scrollIntoView()}document.addEventListener('click',e=>{const a=e.target instanceof Element?e.target.closest('a'):null;if(!a)return;if(a.dataset.altLocalPage){e.preventDefault();parent.postMessage({type:'altnet.local-page',path:a.dataset.altLocalPage,fragment:a.dataset.altLocalFragment||''},'*');return}const h=a.getAttribute('href');if(!h||!/^#[a-zA-Z0-9_-]{0,128}$/.test(h))return;e.preventDefault();if(h.length>1){const t=document.getElementById(h.slice(1));if(t)t.scrollIntoView()}})})();";
+export const LOCAL_NAV_HASH = "iQgeaKaDvZlBIemSOFlm0Y80sxSxhDoAH3P1NI7PzAs=";
 const policy = `default-src 'none'; script-src 'sha256-${SITE_RUNTIME_HASH}' 'sha256-${LOCAL_NAV_HASH}' 'sha256-${LOTTIE_HASH}'; script-src-attr 'none'; style-src data:; style-src-attr 'none'; img-src data:; media-src data:; font-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'`;
 const escapeText = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -156,7 +156,7 @@ export function prepareLocalPreviewHtml(html: string, pagePaths: readonly string
   if (validAnimations && animationEngine) {
     template.content.appendChild(trustedScript(animationEngine, LOTTIE_HASH));
   }
-  if (localPages.size) {
+  if (localPages.size || template.content.querySelector('a[href^="#"]')) {
     if (/^[a-zA-Z0-9_-]{1,128}$/.test(fragment)) {
       const marker = document.createElement("meta"); marker.name = "altnet-local-fragment"; marker.content = fragment;
       template.content.appendChild(marker);

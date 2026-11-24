@@ -1,0 +1,9 @@
+.showcase-dialog[data-theme="light"] { background: #faf9ff; border-color: #d8d3e6; color: #262238; }
+.showcase-dialog[data-theme="light"] .sg-header { border-color: #e1ddea; }
+.showcase-dialog[data-theme="light"] .sg-preview { background: #f0eef7; border-color: #e1ddea; }
+.showcase-dialog[data-theme="light"] .sg-card-copy { background: #fff; }
+.showcase-dialog[data-theme="light"] .sg-title { color: #262238; }
+.showcase-dialog[data-theme="light"] .sg-muted { color: #635d75; }
+.showcase-dialog[data-theme="light"] .sg-outline { border-color: #c9c3d9; }
+.showcase-dialog :focus-visible { outline: 2px solid #9988ff; outline-offset: 2px; }
+.showcase-dialog button[aria-pressed="true"].sg-outline { background: #7662e8; color: white; border-color: #7662e8; }

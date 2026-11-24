@@ -37,6 +37,20 @@ export default function ProjectPanel({ doc, setDoc, onChangeProject, onExportPro
       <button type="button" className={button} onClick={onExportProject}>Скачать проект</button>
       <button type="button" className={button} onClick={onImportProject}>Импорт проекта</button>
     </div>
+    <details className="text-xs text-[#cfd5e6]">
+      <summary className="cursor-pointer py-1">Оформление сайта</summary>
+      <div className="grid gap-2 pt-2">
+        {([['background', 'Фон страницы', '#0b0d12'], ['foreground', 'Основной цвет текста', '#e7e9f0'], ['accent', 'Акцент', '#5865f2']] as const).map(([key, label, fallback]) => {
+          const value = doc.theme?.[key];
+          return <label key={key} className="flex items-center justify-between gap-2">{label}
+            <input type="color" aria-label={label} value={typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback}
+              onChange={event => { const color = event.target.value; setDoc(current => ({ ...current, theme: { ...current.theme, [key]: color } })); }} />
+          </label>;
+        })}
+        <label className="flex items-center gap-2"><input type="checkbox" checked={doc.theme?.showTitle !== false}
+          onChange={event => { const showTitle = event.target.checked; setDoc(current => ({ ...current, theme: { ...current.theme, showTitle } })); }} />Показывать название над сайтом</label>
+      </div>
+    </details>
     <label className="grid gap-1 text-xs text-[#cfd5e6]">Переименовать текущий проект
       <input className={field} value={rename} maxLength={120} onChange={event => setRename(event.target.value)} placeholder={active.name} />
     </label>

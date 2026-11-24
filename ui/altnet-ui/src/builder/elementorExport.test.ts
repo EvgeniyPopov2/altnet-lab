@@ -30,6 +30,13 @@ async function exported(blocks: unknown[], format: string, restrict = false) {
   return { html: await zip.file("index.html")!.async("string"), css: await zip.file("styles.css")!.async("string") };
 }
 describe("HTML и ZIP", () => {
+  it.each(["html", "zip"])("не добавляет стандартный внутренний отступ поверх заданного в %s", async format => {
+    const { css } = await exported([{ type: "heading", text: "Тест", styleByBp: { desktop: { pt: 12, pb: 0, bs: "none" }, mobile: { pt: 4 } } }], format);
+    expect(css).toMatch(/\.sb-style-0>section\.section\{padding-top:0;padding-bottom:0;border-bottom:0\}/);
+    expect(css).toContain("padding-top:12px");
+    expect(css).toContain("padding-top:4px");
+  });
+
   it.each(["html", "zip"])("выводит адаптивную геометрическую обрезку в %s", async (format) => {
     const {css} = await exported([{type:"p", text:"Тест", styleByBp:{desktop:{clipShape:"hexagon"}, mobile:{clipShape:"none"}}}], format);
     expect(css).toContain("clip-path:polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%)");

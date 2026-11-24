@@ -9,6 +9,7 @@
     "test:onion-ui": "node tests/onion-car-ui.mjs",
     "test:onion-integration": "node tests/onion-car-integration.mjs",
     "test:onion-share": "node tests/onion-share-e2e.mjs",
+    "test:showcase": "node tests/showcase-gallery-ui.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

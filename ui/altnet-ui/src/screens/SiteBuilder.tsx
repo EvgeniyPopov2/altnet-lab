@@ -53,6 +53,7 @@ import { StyleClassesContext } from "./SiteBuilder/styleClassesContext";
 import { SiteDataContext } from "./SiteBuilder/siteDataContext";
 import LoopGridView from "./SiteBuilder/blocks/loopgrid/view";
 import TemplatePanel from "./SiteBuilder/TemplatePanel";
+const ShowcaseGallery = React.lazy(() => import("./SiteBuilder/ShowcaseGallery"));
 import { exportPagesZip } from "./SiteBuilder/exportPages";
 import { exportProject, importProject, parseProject, projectsOf } from "./SiteBuilder/projects";
 import type {
@@ -1536,6 +1537,7 @@ export default function SiteBuilder({
           (sidebarCollapsed ? " hidden" : "")
         }
       >
+        {!selBlock && <React.Suspense fallback={null}><ShowcaseGallery doc={doc} setDoc={setDoc} theme={editorTheme} onChangeProject={() => { setSelId(null); setTargetCell(null); }} /></React.Suspense>}
         <div>
           {!selBlock && <Field label="Поиск виджета">
             <input
