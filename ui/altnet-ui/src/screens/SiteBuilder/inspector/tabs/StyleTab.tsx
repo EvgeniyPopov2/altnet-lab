@@ -109,10 +109,17 @@ export default function StyleTab({ block, onPatch, device }: Props) {
       <option value="">Наследовать</option>{options.map(([value, title]) => <option key={value} value={value}>{title}</option>)}
     </select></Field>;
   }
-  function styleColor(key: string, label: string) {
+  function styleColor(key: string, label: string, fallback = "#000000") {
     const value = String(current[key] ?? "");
+    const inherited = String(resolved[key] ?? fallback);
+    const pickerColor = (raw: string) => {
+      if (/^#[a-f0-9]{3,4}$/i.test(raw)) return "#" + raw.slice(1, 4).split("").map(char => char + char).join("");
+      if (/^#[a-f0-9]{6}([a-f0-9]{2})?$/i.test(raw)) return raw.slice(0, 7);
+      return undefined;
+    };
+    const pickerValue = pickerColor(value) ?? pickerColor(inherited) ?? fallback;
     return <div className="sb-color-control"><Field label={label}><input className={input} value={value} placeholder="Наследовать" onChange={e => change(key, e.target.value)} /></Field>
-      <input type="color" aria-label={`Выбрать: ${label}`} value={/^#[a-f0-9]{6}$/i.test(value) ? value : "#000000"} onChange={e => change(key, e.target.value)} />
+      <input type="color" aria-label={`Выбрать: ${label}`} value={pickerValue} onChange={e => change(key, e.target.value)} />
     </div>;
   }
   return <div className="grid gap-3">
@@ -235,12 +242,36 @@ export default function StyleTab({ block, onPatch, device }: Props) {
     <div className="text-sm font-semibold">Оформление блока</div>
     <SpacingControl block={block} device={device} kind="padding" onPatch={onPatch} />
     <SpacingControl block={block} device={device} kind="margin" onPatch={onPatch} />
+    <details className="rounded border px-2 py-1"><summary>Тень блока</summary><div className="grid gap-2 py-2">
+      {styleChoice("blockShadow", "Тип тени блока", [["none", "Без тени"], ["outer", "Внешняя"], ["inset", "Внутренняя"]])}
+      {(resolved.blockShadow === "outer" || resolved.blockShadow === "inset") && <>
+        {styleColor("blockShadowColor", "Цвет тени блока (HEX)")}
+        {slider("styleByBp", "blockShadowX", "Смещение тени блока по X, px", -256, 256)}
+        {slider("styleByBp", "blockShadowY", "Смещение тени блока по Y, px", -256, 256, 8)}
+        {slider("styleByBp", "blockShadowBlur", "Размытие тени блока, px", 0, 256, 24)}
+        {slider("styleByBp", "blockShadowSpread", "Распространение тени блока, px", -256, 256)}
+      </>}
+    </div></details>
     {slider("styleByBp", "br", "Скругление, px", 0, 512)}
     {slider("styleByBp", "w", "Ширина блока, %", 1, 200, 100)}
     {slider("styleByBp", "minh", "Минимальная высота блока, px", 0, 1200)}
     {slider("styleByBp", "op", "Непрозрачность блока, %", 0, 100, 100)}
     <Field label="Цвет фона (HEX)"><input className={input} value={current.bg ?? ""} onChange={e => change("bg", e.target.value)} placeholder="#ffffff" /></Field>
     {current.bg && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(String(current.bg)) && <p className="text-xs text-amber-300">Для публикации введите цвет в формате HEX, например #ffffff.</p>}
+    <details className="rounded border px-2 py-1"><summary>Градиент фона</summary><div className="grid gap-2 py-2">
+      {styleChoice("backgroundType", "Тип градиента", [["none", "Без градиента"], ["linear", "Линейный"], ["radial", "Радиальный"]])}
+      {(resolved.backgroundType === "linear" || resolved.backgroundType === "radial") && <>
+        {styleColor("gradientFrom", "Первый цвет градиента (HEX)", "#6e59f2")}
+        {slider("styleByBp", "gradientStart", "Положение первого цвета, %", 0, 100, 0)}
+        {styleColor("gradientTo", "Второй цвет градиента (HEX)", "#d9d1ff")}
+        {slider("styleByBp", "gradientEnd", "Положение второго цвета, %", 0, 100, 100)}
+        {resolved.backgroundType === "linear" && slider("styleByBp", "gradientAngle", "Угол градиента, °", 0, 360, 180)}
+        {resolved.backgroundType === "radial" && <>
+          {slider("styleByBp", "gradientX", "Центр градиента по X, %", 0, 100, 50)}
+          {slider("styleByBp", "gradientY", "Центр градиента по Y, %", 0, 100, 50)}
+        </>}
+      </>}
+    </div></details>
     {slider("styleByBp", "bw", "Ширина рамки, px", 0, 512)}
     <Field label="Стиль рамки"><select className={input} value={current.bs ?? ""} onChange={e => change("bs", e.target.value)}>
       <option value="">Наследовать</option><option value="none">Без рамки</option><option value="solid">Сплошная</option><option value="dashed">Штриховая</option><option value="dotted">Точечная</option>

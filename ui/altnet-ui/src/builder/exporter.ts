@@ -14,6 +14,8 @@ import { serializeBlock } from "./registry";
 import { buttonLinkOptions, placeholderDataUrl, sanitizeHref, externalLinkRels } from "./cdr";
 import { resolveResponsiveStyle } from "../screens/SiteBuilder/responsiveStyle";
 import { spacingStyle } from "../screens/SiteBuilder/boxDimensions";
+import { backgroundStyle } from "../screens/SiteBuilder/backgroundStyle";
+import { blockShadowStyle } from "../screens/SiteBuilder/blockShadowStyle";
 import { advancedLayoutStyle } from "../screens/SiteBuilder/advancedLayoutStyle";
 import { transformStyle } from "../screens/SiteBuilder/transforms";
 import { animationCss, LOTTIE_HASH, loadLottieRenderer } from "./lottieRenderer";
@@ -390,7 +392,7 @@ function prepareStyleRules(model: SiteModel): string {
       if (typeof raw !== "number" || !Number.isFinite(raw)) return;
       values.push(`${property}:${Math.max(negative ? -512 : 0, Math.min(512, raw))}px`);
     };
-    for (const [key, value] of Object.entries({ ...spacingStyle(style), ...transformStyle(style), ...advancedLayoutStyle(style) })) {
+    for (const [key, value] of Object.entries({ ...spacingStyle(style), ...transformStyle(style), ...advancedLayoutStyle(style), ...backgroundStyle(style), ...blockShadowStyle(style) })) {
       values.push(key.replace(/[A-Z]/g, char => "-" + char.toLowerCase()) + ":" + value);
     }
     add("border-radius", style.br); add("border-width", style.bw);

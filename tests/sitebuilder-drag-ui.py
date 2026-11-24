@@ -31,7 +31,7 @@ parser.add_argument("--button-style-smoke", action="store_true", help="Пров�
 parser.add_argument("--button-icon-padding-smoke", action="store_true", help="Проверить иконку и отступы кнопки по сторонам")
 parser.add_argument("--button-effects-smoke", action="store_true", help="Проверить градиент и тень кнопки")
 parser.add_argument("--heading-semantics-smoke", action="store_true", help="Проверить семантику и ссылку заголовка")
-for case in ("layout","library","animation","templates","loop","matrix","custom-grid","classes","publishing","popup"):
+for case in ("layout","library","animation","templates","loop","matrix","custom-grid","classes","publishing","popup","gradient"):
  parser.add_argument("--elementor-"+case+"-smoke", action="store_const", dest="elementor_case", const=case)
 args=parser.parse_args()
 with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
@@ -119,7 +119,7 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
   js("[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Создать сайт').click()")
   wait("!!document.querySelector('[data-insert-slot=\"slot-0\"]')")
   if args.elementor_case:
-   elementor_checks.run(args.elementor_case,js,wait,call,d)
+   elementor_checks.run(args.elementor_case,js,wait,call,d,args.screenshot)
    sys.exit(0)
   if args.mobile_sort_touch_smoke:
    js("document.querySelector('[aria-label=\"Закрыть все\"]')?.click()")

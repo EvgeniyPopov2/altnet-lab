@@ -9,6 +9,8 @@ PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEkl
 def fixture(case):
     if case in ("custom-grid", "matrix"):
         return {"title": "Макеты", "blocks": []}
+    if case == "gradient":
+        return {"title":"Фон", "blocks":[{"id":"para", "type":"p", "text":"Проверка"}]}
     if case == "popup":
         return {"title":"Окна","blocks":[{"type":"p","id":"homeText","text":"Главная"},{"type":"btn","id":"open","label":"Открыть контакты","href":"#popup-6d5ja5"}],
                 "sitePages":{"version":1,"activeId":"home","pages":[{"id":"home","path":"index.html"},
@@ -43,7 +45,7 @@ def upload(call, selector, path):
     call("DOM.setFileInputFiles", {"nodeId": node, "files": [str(path.resolve())]})
 
 
-def run(case, js, wait, call, directory):
+def run(case, js, wait, call, directory, screenshot=None):
     js("""window.editorQA = {
       block(id) {const e=document.querySelector('[data-canvas-block="'+id+'"] .cursor-pointer') ?? document.querySelector('[data-layout-block="'+id+'"]'); e.click()},
       field(label) {return [...document.querySelectorAll('.builder-inspector label')].find(e=>e.querySelector('span')?.textContent===label)?.querySelector('input,select,textarea')},
@@ -57,7 +59,36 @@ def run(case, js, wait, call, directory):
         document.body.append(f);f.srcdoc=restricted?await (await import('/src/core/sites/localPreview.ts')).prepareLocalSite(html):html;},
       doc(){return document.getElementById('export-check')?.contentDocument}
     };""")
-    if case == "popup":
+    if case == "gradient":
+        js("editorQA.block('para')")
+        wait("!!document.querySelector('.builder-inspector')")
+        js("document.querySelector('#inspector-tab-style').click()")
+        js("[...document.querySelectorAll('.builder-inspector summary')].find(e=>e.textContent==='Градиент фона').click()")
+        js("editorQA.change(editorQA.field('Тип градиента'),'linear')")
+        js("editorQA.change(editorQA.field('Первый цвет градиента (HEX)'),'#ff0000')")
+        js("editorQA.change(editorQA.field('Второй цвет градиента (HEX)'),'#0000ff')")
+        js("editorQA.change(editorQA.field('Угол градиента, °'),90)")
+        js("[...document.querySelectorAll('.builder-inspector summary')].find(e=>e.textContent==='Тень блока').click()")
+        js("editorQA.change(editorQA.field('Тип тени блока'),'outer')")
+        js("editorQA.change(editorQA.field('Смещение тени блока по X, px'),5)")
+        wait("editorQA.saved().blocks[0].styleByBp?.desktop?.gradientAngle===90")
+        assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).backgroundImage").startswith('linear-gradient(90deg, rgb(255, 0, 0)')
+        assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).boxShadow").startswith('rgba(0, 0, 0, 0.25) 5px')
+        if screenshot:
+            Path(screenshot).write_bytes(base64.b64decode(call("Page.captureScreenshot", {"format":"png"})["data"]))
+        js("[...document.querySelectorAll('.builder-inspector button')].find(e=>e.textContent==='Mobile').click()")
+        assert js("document.querySelector('[aria-label=\"Выбрать: Первый цвет градиента (HEX)\"]').value")=="#ff0000"
+        js("editorQA.change(editorQA.field('Тип градиента'),'radial')")
+        js("editorQA.change(editorQA.field('Центр градиента по X, %'),25)")
+        wait("editorQA.saved().blocks[0].styleByBp?.mobile?.gradientX===25")
+        assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).backgroundImage").startswith('radial-gradient')
+        js("editorQA.export(true)")
+        wait("!!editorQA.doc()?.querySelector('.sb-style-0')")
+        assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).backgroundImage").startswith('linear-gradient(90deg')
+        assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).boxShadow").startswith('rgba(0, 0, 0, 0.25) 5px')
+        js("document.getElementById('export-check').style.width='375px'")
+        wait("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).backgroundImage.startsWith('radial-gradient')")
+    elif case == "popup":
         js("editorQA.export(true)")
         wait("!!editorQA.doc()?.querySelector('dialog[data-popup-options]')")
         assert not js("editorQA.doc().querySelector('dialog').open")
@@ -118,9 +149,13 @@ def run(case, js, wait, call, directory):
         wait("!!document.querySelector('.sb-class-editor')")
         js("""editorQA.change([...document.querySelectorAll('.sb-class-editor label')].find(l=>l.querySelector('span')?.textContent==='Цвет текста (HEX)').querySelector('input'),'#884422')""")
         wait("['first','second'].every(id=>getComputedStyle(document.querySelector('[data-styled-block='+id+']')).color==='rgb(136, 68, 34)')")
+        js("[...document.querySelectorAll('.sb-class-editor summary')].find(e=>e.textContent==='Градиент фона').click()")
+        js("editorQA.change([...document.querySelectorAll('.sb-class-editor label')].find(l=>l.querySelector('span')?.textContent==='Тип градиента').querySelector('select'),'linear')")
+        wait("['first','second'].every(id=>getComputedStyle(document.querySelector('[data-styled-block='+id+']')).backgroundImage.startsWith('linear-gradient'))")
         js("editorQA.export(true)")
         wait("editorQA.doc()?.querySelectorAll('.sb-global-article-title').length===2")
         assert js("Array.from(editorQA.doc().querySelectorAll('.sb-global-article-title')).every(e=>getComputedStyle(e).color==='rgb(136, 68, 34)')")
+        assert js("Array.from(editorQA.doc().querySelectorAll('.sb-global-article-title')).every(e=>getComputedStyle(e).backgroundImage.startsWith('linear-gradient'))")
     elif case == "matrix":
         palette = "button[draggable=true]:not(:disabled)"
         labels = js("[...new Set(Array.from(document.querySelectorAll("+json.dumps(palette)+")).filter(b=>b.getClientRects().length).map(b=>b.textContent.trim()))]")
