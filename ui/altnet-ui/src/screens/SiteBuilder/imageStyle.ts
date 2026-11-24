@@ -1,3 +1,4 @@
+import { cornerStyles } from "./corners";
 import { resolveResponsiveStyle } from "./responsiveStyle";
 
 type Device = "desktop" | "tablet" | "mobile";
@@ -34,8 +35,8 @@ export function imageStyle(byDevice: unknown, device: Device): Record<string, st
   if (height !== undefined) result.height = `${height}px`;
   if (opacity !== undefined) result.opacity = opacity / 100;
   if (typeof source.fit === "string" && ["contain", "cover", "fill", "none", "scale-down"].includes(source.fit)) result.objectFit = source.fit;
-  const radius = number("radius", 0, 512), borderWidth = number("borderWidth", 0, 32);
-  if (radius !== undefined) result.borderRadius = `${radius}px`;
+  const borderWidth = number("borderWidth", 0, 32);
+  Object.assign(result, cornerStyles(byDevice, device, "normal", 512));
   if (borderWidth !== undefined) { result.borderWidth = `${borderWidth}px`; result.borderStyle = "solid"; }
   if (typeof source.borderType === "string" && borderTypes.includes(source.borderType)) result.borderStyle = source.borderType;
   if (imageAlignment(byDevice, device)) result.display = "inline-block";
@@ -78,10 +79,11 @@ function imageFilter(source: Record<string, unknown>, prefix: string): string | 
 export function imageHoverStyle(byDevice: unknown, device: Device): Record<string, string | number> {
   const source = resolveResponsiveStyle({}, byDevice, device);
   const result: Record<string, string | number> = {};
-  for (const [key, css, max, unit] of [["hoverOpacity", "opacity", 100, ""], ["hoverRadius", "borderRadius", 512, "px"], ["hoverBorderWidth", "borderWidth", 32, "px"]] as const) {
+  for (const [key, css, max, unit] of [["hoverOpacity", "opacity", 100, ""], ["hoverBorderWidth", "borderWidth", 32, "px"]] as const) {
     const value = source[key];
     if (typeof value === "number" && Number.isFinite(value)) result[css] = unit ? `${Math.max(0, Math.min(max, value))}${unit}` : Math.max(0, Math.min(max, value)) / 100;
   }
+  Object.assign(result, cornerStyles(byDevice, device, "hover", 512));
   if (result.borderWidth !== undefined) result.borderStyle = typeof source.borderType === "string" && borderTypes.includes(source.borderType) ? source.borderType : "solid";
   if (typeof source.hoverBorderType === "string" && borderTypes.includes(source.hoverBorderType)) result.borderStyle = source.hoverBorderType;
   if (typeof source.hoverBorderColor === "string" && /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(source.hoverBorderColor)) result.borderColor = source.hoverBorderColor;

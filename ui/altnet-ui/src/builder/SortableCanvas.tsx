@@ -1,24 +1,16 @@
+import type { BlockType, GridTemplate } from "../screens/SiteBuilder/types";
 import React, { useMemo, useState } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, useDroppable } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, arrayMove, rectSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { BLOCK_DRAG_TYPE, WIDGET_DRAG_TYPE, readWidgetType } from "../screens/SiteBuilder/palette/drag";
+import CustomLayout from "../screens/SiteBuilder/layout/CustomLayout";
 import { moveBlockToSlot } from "./slotOrder";
 
 type SortableLike = { id: string; locked?: boolean };
 
-export type InsertChoice =
-  | "h1" | "heading" | "p" | "btn" | "img"
-  | "divider" | "spacer"
-  | "hero" | "cols2" | "section" | "grid"
-  | "icon" | "iconlist" | "alert" | "html" | "code"
-  | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
-  | "counter" | "progress" | "breadcrumbs" | "pagination" | "social" | "iconbox" | "imagebox"
-  | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
-  | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
-  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
-  | "container" | "sidebar" | "offcanvas"| "shortcode" | "pricetable";
+export type InsertChoice = BlockType | "bio-card";
 
 type Props<T extends SortableLike> = {
   cols?: 1 | 2 | 3 | 4;
@@ -28,7 +20,7 @@ type Props<T extends SortableLike> = {
   renderBlock: (b: T) => React.ReactNode;
   onReorder: (next: T[]) => void;
   /** Вставка нового блока в индекс (0..N). Вызывается при клике «+» и выборе типа. */
-  onInsertAt?: (index: number, type: InsertChoice, preset?: any) => void;
+  onInsertAt?: (index: number, type: InsertChoice, preset?: number[] | GridTemplate) => void;
   onMoveToRoot?: (index: number, id: string) => void;
 };
 
@@ -37,7 +29,7 @@ type InsertSlotVariant = "default" | "section";
 type InsertSlotProps = {
   id: string;
   variant?: InsertSlotVariant;
-  onInsert?: (type: InsertChoice, preset?: any) => void;
+  onInsert?: (type: InsertChoice, preset?: number[] | GridTemplate) => void;
   onMoveExisting?: (id: string) => void;
 };
 
@@ -101,6 +93,7 @@ function InsertSlot({ id, onInsert, onMoveExisting, variant }: InsertSlotProps) 
   // Состояние мастера для слота секции
   const [stage, setStage] = useState<"root" | "layout" | "flex" | "grid">("root");
 
+  const [rows, setRows] = useState(1);
   const isSectionMaster = variant === "section" || stage !== "root";
 
   return (
@@ -216,7 +209,7 @@ function InsertSlot({ id, onInsert, onMoveExisting, variant }: InsertSlotProps) 
                     {/* Grid карточка */}
                     <button
                       type="button"
-                      onClick={() => setStage("grid")}
+                      onClick={() => { setRows(1); setStage("grid"); }}
                       className="group flex w-64 flex-col items-center gap-3 rounded-2xl border-2 border-[#E5D9FF] bg-[#fdf2ff] px-6 py-5 text-[#111827] hover:border-[#6E59F2] hover:bg-white transition focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6E59F2] focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                     >
                       {/* Псевдо-иконка Grid 2×2 */}
@@ -258,7 +251,7 @@ function InsertSlot({ id, onInsert, onMoveExisting, variant }: InsertSlotProps) 
                       <div className="text-[11px] text-[#6b7280]">
                         {stage === "flex"
                           ? "Колонки в одну строку, поведение задаётся flex-контейнером"
-                          : "Выберите количество и пропорции колонок"}
+                          : "Выберите число строк и пропорции колонок"}
                       </div>
                     </div>
 
@@ -272,6 +265,11 @@ function InsertSlot({ id, onInsert, onMoveExisting, variant }: InsertSlotProps) 
                     </button>
                   </div>
 
+                  {stage === "grid" && <label className="sb-preset-rows">Строки сетки
+                    <select value={rows} onChange={event => setRows(Number(event.target.value))}>
+                      {Array.from({ length: 16 }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+                    </select>
+                  </label>}
                   <div
                     className={
                       stage === "flex"
@@ -292,7 +290,8 @@ function InsertSlot({ id, onInsert, onMoveExisting, variant }: InsertSlotProps) 
                             [1, 1, 2],
                             [3, 1],
                             [1, 3],
-                            [2, 2],
+                            [1, 1, 1, 1, 1],
+                            [1, 1, 1, 1, 1, 1],
                             [1, 1, 1, 1],
                           ]
                         : [
@@ -307,32 +306,27 @@ function InsertSlot({ id, onInsert, onMoveExisting, variant }: InsertSlotProps) 
                       <button
                         key={idx}
                         type="button"
-                        aria-label={`Макет: ${cols.length} ${cols.length === 1 ? "колонка" : "колонки"}, пропорции ${cols.join(" к ")}`}
+                        aria-label={`Макет: ${cols.length} ${cols.length === 1 ? "колонка" : cols.length < 5 ? "колонки" : "колонок"}, пропорции ${cols.join(" к ")}${stage === "grid" ? ", строк " + rows : ""}`}
                         onClick={() => {
-                          // Передаём выбранную структуру колонок как preset (пока без жёсткого типа)
-                          onInsert?.(
-                            stage === "flex"
-                              ? ("section" as InsertChoice)
-                              : ("grid" as InsertChoice),
-                            cols
-                          );
+                          if (stage === "grid") onInsert?.("grid", { columns: cols, rows });
+                          else onInsert?.("section", cols);
                           setStage("root");
                         }}
                         className="flex flex-col items-center gap-1 rounded-lg border border-[#e5e2f1] bg-[#fbfaff] px-2 py-2 hover:border-[#6E59F2] hover:bg-[#f1eeff] transition focus-visible:outline-2 focus-visible:outline-[#6E59F2]"
                       >
-                        <div data-layout-preview={cols.join("-")} aria-hidden="true" className="h-12 w-full max-w-[120px] rounded-md border border-[#c8bfee] bg-white flex gap-1 p-1 overflow-hidden">
-                          {cols.map((flexValue, i) => (
-                            <div
-                              key={i}
-                              className="min-w-0 rounded-sm border border-[#8979dd] bg-[#c9c1f5]"
-                              style={{ flex: `${flexValue} 1 0%` }}
-                            />
-                          ))}
+                        <div data-layout-preview={cols.join("-")} aria-hidden="true" className="sb-column-preview"
+                          style={{ minHeight: stage === "grid" ? Math.max(40, rows * 5 + 4) : undefined, gridTemplateColumns: cols.map(weight => `minmax(0, ${weight}fr)`).join(" "), gridTemplateRows: `repeat(${stage === "grid" ? rows : 1}, minmax(0,1fr))` }}>
+                          {Array.from({length: cols.length * (stage === "grid" ? rows : 1)}, (_, i) => <span key={i} />)}
                         </div>
-                        <span className="text-[11px] font-semibold text-[#40365f]">{cols.length} {cols.length === 1 ? "колонка" : "колонки"} · {cols.join(" : ")}</span>
+                        <span className="sb-preset-caption">{stage === "grid" ? `${cols.length} × ${rows}` : `${cols.length} ${cols.length === 1 ? "колонка" : cols.length < 5 ? "колонки" : "колонок"}`} · {cols.join(" : ")}</span>
                       </button>
                     ))}
                   </div>
+                  <CustomLayout key={stage} grid={stage === "grid"} onInsert={(weights, height) => {
+                    if (stage === "grid") onInsert?.("grid", {columns: weights, rows: height});
+                    else onInsert?.("section", weights);
+                    setStage("root");
+                  }} />
                 </div>
               )}
             </div>

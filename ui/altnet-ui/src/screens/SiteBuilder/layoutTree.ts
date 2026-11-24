@@ -31,7 +31,7 @@ export function findLocation(blocks: Block[], id: string): { parentId: string | 
   return undefined;
 }
 
-function lockedPath(blocks: Block[], id: string, locked = false): boolean {
+export function lockedPath(blocks: Block[], id: string, locked = false): boolean {
   for (const block of blocks) {
     const here = locked || ("locked" in block && Boolean(block.locked));
     if (block.id === id) return here;

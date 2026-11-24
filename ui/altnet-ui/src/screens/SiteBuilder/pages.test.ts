@@ -75,7 +75,7 @@ describe("страницы сайта", () => {
     expect(JSON.parse((await zip.file("manifest.json")?.async("string"))!).pages).toHaveLength(2);
   });
   it("не создаёт неполный ZIP, если виджет одной из страниц не поддерживается", async () => {
-    const invalid = addPage({ ...original, blocks: [{ id: "map", type: "map", lat: 1, lon: 2 }] }, "Вторая");
+    const invalid = addPage({ ...original, blocks: [{ id: "animation-without-file", type: "lottie" }] }, "Вторая");
     await expect(exportPagesZip(invalid)).rejects.toThrow("неподдерживаемые виджеты");
   });
   it("включает в sitemap только индексируемые страницы с безопасным каноническим адресом", async () => {

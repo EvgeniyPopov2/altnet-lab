@@ -9,7 +9,7 @@ function safeHref(h: string) {
 
 export default function ContentNavView({ block }: { block: ContentNavBlock }) {
   const row = (block.orientation ?? "horizontal") === "horizontal";
-  const items = block.items || [];
+  const items = React.useMemo(() => block.items || [], [block.items]);
   const [active, setActive] = React.useState(block.activeHref || (items[0]?.href ?? ""));
   const offset = Math.max(0, Math.floor(block.spyOffset ?? 120));
   const aria = block.ariaLabel || "Навигация по контенту";

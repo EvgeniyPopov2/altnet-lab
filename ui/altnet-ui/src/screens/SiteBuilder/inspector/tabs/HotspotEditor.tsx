@@ -6,7 +6,7 @@ import LocalImageInput from "./LocalImageInput";
 
 const input = "w-full rounded-lg border border-[#1f2751] bg-[#0c0f1a] px-3 py-2";
 const clamp = (value: number) => Math.max(0, Math.min(100, Number.isFinite(value) ? value : 50));
-export default function HotspotEditor({ block, onPatch }: { block: HotspotBlock; onPatch: (patch: Record<string, any>) => void }) {
+export default function HotspotEditor({ block, onPatch }: { block: HotspotBlock; onPatch: (patch: Record<string, unknown>) => void }) {
   const board = useRef<HTMLDivElement>(null);
   const markers = Array.isArray(block.markers) ? block.markers : [];
   const update = (index: number, patch: Partial<HotspotMarker>) => onPatch({ markers: markers.map((marker, i) => i === index ? { ...marker, ...patch } : marker) });

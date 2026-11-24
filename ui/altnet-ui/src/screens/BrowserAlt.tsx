@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Plus, RotateCw, X } from "lucide-react";
-import { prepareLocalPreviewHtml } from "../core/sites/localPreview";
+import LocalSiteFrame from "../components/LocalSiteFrame";
 import {
   deletePublishedSite,
   getPublishedSite,
@@ -131,10 +131,10 @@ export default function BrowserAlt({
     return () => { active = false; };
   }, [activeTab?.url, activeTab?.reloadToken, publishedToken]);
 
+  const activeUrl = activeTab?.url;
   useEffect(() => {
-    if (!activeTab) return;
-    setAddressValue(activeTab.url);
-  }, [activeTab?.id, activeTab?.url]);
+    if (activeUrl !== undefined) setAddressValue(activeUrl);
+  }, [activeTab?.id, activeUrl]);
 
   const canGoBack = !!activeTab && activeTab.cursor > 0;
   const canGoForward =
@@ -462,13 +462,9 @@ export default function BrowserAlt({
 
         {site.storageWarning && <p role="alert" className="px-3 py-2 text-xs text-amber-300">{site.storageWarning}</p>}
         <p className="px-3 py-2 text-xs text-[#c9d0e9]">В локальном просмотре внешние ссылки, формы и медиа отключены до подключения защищённого маршрута.</p>
-        <iframe
-          key={`${activeTab.id}:${activeTab.url}:${activeTab.reloadToken}:${publishedToken}`}
-          ref={siteFrameRef}
-          title={page.title}
-          sandbox="allow-scripts"
-          srcDoc={prepareLocalPreviewHtml(page.html, site.pages?.map(item => item.path) ?? ["index.html"], url.split("#")[1] || "")}
-          className="w-full h-[70vh] bg-white"
+        <LocalSiteFrame key={`${activeTab.id}:${activeTab.url}:${activeTab.reloadToken}:${publishedToken}`}
+          frameRef={siteFrameRef} title={page.title} html={page.html}
+          paths={site.pages?.map(item => item.path) ?? ["index.html"]} fragment={url.split("#")[1] || ""}
         />
       </div>
     );

@@ -1,9 +1,9 @@
-import { resolveLayout } from "./layoutResponsive";
+import { resolveLayout, type LayoutByBreakpoint } from "./layoutResponsive";
 
 export const MAX_GRID_CELLS = 64;
 export const MAX_GRID_COLUMNS = 12;
 export type GridMerge = { start: number; columns: number; rows: number };
-type Grid = { layoutCells?: unknown[][]; layoutColumns?: unknown; layoutPreset?: unknown; layoutByBp?: Record<string, any>; layoutGap?: unknown; layoutMerges?: unknown };
+type Grid = { layoutCells?: unknown[][]; layoutColumns?: unknown; layoutPreset?: unknown; layoutByBp?: LayoutByBreakpoint; layoutGap?: unknown; layoutMerges?: unknown };
 
 /** Старые документы без числа колонок остаются однострочными. */
 export function gridColumnCount(block: Grid): number {
@@ -95,7 +95,7 @@ export function changeGrid(block: Grid, operation: "add-row" | "remove-row" | "a
     return matrix.flatMap(() => weights);
   };
   const base = repeat(gridTracks(block, "desktop"));
-  const by: Record<string, any> = { ...block.layoutByBp };
+  const by: LayoutByBreakpoint = { ...block.layoutByBp };
   for (const device of ["tablet", "mobile"] as const) {
     const setting = block.layoutByBp?.[device];
     if (setting && typeof setting === "object") {

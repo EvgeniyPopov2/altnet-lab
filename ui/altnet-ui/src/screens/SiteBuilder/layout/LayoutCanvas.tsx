@@ -3,7 +3,7 @@ import type { Block } from "../types";
 import type { InsertChoice } from "../../../builder/SortableCanvas";
 import { BLOCK_DRAG_TYPE, readWidgetType, WIDGET_DRAG_TYPE } from "../palette/drag";
 import { cellsOf } from "../layoutTree";
-import { resolveGridGaps, resolveLayout, type LayoutBreakpoint } from "../layoutResponsive";
+import { resolveFlexLayout, resolveGridGaps, resolveLayout, type LayoutBreakpoint } from "../layoutResponsive";
 import { gridColumnCount, gridCoveredCells, gridTracks, readGridMerges } from "../gridLayout";
 import "./layoutCanvas.css";
 
@@ -26,6 +26,7 @@ export default function LayoutCanvas({ block, device, selectedId, onSelect, onCh
   const locked = "locked" in block && Boolean(block.locked);
   const layout = resolveLayout(block, device);
   const gaps = block.type === "grid" ? resolveGridGaps(block, device) : { x: layout.gap, y: layout.gap };
+  const flex = block.type === "section" || block.type === "container" ? resolveFlexLayout(block, device) : null;
   const columns = (block.type === "grid" ? gridTracks(block, device) : layout.weights).map(weight => `minmax(0, ${weight}fr)`).join(" ");
   const merges = block.type === "grid" ? readGridMerges(block) || [] : [];
   const covered = block.type === "grid" ? gridCoveredCells(block) : new Set<number>();
@@ -64,7 +65,7 @@ export default function LayoutCanvas({ block, device, selectedId, onSelect, onCh
   }
 
   return (
-    <div className={`p-3 ${sectionClass}`}>
+    <div className={`p-3 ${sectionClass}`} style={flex?.contentWidth ? { maxWidth: "none" } : undefined}>
       {block.type === "section" && block.title && <h2 className={`mb-2 text-lg font-semibold ${align}`}>{block.title}</h2>}
       {block.type === "section" && block.text && <p className={`mb-2 ${align}`}>{block.text}</p>}
       {block.type === "container" && block.note && <p className="mb-2 text-xs text-[#677089]">{block.note}</p>}
@@ -75,10 +76,10 @@ export default function LayoutCanvas({ block, device, selectedId, onSelect, onCh
           {item.caption && <figcaption className="text-xs text-slate-700">{item.caption}</figcaption>}
         </figure>)}
       </div>}
-      <div className="grid" style={{ columnGap: `${gaps.x}px`, rowGap: `${gaps.y}px`, gridTemplateColumns: layout.mode === "stack" ? "minmax(0, 1fr)" : columns }}>
+      <div className="grid" data-layout-kind={flex ? "flex" : "grid"} style={flex?.row ?? { columnGap: `${gaps.x}px`, rowGap: `${gaps.y}px`, gridTemplateColumns: layout.mode === "stack" ? "minmax(0, 1fr)" : columns }}>
         {cells.map((items, index) => covered.has(index) ? null : (
           <div key={index} data-layout-cell={`${block.id}:${index}`}
-            style={merges.length && layout.mode === "columns" ? {
+            style={flex ? { flex: flex.cells[index], containerType: flex.sizing === "content" ? "normal" : undefined } : merges.length && layout.mode === "columns" ? {
               gridColumn: `${index % columnCount + 1} / span ${merges.find(item => item.start === index)?.columns || 1}`,
               gridRow: `${Math.floor(index / columnCount) + 1} / span ${merges.find(item => item.start === index)?.rows || 1}`,
             } : undefined}

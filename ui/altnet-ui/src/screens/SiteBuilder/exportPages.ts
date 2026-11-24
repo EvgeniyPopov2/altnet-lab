@@ -1,19 +1,18 @@
-import JSZip from "jszip";
 import { adaptFromSiteBuilderDoc, exportSingleHtml, sanitizeCanonicalUrl, unsupportedBlockTypes } from "../../builder/exporter";
 import { buildSitemap } from "../../builder/sitemap";
-import { visibleBlocks } from "./layoutTree";
-import { allPageDocuments } from "./pages";
+import { pagesForBuild } from "./siteTemplates";
 import type { Doc } from "./types";
 
 /** Каждая страница самодостаточна, поэтому относительные ссылки работают после распаковки. */
 export async function exportPagesZip(doc: Doc, onProgress?: (done: number, total: number) => void): Promise<Blob> {
-  const pages = allPageDocuments(doc);
+  const pages = pagesForBuild(doc);
+  const { default: JSZip } = await import("jszip");
   const zip = new JSZip();
   const manifest: { path: string; title: string }[] = [];
   const indexableUrls: string[] = [];
   onProgress?.(0, pages.length);
   for (const [index, page] of pages.entries()) {
-    const model = adaptFromSiteBuilderDoc({ ...page.document, blocks: visibleBlocks(page.document.blocks) });
+    const model = adaptFromSiteBuilderDoc(page.document);
     const unsupported = unsupportedBlockTypes(model);
     if (unsupported.length) throw new Error(`Страница «${page.document.title}»: неподдерживаемые виджеты ${unsupported.join(", ")}.`);
     const html = await exportSingleHtml(model, { bundleAssets: true });

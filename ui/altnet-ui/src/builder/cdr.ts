@@ -12,7 +12,7 @@ export function sanitizeHref(raw: string): string {
   const v = (raw ?? "").trim();
   if (!v) return "#";
   // Обратная косая черта и управляющие символы меняют трактовку URL браузером.
-  if (/[\\\x00-\x1f\x7f]/.test(v) || v.startsWith("//")) return "#";
+  if ((v.includes("\\") || /[^\x20-\x7e\u0080-\uffff]/.test(v)) || v.startsWith("//")) return "#";
   const lower = v.toLowerCase();
 
   // Якоря: запрещаем конструкции вида "#javascript:...", "#https://..." и прочие схемы после '#'

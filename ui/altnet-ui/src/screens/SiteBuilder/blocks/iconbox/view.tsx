@@ -1,26 +1,16 @@
-type IconBoxItem = {
-  id: string;
-  title?: string;
-  label?: string;
-  text?: string;
-  description?: string;
-  icon?: string;
-};
-type IconBoxLike = { items?: IconBoxItem[]; columns?: 1 | 2 | 3 | 4 };
+import type { IconBoxBlock, CardItem } from "../../types";
 
-export default function IconBoxView({ block }: { block: any }) {
-  // используем тип, чтобы не было "не используется"
-  const bx = (block as Partial<IconBoxLike>) || {};
+export default function IconBoxView({ block }: { block: IconBoxBlock }) {
 
-  const cols = bx.columns ?? (Array.isArray(bx.items) ? 3 : 1);
+  const cols = block.columns ?? (Array.isArray(block.items) ? 3 : 1);
   const grid =
     cols === 4 ? "md:grid-cols-4" : cols === 2 ? "md:grid-cols-2" : cols === 1 ? "grid-cols-1" : "md:grid-cols-3";
 
-  const items: IconBoxItem[] = Array.isArray(bx.items) ? bx.items : [{ id: block.id, title: block.title, text: block.text, icon: block.icon }];
+  const items: CardItem[] = Array.isArray(block.items) ? block.items : [{ id: block.id, title: block.title, text: block.text, icon: block.icon }];
 
   return (
     <div className={`grid gap-3 ${grid}`}>
-      {items.map((it: IconBoxItem) => (
+      {items.map((it: CardItem) => (
         <div
           key={it.id}
           className="rounded-2xl border border-[#1f2751] bg-[#0b1022] p-4"

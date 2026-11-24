@@ -1,4 +1,5 @@
 // src/screens/SiteBuilder/blocks/img/view.tsx
+import { imageCaption } from "../../mediaLibrary";
 import type { ImgBlock } from "../../types";
 import type { CSSProperties } from "react";
 import { imageAlignment, imageCaptionStyle, imageHoverStyle, imageStyle, imageTransition } from "../../imageStyle";
@@ -28,8 +29,9 @@ export default function ImgView({ block, device = "desktop" }: { block: ImgBlock
       referrerPolicy="no-referrer"
     />
   );
-  const linked = typeof block.href === "string" && block.href.trim() ? <a className="sb-editor-image-link" href={sanitizeHref(block.href)} onClick={event => event.preventDefault()}>{picture}</a> : picture;
-  const captioned = block.caption ? <figure className="sb-editor-image-figure">{linked}<figcaption style={imageCaptionStyle(block.imageStyleByBp, device)}>{block.caption}</figcaption></figure> : linked;
+  const caption = imageCaption(block);
+  const linked = (!block.linkTo || block.linkTo === "custom") && typeof block.href === "string" && block.href.trim() ? <a className="sb-editor-image-link" href={sanitizeHref(block.href)} onClick={event => event.preventDefault()}>{picture}</a> : picture;
+  const captioned = caption ? <figure className="sb-editor-image-figure">{linked}<figcaption style={imageCaptionStyle(block.imageStyleByBp, device)}>{caption}</figcaption></figure> : linked;
   const alignment = imageAlignment(block.imageStyleByBp, device);
   return alignment ? <div style={{ textAlign: alignment as CSSProperties["textAlign"] }}>{captioned}</div> : captioned;
 }

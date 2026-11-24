@@ -1,3 +1,7 @@
+import { validStyleClasses } from "./styleClasses";
+import { validEntry } from "./dynamicContent";
+import { validTemplate } from "./templateRules";
+import { validMediaLibrary } from "./mediaLibrary";
 import type { Doc } from "./types";
 
 export const STORAGE_KEY = "altnet.sitebuilder.v1";
@@ -13,6 +17,9 @@ export function validateDraft(value: unknown): DraftLoad {
     if (!value || typeof value !== "object") return { status: "unavailable" };
     const doc = value as Record<string, unknown>;
     if (typeof doc.title !== "string" || !Array.isArray(doc.blocks)) return { status: "unavailable" };
+    if (doc.styleClasses !== undefined && !validStyleClasses(doc.styleClasses)) return {status:"unavailable"};
+    if (doc.entry !== undefined && !validEntry(doc.entry)) return { status: "unavailable" };
+    if (doc.mediaLibrary !== undefined && !validMediaLibrary(doc.mediaLibrary)) return { status: "unavailable" };
     const ids = new Set<string>();
     const pending = doc.blocks.map(block => ({ block, depth: 0 }));
     while (pending.length) {
@@ -22,6 +29,8 @@ export function validateDraft(value: unknown): DraftLoad {
         return { status: "unavailable" };
       }
       ids.add(block.id);
+      if (block.styleClassIds !== undefined && (!Array.isArray(block.styleClassIds) ||
+          !block.styleClassIds.every((id:unknown)=>typeof id==="string") || new Set(block.styleClassIds).size!==block.styleClassIds.length)) return {status:"unavailable"};
       if (block.type === "menu" && Array.isArray(block.items)) {
         const menu = block.items.map((item: unknown) => ({ item, depth: 0 }));
         let count = 0;
@@ -54,12 +63,13 @@ export function validateDraft(value: unknown): DraftLoad {
       for (const page of workspace.pages) {
         if (!page || typeof page !== "object" || typeof page.id !== "string" || !page.id || pageIds.has(page.id) ||
             typeof page.path !== "string" || !/^[a-z0-9][a-z0-9-]{0,63}\.html$/.test(page.path) || paths.has(page.path)) return { status: "unavailable" };
+        if (page.template !== undefined && (page.path === "index.html" || !validTemplate(page.template))) return { status: "unavailable" };
         pageIds.add(page.id); paths.add(page.path);
         if (page.id === workspace.activeId) {
           if (page.document !== undefined) return { status: "unavailable" };
           active++;
         } else {
-          if (!page.document || typeof page.document !== "object" || page.document.sitePages !== undefined || page.document.siteProjects !== undefined ||
+          if (!page.document || typeof page.document !== "object" || page.document.sitePages !== undefined || page.document.siteProjects !== undefined || page.document.mediaLibrary !== undefined || page.document.styleClasses !== undefined ||
               validateDraft(page.document).status !== "loaded") return { status: "unavailable" };
         }
       }

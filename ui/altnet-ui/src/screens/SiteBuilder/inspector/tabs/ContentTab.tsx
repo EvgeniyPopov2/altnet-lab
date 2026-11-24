@@ -1,8 +1,18 @@
+import ParagraphEditor from "./ParagraphEditor";
+import {soundSettings,playerFlags} from "../../soundCloud";
+import TextPathEditor from "./TextPathEditor";
+import { editableLegacyLayout } from "../../registry";
+import { asRecord } from "../../../../core/records";
+import type { Block } from "../../types";
 import Field from "../../ui/Field";
 import { useState } from "react";
 import { newId } from "../../registry";
 import { safeAnchorName } from "../../blocks/anchor/name";
+import LoopGridEditor from "./LoopGridEditor";
+import MapEditor from "./MapEditor";
+import LottieEditor from "./LottieEditor";
 import MenuEditor from "./MenuEditor";
+import FlexControls from "./FlexControls";
 import CardEditor from "./CardEditor";
 import EntriesEditor from "./EntriesEditor";
 import TabsEditor from "./TabsEditor";
@@ -19,7 +29,7 @@ import { changeGrid, gridColumnCount, gridCoveredCells, readGridMerges, setGridM
 import { buttonIconPath, buttonIcons } from "../../buttonIcons";
 
 type Props = {
-  block: any;
+  block: Block;
   onPatch: (patch: BlockPatch) => void;
   device: "desktop" | "tablet" | "mobile";
 };
@@ -29,8 +39,25 @@ export default function ContentTab({ block, onPatch, device }: Props) {
   const [mergeWidth, setMergeWidth] = useState(2);
   const [mergeHeight, setMergeHeight] = useState(1);
   const [mergeError, setMergeError] = useState("");
-  const t = (block?.type || "") as string;
+  const t = block.type;
 
+  if(t==="soundcloud"){
+    const s=soundSettings(block);
+    return <div className="grid gap-2">
+      <Field label="Адрес трека или плейлиста"><input type="url" value={block.track??""} placeholder="https://soundcloud.com/artist/track" onChange={e=>onPatch({track:e.target.value})}/></Field>
+      {block.track && !s.track && <p role="alert">Укажите ссылку SoundCloud на трек или плейлист исполнителя.</p>}
+      <Field label="Название аудиоплеера"><input value={block.label??""} onChange={e=>onPatch({label:e.target.value})}/></Field>
+      <Field label="Цвет управления"><input type="color" value={s.color} onChange={e=>onPatch({color:e.target.value})}/></Field>
+      {playerFlags.map(([key,label])=><label key={key}><input type="checkbox" checked={s.flags[key]} onChange={e=>{const checked=e.target.checked;
+        onPatch(latest=>latest.type==="soundcloud"?{flags:{...latest.flags,[key]:checked}}:{});}}/> {label}</label>)}
+    </div>;
+  }
+  if (t === "readmore") return <div className="grid gap-2"><Field label="Текст ссылки продолжения"><input value={block.label??""} onChange={e=>onPatch({label:e.target.value})}/></Field>
+    <p className="text-xs">В анонс записи войдёт текст выше этого виджета. Ссылка в списке записей откроет продолжение.</p></div>;
+  if (t === "textpath") return <TextPathEditor block={block} onPatch={onPatch}/>;
+  if (t === "loopgrid") return <LoopGridEditor block={block} onPatch={onPatch} device={device} />;
+  if (t === "map") return <MapEditor block={block} onPatch={onPatch} />;
+  if (t === "lottie") return <LottieEditor block={block} onPatch={onPatch} />;
   if (t === "pricetable") return <PriceTableEditor block={block} onPatch={onPatch} />;
   if (t === "mediacarousel") return <CarouselEditor block={block} onPatch={onPatch} />;
   if (t === "hotspot") return <HotspotEditor block={block} onPatch={onPatch} />;
@@ -91,7 +118,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
 
   if (t === "pagination") {
     const input = "w-full rounded-lg border border-[#1f2751] bg-[#0c0f1a] px-3 py-2";
-    const number = (key: string, label: string, min: number, max: number, fallback: number) => <Field key={key} label={label}><input className={input} type="number" min={min} max={max} value={block[key] ?? fallback} onChange={e => { const value = Math.floor(Number(e.target.value)); if (Number.isFinite(value)) onPatch({ [key]: Math.max(min, Math.min(max, value)) }); }} /></Field>;
+    const number = (key: "total" | "current" | "siblings" | "boundary", label: string, min: number, max: number, fallback: number) => <Field key={key} label={label}><input className={input} type="number" min={min} max={max} value={block[key] ?? fallback} onChange={e => { const value = Math.floor(Number(e.target.value)); if (Number.isFinite(value)) onPatch({ [key]: Math.max(min, Math.min(max, value)) }); }} /></Field>;
     return <div className="grid gap-3">
       {number("total", "Всего страниц", 1, 10000, 1)}
       {number("current", "Текущая страница", 1, Math.max(1, Number(block.total) || 1), 1)}
@@ -105,7 +132,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
   }
 
   if (t === "progresstracker") {
-    const steps: any[] = Array.isArray(block.steps) ? block.steps : [];
+    const steps = Array.isArray(block.steps) ? block.steps : [];
     const current = Math.max(0, Math.min(steps.length - 1, Number(block.current) || 0));
     const input = "w-full rounded-lg border border-[#1f2751] bg-[#0c0f1a] px-3 py-2";
     const move = (index: number, direction: -1 | 1) => {
@@ -176,7 +203,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
   if (t === "toc" || t === "breadcrumbs" || t === "social" || t === "sidebar" || t === "contentnav") {
     const items = Array.isArray(block.items) ? block.items : [];
     const input = "w-full rounded-lg border border-[#1f2751] bg-[#0c0f1a] px-3 py-2";
-    const update = (index: number, patch: Record<string, string>) => onPatch({ items: items.map((item: any, i: number) => i === index ? { ...item, ...patch } : item) });
+    const update = (index: number, patch: Record<string, string>) => onPatch({ items: items.map((item, i: number) => i === index ? { ...item, ...patch } : item) });
     return <div className="grid gap-3">
       {t === "toc" ? <p className="text-xs text-[#c9d0e9]">Добавьте пункты и укажите ссылки на якоря, например #section-1. Автоматическое оглавление пока не подключено.</p> : t === "breadcrumbs" ? <>
         <p className="text-xs text-[#c9d0e9]">Последний пункт обозначает текущую страницу.</p>
@@ -194,14 +221,14 @@ export default function ContentTab({ block, onPatch, device }: Props) {
         <Field label="Ширина, px"><input className={input} type="number" min="160" max="520" value={block.width ?? 260} onChange={e => onPatch({ width: Math.max(160, Math.min(520, Number(e.target.value) || 160)) })} /></Field>
         <Field label="Расположение"><select className={input} value={block.side || "left"} onChange={e => onPatch({ side: e.target.value })}><option value="left">Слева</option><option value="right">Справа</option></select></Field>
       </> : <p className="text-xs text-[#c9d0e9]">Укажите названия и адреса социальных страниц.</p>}
-      {items.map((item: any, index: number) => <fieldset key={item.id || index} className="grid gap-2 rounded border border-[#2a2f45] p-2">
+      {items.map((item, index: number) => <fieldset key={item.id || index} className="grid gap-2 rounded border border-[#2a2f45] p-2">
         <legend className="px-1 text-xs">Пункт {index + 1}</legend>
         <Field label="Название"><input className={input} value={item.label || ""} onChange={e => update(index, { label: e.target.value })} /></Field>
         <Field label={t === "toc" || t === "contentnav" ? "Ссылка на якорь" : "Ссылка"}><input className={input} value={item.href || ""} onChange={e => update(index, { href: e.target.value })} /></Field>
         <div className="flex gap-1">
           <button type="button" disabled={index === 0} className="rounded border px-2 text-xs disabled:opacity-40" onClick={() => { const next = items.slice(); [next[index - 1], next[index]] = [next[index], next[index - 1]]; onPatch({ items: next }); }}>↑</button>
           <button type="button" disabled={index === items.length - 1} className="rounded border px-2 text-xs disabled:opacity-40" onClick={() => { const next = items.slice(); [next[index + 1], next[index]] = [next[index], next[index + 1]]; onPatch({ items: next }); }}>↓</button>
-          <button type="button" className="rounded border px-2 text-xs" onClick={() => onPatch({ items: items.filter((_: any, i: number) => i !== index) })}>Удалить</button>
+          <button type="button" className="rounded border px-2 text-xs" onClick={() => onPatch({ items: items.filter((_, i: number) => i !== index) })}>Удалить</button>
         </div>
       </fieldset>)}
       <button type="button" className="rounded border border-[#6E59F2] px-3 py-2 text-xs" onClick={() => onPatch({ items: [...items, { id: newId("ti"), label: t === "social" ? "Социальная страница" : "Новый раздел", href: t === "social" ? "" : "#" }] })}>Добавить пункт</button>
@@ -211,20 +238,29 @@ export default function ContentTab({ block, onPatch, device }: Props) {
   if (t === "gallery") {
     const items = Array.isArray(block.items) ? block.items : [];
     const input = "w-full rounded-lg border border-[#1f2751] bg-[#0c0f1a] px-3 py-2";
-    const update = (index: number, patch: Record<string, string>) => onPatch({ items: items.map((item: any, i: number) => i === index ? { ...item, ...patch } : item) });
+    const update = (index: number, patch: Record<string, string>) => onPatch({ items: items.map((item, i: number) => i === index ? { ...item, ...patch } : item) });
     return <div className="grid gap-3">
       <Field label="Колонки"><select className={input} value={block.cols || 3} onChange={e => onPatch({ cols: Number(e.target.value) })}>
         <option value="2">2</option><option value="3">3</option><option value="4">4</option>
       </select></Field>
-      {items.map((item: any, index: number) => <fieldset key={item.id || index} className="grid gap-2 rounded border border-[#2a2f45] p-2">
+      <label><input type="checkbox" checked={block.lightbox === true} onChange={e => onPatch({ lightbox: e.target.checked })} /> Открывать галерею в лайтбоксе</label>
+      {items.map((item, index: number) => <fieldset key={item.id || index} className="grid gap-2 rounded border border-[#2a2f45] p-2">
         <legend className="px-1 text-xs">Изображение {index + 1}</legend>
         <Field label="Адрес изображения"><input className={input} value={item.src || ""} onChange={e => update(index, { src: e.target.value })} /></Field>
-        <LocalImageInput onLoad={src => onPatch((current: any) => ({ items: (Array.isArray(current.items) ? current.items : []).map((entry: any) => (item.id ? entry.id === item.id : entry === item) ? { ...entry, src } : entry) }))} />
+        <LocalImageInput onLoad={(src, asset) => onPatch(current => {
+          if (current.type !== "gallery") return {};
+          return { items: current.items.map(entry => {
+            if ((item.id ? entry.id !== item.id : entry !== item) || entry.src !== item.src) return entry;
+            return { ...entry, src, alt: entry.alt === item.alt && asset.alt ? asset.alt : entry.alt,
+              caption: entry.caption === item.caption && asset.caption ? asset.caption : entry.caption };
+          }) };
+        })} />
         <Field label="Описание изображения"><input className={input} value={item.alt || ""} onChange={e => update(index, { alt: e.target.value })} /></Field>
+        <Field label="Подпись в галерее"><input className={input} value={item.caption || ""} onChange={e => update(index, { caption: e.target.value })} /></Field>
         <div className="flex gap-1">
           <button type="button" disabled={index === 0} className="rounded border px-2 text-xs disabled:opacity-40" onClick={() => { const next = items.slice(); [next[index - 1], next[index]] = [next[index], next[index - 1]]; onPatch({ items: next }); }}>↑</button>
           <button type="button" disabled={index === items.length - 1} className="rounded border px-2 text-xs disabled:opacity-40" onClick={() => { const next = items.slice(); [next[index + 1], next[index]] = [next[index], next[index + 1]]; onPatch({ items: next }); }}>↓</button>
-          <button type="button" className="rounded border px-2 text-xs" onClick={() => onPatch({ items: items.filter((_: any, i: number) => i !== index) })}>Удалить</button>
+          <button type="button" className="rounded border px-2 text-xs" onClick={() => onPatch({ items: items.filter((_, i: number) => i !== index) })}>Удалить</button>
         </div>
       </fieldset>)}
       <button type="button" className="rounded border border-[#6E59F2] px-3 py-2 text-xs" onClick={() => onPatch({ items: [...items, { id: newId("gi"), src: "", alt: "" }] })}>Добавить изображение</button>
@@ -243,8 +279,8 @@ export default function ContentTab({ block, onPatch, device }: Props) {
       : [["title", "Заголовок"], ["text", "Текст"], ["img", "Адрес изображения"], ["alt", "Описание изображения"]];
     return <div className="grid gap-3">
       {fields.map(([key, label]) => <Field key={key} label={label}>{key === "text" || key === "subtitle" ?
-        <textarea className={input} value={block[key] || ""} onChange={e => onPatch({ [key]: e.target.value })} /> :
-        <input className={input} value={block[key] || ""} onChange={e => onPatch({ [key]: e.target.value })} />}</Field>)}
+        <textarea className={input} value={String(asRecord(block)[key] ?? "")} onChange={e => onPatch({ [key]: e.target.value })} /> :
+        <input className={input} value={String(asRecord(block)[key] ?? "")} onChange={e => onPatch({ [key]: e.target.value })} />}</Field>)}
       {t === "cols2" && <>
         <LocalImageInput onLoad={img => onPatch({ img })} />
         <Field label="Пропорции текста и изображения"><select className={input} value={block.ratio || "6-6"} onChange={e => onPatch({ ratio: e.target.value })}>
@@ -259,7 +295,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
     const input = "w-full rounded-lg border border-[#1f2751] bg-[#0c0f1a] px-3 py-2";
     return <div className="grid gap-3">
       {([ ["title", "Заголовок"], ["text", "Текст"], ["btnLabel", "Надпись кнопки"], ["btnHref", "Ссылка кнопки"] ] as const).map(([key, label]) =>
-        <Field key={key} label={label}>{key === "text" ? <textarea className={input} value={block[key] || ""} onChange={e => onPatch({ [key]: e.target.value })} /> : <input className={input} value={block[key] || ""} onChange={e => onPatch({ [key]: e.target.value })} />}</Field>)}
+        <Field key={key} label={label}>{key === "text" ? <textarea className={input} value={String(asRecord(block)[key] ?? "")} onChange={e => onPatch({ [key]: e.target.value })} /> : <input className={input} value={String(asRecord(block)[key] ?? "")} onChange={e => onPatch({ [key]: e.target.value })} />}</Field>)}
       <Field label="Кнопка"><select className={input} value={block.variant || "primary"} onChange={e => onPatch({ variant: e.target.value })}>
         <option value="primary">Основная</option><option value="secondary">Вторичная</option><option value="outline">Контур</option><option value="ghost">Прозрачная</option>
       </select></Field>
@@ -287,7 +323,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
   if (t === "iconlist") {
     const items = Array.isArray(block.items) ? block.items : [];
     const inputClass = "w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]";
-    const update = (index: number, patch: Record<string, string>) => onPatch({ items: items.map((item: any, i: number) => i === index ? { ...item, ...patch } : item) });
+    const update = (index: number, patch: Record<string, string>) => onPatch({ items: items.map((item, i: number) => i === index ? { ...item, ...patch } : item) });
     return <div className="grid gap-3">
       <Field label="Маркер"><select className={inputClass} value={block.variant || "dot"} onChange={e => onPatch({ variant: e.target.value })}>
         <option value="dot">Точка</option><option value="check">Галочка</option><option value="star">Звезда</option><option value="custom">Свой текст</option>
@@ -298,20 +334,25 @@ export default function ContentTab({ block, onPatch, device }: Props) {
       <Field label="Выравнивание"><select className={inputClass} value={block.align || "start"} onChange={e => onPatch({ align: e.target.value })}>
         <option value="start">Слева</option><option value="center">По центру</option><option value="end">Справа</option>
       </select></Field>
-      {items.map((item: any, index: number) => <fieldset key={item.id || index} className="grid gap-2 rounded border border-[#2a2f45] p-2">
+      {items.map((item, index: number) => <fieldset key={item.id || index} className="grid gap-2 rounded border border-[#2a2f45] p-2">
         <legend className="px-1 text-xs">Пункт {index + 1}</legend>
         {([ ["label", "Текст"], ["description", "Описание"], ["href", "Ссылка"], ...(block.variant === "custom" ? [["icon", "Маркер"]] : []) ] as string[][]).map(([key, label]) =>
-          <Field key={key} label={label}><input className={inputClass} value={item[key] || ""} onChange={e => update(index, { [key]: e.target.value })} /></Field>)}
+          <Field key={key} label={label}><input className={inputClass} value={String(asRecord(item)[key] ?? "")} onChange={e => update(index, { [key]: e.target.value })} /></Field>)}
         <div className="flex gap-1">
           <button type="button" disabled={index === 0} className="rounded border px-2 text-xs disabled:opacity-40" onClick={() => { const next = items.slice(); [next[index - 1], next[index]] = [next[index], next[index - 1]]; onPatch({ items: next }); }}>↑</button>
           <button type="button" disabled={index === items.length - 1} className="rounded border px-2 text-xs disabled:opacity-40" onClick={() => { const next = items.slice(); [next[index + 1], next[index]] = [next[index], next[index + 1]]; onPatch({ items: next }); }}>↓</button>
-          <button type="button" className="rounded border px-2 text-xs" onClick={() => onPatch({ items: items.filter((_: any, i: number) => i !== index) })}>Удалить</button>
+          <button type="button" className="rounded border px-2 text-xs" onClick={() => onPatch({ items: items.filter((_, i: number) => i !== index) })}>Удалить</button>
         </div>
       </fieldset>)}
       <button type="button" className="rounded border border-[#6E59F2] px-3 py-2 text-xs" onClick={() => onPatch({ items: [...items, { id: newId("ili"), label: "Новый пункт", href: "" }] })}>Добавить пункт</button>
     </div>;
   }
 
+  if ((t === "section" || t === "grid" || t === "container") && !Array.isArray(block.layoutCells)) {
+    return <button type="button" className="rounded border px-3 py-2 text-sm" onClick={() => onPatch(editableLegacyLayout(block))}>
+      {t === "container" ? "Сделать контейнер редактируемым" : "Редактировать колонки и содержимое"}
+    </button>;
+  }
   if ((t === "section" || t === "grid" || t === "container") && Array.isArray(block.layoutCells)) {
     const cells: unknown[][] = block.layoutCells;
     const columnCount = t === "grid" ? gridColumnCount(block) : cells.length;
@@ -326,7 +367,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
     const gridGaps = resolveGridGaps(block, device);
     const updateResponsive = (patch: Record<string, unknown>) => {
       if (device === "desktop") return;
-      onPatch((latest: any) => ({ layoutByBp: { ...latest.layoutByBp, [device]: { ...latest.layoutByBp?.[device], ...patch } } }));
+      onPatch((latest) => "layoutByBp" in latest || latest.type === "container" || latest.type === "grid" || latest.type === "section" ? ({ layoutByBp: { ...latest.layoutByBp, [device]: { ...latest.layoutByBp?.[device], ...patch } } }) : {});
     };
     const inputClass = "w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]";
     return <div className="grid gap-3">
@@ -360,11 +401,12 @@ export default function ContentTab({ block, onPatch, device }: Props) {
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={Boolean(block.rounded)} onChange={e => onPatch({ rounded: e.target.checked })} />Скругление</label>
         <Field label="Подпись в редакторе"><input className={inputClass} value={block.note || ""} onChange={e => onPatch({ note: e.target.value })} /></Field>
       </>}
+      {t !== "grid" && <FlexControls block={block} device={device} onPatch={onPatch} />}
       <div className="text-sm font-semibold">Колонки: {columnCount}{t === "grid" ? ` · Строки: ${rowCount}` : ""}</div>
       <p className="text-xs text-[#c9d0e9]">Настройки относятся к выбранному размеру экрана. Пропорции задают относительную ширину колонок.</p>
-      {device !== "desktop" && <Field label="Расположение на выбранном экране"><select className={inputClass} value={layout.mode} onChange={event => updateResponsive({ mode: event.target.value })}><option value="columns">Рядом</option><option value="stack">Друг под другом</option></select></Field>}
-      <Field label="Расстояние между колонками (px)"><input className={inputClass} type="number" min={0} max={128} step={1} value={t === "grid" ? gridGaps.x : layout.gap} onChange={event => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= 0 && value <= 128) { if (device === "desktop") onPatch(t === "grid" ? { layoutGapX: value } : { layoutGap: value }); else updateResponsive(t === "grid" ? { gapX: value } : { gap: value }); } }} /></Field>
-      {t === "grid" && <Field label="Расстояние между строками (px)"><input className={inputClass} type="number" min={0} max={128} step={1} value={gridGaps.y} onChange={event => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= 0 && value <= 128) { if (device === "desktop") onPatch({ layoutGapY: value }); else updateResponsive({ gapY: value }); } }} /></Field>}
+      {t === "grid" && device !== "desktop" && <Field label="Расположение на выбранном экране"><select className={inputClass} value={layout.mode} onChange={event => updateResponsive({ mode: event.target.value })}><option value="columns">Рядом</option><option value="stack">Друг под другом</option></select></Field>}
+      <Field label="Расстояние между колонками (px)"><input className={inputClass} type="number" min={0} max={128} step={1} value={gridGaps.x} onChange={event => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= 0 && value <= 128) { if (device === "desktop") onPatch({ layoutGapX: value }); else updateResponsive({ gapX: value }); } }} /></Field>
+      {<Field label="Расстояние между строками (px)"><input className={inputClass} type="number" min={0} max={128} step={1} value={gridGaps.y} onChange={event => { const value = Number(event.target.value); if (Number.isInteger(value) && value >= 0 && value <= 128) { if (device === "desktop") onPatch({ layoutGapY: value }); else updateResponsive({ gapY: value }); } }} /></Field>}
       {device !== "desktop" && block.layoutByBp?.[device] && <button type="button" className="rounded border border-[#686380] px-3 py-2 text-xs" onClick={() => { const next = { ...block.layoutByBp }; delete next[device]; onPatch({ layoutByBp: next }); }}>Сбросить настройки сетки для этого экрана</button>}
       {cells.slice(0, columnCount).map((_, index) => <Field key={index} label={`Пропорция колонки ${index + 1}`}>
         <input aria-label={`Пропорция колонки ${index + 1}`} className={inputClass} type="number" min={1} max={16} step={1} value={weights[index]}
@@ -375,7 +417,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
           {([["add-row", "Добавить строку"], ["remove-row", "Удалить последнюю строку"], ["add-column", "Добавить колонку"], ["remove-column", "Удалить последнюю колонку"]] as const).map(([operation, label]) =>
             <button key={operation} type="button" disabled={!changeGrid(block, operation)}
               className="rounded border border-[#6E59F2] px-2 py-2 text-xs disabled:opacity-40"
-              onClick={() => onPatch((latest: any) => changeGrid(latest, operation) || {})}>{label}</button>)}
+              onClick={() => onPatch((latest) => latest.type === "grid" ? changeGrid(latest, operation) || {} : {})}>{label}</button>)}
         </div>
         <p className="text-xs text-[#c9d0e9]">Удалить можно пустую строку или колонку вне объединений. Максимум — 64 ячейки.</p>
         <div className="border-t border-[#1f2751] pt-3 text-sm font-semibold">Объединение ячеек</div>
@@ -398,11 +440,11 @@ export default function ContentTab({ block, onPatch, device }: Props) {
               if (!setGridMerge(block, anchor, mergeWidth, mergeHeight)) {
                 setMergeError("Нельзя объединить: проверьте размеры, пересечения и содержимое соседних ячеек."); return;
               }
-              onPatch((latest: any) => setGridMerge(latest, anchor, mergeWidth, mergeHeight) || {});
+              onPatch((latest) => latest.type === "grid" ? setGridMerge(latest, anchor, mergeWidth, mergeHeight) || {} : {});
               setMergeError("");
             }}>Объединить</button>
             <button type="button" disabled={!selectedMerge} className="rounded border border-[#686380] px-2 py-2 text-xs disabled:opacity-40"
-              onClick={() => { onPatch((latest: any) => splitGridMerge(latest, anchor) || {}); setMergeError(""); }}>Разделить</button>
+              onClick={() => { onPatch((latest) => latest.type === "grid" ? splitGridMerge(latest, anchor) || {} : {}); setMergeError(""); }}>Разделить</button>
           </div>
           <p className="text-xs text-[#c9d0e9]">Содержимое остаётся в начальной ячейке; остальные ячейки должны быть пустыми.</p>
           {mergeError && <p role="alert" className="text-xs text-amber-300">{mergeError}</p>}
@@ -411,7 +453,7 @@ export default function ContentTab({ block, onPatch, device }: Props) {
       <button type="button" disabled={cells.length >= 12} className="rounded border border-[#6E59F2] px-3 py-2 text-xs disabled:opacity-40"
         onClick={() => onPatch({ layoutCells: [...cells, []], layoutPreset: [...baseWeights, 1] })}>Добавить колонку</button>
       <button type="button" disabled={cells.length <= 1 || cells[cells.length - 1].length > 0} className="rounded border border-[#686380] px-3 py-2 text-xs disabled:opacity-40"
-        onClick={() => onPatch({ layoutCells: cells.slice(0, -1), layoutPreset: baseWeights.slice(0, -1), layoutByBp: Object.fromEntries(Object.entries(block.layoutByBp || {}).map(([bp, value]: [string, any]) => [bp, { ...value, ...(Array.isArray(value?.weights) ? { weights: value.weights.slice(0, -1) } : {}) }])) })}>Удалить последнюю пустую колонку</button>
+        onClick={() => onPatch({ layoutCells: cells.slice(0, -1), layoutPreset: baseWeights.slice(0, -1), layoutByBp: Object.fromEntries(Object.entries(block.layoutByBp || {}).map(([bp, value]) => [bp, { ...value, ...(Array.isArray(value?.weights) ? { weights: value.weights.slice(0, -1) } : {}) }])) })}>Удалить последнюю пустую колонку</button>
       {cells[cells.length - 1]?.length > 0 && <p className="text-xs text-[#c9d0e9]">Чтобы удалить последнюю колонку, сначала переместите из неё виджеты.</p>}
       </>}
     </div>;
@@ -420,8 +462,8 @@ export default function ContentTab({ block, onPatch, device }: Props) {
   if (["alert", "blockquote", "progress", "counter"].includes(t)) {
     const inputClass = "w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-[#e6e9f4]";
     const field = (key: string, label: string, multiline = false) => <Field key={key} label={label}>
-      {multiline ? <textarea className={inputClass} value={block[key] ?? ""} onChange={e => onPatch({ [key]: e.target.value })} />
-        : <input className={inputClass} value={block[key] ?? ""} onChange={e => onPatch({ [key]: e.target.value })} />}
+      {multiline ? <textarea className={inputClass} value={String(asRecord(block)[key] ?? "")} onChange={e => onPatch({ [key]: e.target.value })} />
+        : <input className={inputClass} value={String(asRecord(block)[key] ?? "")} onChange={e => onPatch({ [key]: e.target.value })} />}
     </Field>;
     return <div className="grid gap-3">
       {t === "alert" && <>{field("title", "Заголовок")}{field("text", "Текст", true)}
@@ -452,18 +494,15 @@ export default function ContentTab({ block, onPatch, device }: Props) {
   if (t === "h1" || t === "heading" || t === "p") {
     return (
       <div className="grid gap-3">
-        <Field label="Текст">
-          {t === "p" ? <textarea
-            className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
-            value={block.text || ""} onChange={(e) => onPatch({ text: e.target.value })}
-          /> : <input
+        {t==="p"?<ParagraphEditor block={block} onPatch={onPatch}/>:<Field label="Текст">
+          <input
             className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] outline-none text-[#e6e9f4]"
             value={block.text || ""}
             onChange={(e) => onPatch({ text: e.target.value })}
             autoComplete="off"
             spellCheck={false}
-          />}
-        </Field>
+          />
+        </Field>}
         {t === "heading" && <Field label="Уровень заголовка"><select className="w-full px-2 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-sm"
           value={block.level || "h2"} onChange={e => onPatch({ level: e.target.value })}>
           {["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].map(tag => <option key={tag} value={tag}>{tag.toUpperCase()}</option>)}
@@ -473,12 +512,12 @@ export default function ContentTab({ block, onPatch, device }: Props) {
             value={block.href ?? ""} onChange={event => onPatch({ href: event.target.value })} placeholder="Необязательно" /></Field>
           {typeof block.href === "string" && block.href.trim() && <>
             <Field label="Открытие ссылки"><select className="w-full px-2 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-sm"
-              value={["same", "new"].includes(block.linkOpen) ? block.linkOpen : "auto"} onChange={event => onPatch({ linkOpen: event.target.value })}>
+              value={["same", "new"].includes(block.linkOpen ?? "") ? block.linkOpen : "auto"} onChange={event => onPatch({ linkOpen: event.target.value })}>
               <option value="auto">Автоматически</option><option value="same">В текущей вкладке</option><option value="new">В новой вкладке</option>
             </select></Field>
             {block.linkOpen === "new" && <p className="text-xs text-[#c9d0e9]">В изолированном .alt-просмотре локальные страницы открываются внутри .alt; внешние ссылки недоступны до подключения защищённого маршрута.</p>}
             <Field label="Индексация ссылки"><select className="w-full px-2 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-sm"
-              value={["nofollow", "follow"].includes(block.linkIndexing) ? block.linkIndexing : "auto"} onChange={event => onPatch({ linkIndexing: event.target.value })}>
+              value={["nofollow", "follow"].includes(block.linkIndexing ?? "") ? block.linkIndexing : "auto"} onChange={event => onPatch({ linkIndexing: event.target.value })}>
               <option value="auto">Автоматически</option><option value="nofollow">Не передавать вес (nofollow)</option><option value="follow">Разрешить переход роботу</option>
             </select></Field>
           </>}
@@ -516,12 +555,12 @@ export default function ContentTab({ block, onPatch, device }: Props) {
           />
         </Field>
         <Field label="Открытие ссылки"><select className="w-full px-2 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-sm"
-          value={["same", "new"].includes(block.linkOpen) ? block.linkOpen : "auto"} onChange={event => onPatch({ linkOpen: event.target.value })}>
+          value={["same", "new"].includes(block.linkOpen ?? "") ? block.linkOpen : "auto"} onChange={event => onPatch({ linkOpen: event.target.value })}>
           <option value="auto">Автоматически</option><option value="same">В текущей вкладке</option><option value="new">В новой вкладке</option>
         </select></Field>
         {block.linkOpen === "new" && <p className="text-xs text-[#c9d0e9]">В изолированном .alt-просмотре локальные страницы открываются внутри .alt; внешние ссылки недоступны до подключения защищённого маршрута.</p>}
         <Field label="Индексация ссылки"><select className="w-full px-2 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751] text-sm"
-          value={["nofollow", "follow"].includes(block.linkIndexing) ? block.linkIndexing : "auto"} onChange={event => onPatch({ linkIndexing: event.target.value })}>
+          value={["nofollow", "follow"].includes(block.linkIndexing ?? "") ? block.linkIndexing : "auto"} onChange={event => onPatch({ linkIndexing: event.target.value })}>
           <option value="auto">Автоматически</option><option value="nofollow">Не передавать вес (nofollow)</option><option value="follow">Разрешить переход роботу</option>
         </select></Field>
         <Field label="Доступное имя кнопки"><input className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751]"
@@ -568,11 +607,15 @@ export default function ContentTab({ block, onPatch, device }: Props) {
             value={block.src ?? block.cid ?? ""}
             onChange={(e) => {
               const v = e.target.value;
-              onPatch({ src: v, cid: v });
+              onPatch({ src: v, cid: v, mediaId: undefined, mediaCaption: undefined });
             }}
           />
         </Field>
-        <LocalImageInput onLoad={dataUrl => onPatch({ src: dataUrl, cid: dataUrl })} />
+        <LocalImageInput onLoad={(dataUrl, asset) => onPatch(current => {
+          if(current.type !== "img" || (current.src ?? current.cid) !== (block.src ?? block.cid)) return {};
+          return { src: dataUrl, cid: dataUrl, alt: current.alt === block.alt && asset.alt ? asset.alt : current.alt,
+            mediaId: asset.id, mediaCaption: asset.caption };
+        })} />
         <Field label="Alt">
           <input
             className="w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751]"
@@ -580,13 +623,21 @@ export default function ContentTab({ block, onPatch, device }: Props) {
             onChange={(e) => onPatch({ alt: e.target.value })}
           />
         </Field>
-        <Field label="Подпись под изображением"><textarea className={input} value={block.caption || ""} onChange={e => onPatch({ caption: e.target.value })} /></Field>
-        <Field label="Ссылка изображения"><input className={input} value={block.href || ""} onChange={e => onPatch({ href: e.target.value })} placeholder="https:// или /страница" /></Field>
-        {block.href && <>
-          <Field label="Открытие ссылки"><select className={input} value={["same", "new"].includes(block.linkOpen) ? block.linkOpen : "auto"} onChange={e => onPatch({ linkOpen: e.target.value })}>
+        <Field label="Источник подписи"><select className={input} value={block.captionSource ?? "custom"} onChange={e => onPatch({ captionSource: e.target.value })}>
+          <option value="none">Без подписи</option><option value="media">Из медиатеки</option><option value="custom">Своя подпись</option>
+        </select></Field>
+        {block.captionSource === "media" && <span className="text-xs">{block.mediaCaption || "В медиатеке подпись ещё не задана."}</span>}
+        {(!block.captionSource || block.captionSource === "custom") && <Field label="Подпись под изображением"><textarea className={input} value={block.caption || ""} onChange={e => onPatch({ caption: e.target.value })} /></Field>}
+        <Field label="Действие при нажатии"><select className={input} value={block.linkTo ?? "custom"} onChange={e => onPatch({ linkTo: e.target.value })}>
+          <option value="none">Без ссылки</option><option value="media">Медиафайл</option><option value="custom">Произвольная ссылка</option>
+        </select></Field>
+        {block.linkTo === "media" && <label><input type="checkbox" checked={block.lightbox !== false} onChange={e => onPatch({ lightbox: e.target.checked })} /> Открывать в лайтбоксе</label>}
+        {(!block.linkTo || block.linkTo === "custom") && <Field label="Ссылка изображения"><input className={input} value={block.href || ""} onChange={e => onPatch({ href: e.target.value })} placeholder="https:// или /страница" /></Field>}
+        {(!block.linkTo || block.linkTo === "custom") && block.href && <>
+          <Field label="Открытие ссылки"><select className={input} value={["same", "new"].includes(block.linkOpen ?? "") ? block.linkOpen : "auto"} onChange={e => onPatch({ linkOpen: e.target.value })}>
             <option value="auto">Автоматически</option><option value="same">В текущей вкладке</option><option value="new">В новой вкладке</option>
           </select></Field>
-          <Field label="Индексация ссылки"><select className={input} value={["nofollow", "follow"].includes(block.linkIndexing) ? block.linkIndexing : "auto"} onChange={e => onPatch({ linkIndexing: e.target.value })}>
+          <Field label="Индексация ссылки"><select className={input} value={["nofollow", "follow"].includes(block.linkIndexing ?? "") ? block.linkIndexing : "auto"} onChange={e => onPatch({ linkIndexing: e.target.value })}>
             <option value="auto">Автоматически</option><option value="nofollow">Не передавать вес (nofollow)</option><option value="follow">Разрешить переход роботу</option>
           </select></Field>
           {block.linkOpen === "new" && <p className="text-xs text-[#c9d0e9]">В изолированном .alt-просмотре локальные страницы открываются внутри .alt; внешние ссылки недоступны до подключения защищённого маршрута.</p>}

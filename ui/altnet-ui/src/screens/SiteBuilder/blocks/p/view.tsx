@@ -1,3 +1,4 @@
+import InlineRuns from "./InlineRuns";
 // src/screens/SiteBuilder/blocks/p/view.tsx
 import type { PBlock } from "../../types";
 
@@ -7,7 +8,7 @@ export default function PView({ block }: { block: PBlock }) {
 
   return (
     <p className={`whitespace-pre-wrap text-base leading-6 text-[#2b3050] ${align}`}>
-      {block.text || "Текст абзаца. Нажмите, чтобы отредактировать."}
+      <InlineRuns text={block.text} runs={block.richRuns}/>
     </p>
   );
 }

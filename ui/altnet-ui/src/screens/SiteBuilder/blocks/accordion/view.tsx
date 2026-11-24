@@ -14,13 +14,13 @@ function clsPanel(variant?: "ghost" | "filled" | "outline") { return `px-3 py-2 
 export default function AccordionView({ block }: { block: AccordionBlock }) {
   const allowMultiple = !!block.allowMultiple;
   const allowToggle = block.allowToggle !== false; // по умолчанию можно закрыть последний
-  const initial = () => {
+  const initial = React.useMemo(() => {
     const chosen = block.items.filter(i => i.open).map(i => i.id);
     const normalized = allowMultiple ? chosen : chosen.slice(0, 1);
     return !allowToggle && !normalized.length && block.items.length ? [block.items[0].id] : normalized;
-  };
+  }, [block.items, allowMultiple, allowToggle]);
   const [openIds, setOpen] = React.useState<string[]>(initial);
-  React.useEffect(() => { setOpen(initial()); }, [block.items, allowMultiple, allowToggle]);
+  React.useEffect(() => { setOpen(initial); }, [initial]);
 
   function toggle(id: string) {
     setOpen(prev => {

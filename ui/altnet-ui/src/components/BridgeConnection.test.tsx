@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import BridgeConnection, { connectionText, type BridgeStatus } from "./BridgeConnection";
+import BridgeConnection from "./BridgeConnection";
+import { connectionText, type BridgeStatus } from "./bridgeStatus";
 
 describe("управление мостами", () => {
   it("даёт офлайн-подсказку и не выдаёт отсутствующий клиент за готовое соединение", () => {

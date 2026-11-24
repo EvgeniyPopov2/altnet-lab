@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { PrivacyProfile } from "../policy/types";
 
 export type VoiceInputMode = "vad" | "ptt";
@@ -131,21 +131,20 @@ export function writeVoiceVideoSettings(profile: PrivacyProfile, s: VoiceVideoSe
 export function useVoiceVideoSettings(
   profile: PrivacyProfile,
 ): [VoiceVideoSettings, (patch: Partial<VoiceVideoSettings>) => void, () => void] {
-  const [s, setS] = useState<VoiceVideoSettings>(() => readVoiceVideoSettings(profile));
+  const [state, setState] = useState(() => ({ profile, settings: readVoiceVideoSettings(profile) }));
+  if (state.profile !== profile) setState({ profile, settings: readVoiceVideoSettings(profile) });
+  const s = state.settings;
 
   useEffect(() => {
-    setS(readVoiceVideoSettings(profile));
+    writeVoiceVideoSettings(state.profile, state.settings);
+  }, [state]);
+
+  const patch = useCallback((changes: Partial<VoiceVideoSettings>) => {
+    setState(previous => previous.profile === profile ? { profile, settings: { ...previous.settings, ...changes } } : previous);
   }, [profile]);
 
-  useEffect(() => {
-    writeVoiceVideoSettings(profile, s);
-  }, [profile, s]);
+  const reset = useCallback(() => setState(previous => previous.profile === profile
+    ? { profile, settings: getDefaultVoiceVideoSettings(profile) } : previous), [profile]);
 
-  const patch = (p: Partial<VoiceVideoSettings>) => {
-    setS((prev) => ({ ...prev, ...p }));
-  };
-
-  const reset = () => setS(getDefaultVoiceVideoSettings(profile));
-
-  return useMemo(() => [s, patch, reset] as const, [s]);
+  return useMemo(() => [s, patch, reset] as const, [s, patch, reset]);
 }

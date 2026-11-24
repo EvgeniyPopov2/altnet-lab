@@ -1,3 +1,9 @@
+import { useClassStyle } from "../../styleClassesContext";
+import { blendModes } from "../../textAppearance";
+import SpacingControl from "./SpacingControl";
+import CornerControl from "./CornerControl";
+import { corners } from "../../corners";
+import type { Block, StyleLayer } from "../../types";
 import { useRef, useState } from "react";
 import Field from "../../ui/Field";
 import { resolveResponsiveStyle } from "../../responsiveStyle";
@@ -6,7 +12,7 @@ import { buttonIconPath } from "../../buttonIcons";
 import type { BlockPatch } from "../patch";
 
 type Device = "desktop" | "tablet" | "mobile";
-type Props = { block: any; onPatch: (patch: BlockPatch, group?: string) => void; device: Device };
+type Props = { block: Block; onPatch: (patch: BlockPatch, group?: string) => void; device: Device };
 const input = "w-full px-3 py-2 rounded-lg bg-[#0c0f1a] border border-[#1f2751]";
 let gesture = 0;
 
@@ -35,36 +41,41 @@ export default function StyleTab({ block, onPatch, device }: Props) {
   const [imageState, setImageState] = useState<"normal" | "hover">("normal");
   const [linkPadding, setLinkPadding] = useState(false);
   const current = block.styleByBp?.[device] || {};
-  const resolved = resolveResponsiveStyle(block.style, block.styleByBp, device);
-  const image = block.imageStyleByBp?.[device] || {};
-  const imageResolved = resolveResponsiveStyle({}, block.imageStyleByBp, device);
-  const button = block.buttonStyleByBp?.[device] || {};
-  const buttonResolved = resolveResponsiveStyle({}, block.buttonStyleByBp, device);
-  const update = (collection: string, key: string, value: string, min = 0, max = 512, group?: string) => {
+  const resolved = useClassStyle(block, device);
+  const imageLayers = block.type === "img" ? block.imageStyleByBp : undefined;
+  const image: StyleLayer = imageLayers?.[device] || {};
+  const imageResolved = resolveResponsiveStyle({}, imageLayers, device);
+  const buttonLayers = block.type === "btn" ? block.buttonStyleByBp : undefined;
+  const button: StyleLayer = buttonLayers?.[device] || {};
+  const buttonResolved = resolveResponsiveStyle({}, buttonLayers, device);
+  const update = (collection: "styleByBp" | "buttonStyleByBp" | "imageStyleByBp", key: string, value: string, min?: number, max?: number, group?: string) => {
     let parsed: string | number | undefined = value;
     if (value === "") parsed = undefined;
-    else if (!["bg", "bc", "bs", "tc", "ta", "fit", "ff", "align", "borderType", "hoverBorderType", "captionAlign", "captionColor", "captionFont", "color", "borderColor", "hoverColor", "hoverBg", "hoverBorderColor", "backgroundType", "hoverBackgroundType", "gradientStart", "gradientEnd", "hoverGradientStart", "hoverGradientEnd", "shadowMode", "hoverShadowMode", "shadowColor", "hoverShadowColor", "activeColor", "activeBg", "activeBorderColor", "activeBackgroundType", "activeGradientStart", "activeGradientEnd", "activeShadowMode", "activeShadowColor"].includes(key)) {
+    else if (min !== undefined && max !== undefined) {
       const n = Number(value); if (!Number.isFinite(n)) return;
       parsed = Math.max(min, Math.min(max, n));
     }
-    onPatch((latest: any) => {
-      const all = latest[collection] || {};
-      const next = { ...(all[device] || {}) };
+    onPatch((latest) => {
+      const all = collection === "styleByBp" ? latest.styleByBp || {} : collection === "buttonStyleByBp" && latest.type === "btn" ? latest.buttonStyleByBp || {} : collection === "imageStyleByBp" && latest.type === "img" ? latest.imageStyleByBp || {} : {};
+      const next: StyleLayer = { ...all[device] };
+      if ((key === "radius" || key === "hoverRadius" || key === "activeRadius") && parsed !== undefined) {
+        for (const [corner] of corners) delete next[key + corner];
+      }
       if (parsed === undefined) delete next[key]; else next[key] = parsed;
       return { [collection]: { ...all, [device]: next } };
     }, group);
   };
-  const slider = (collection: string, key: string, label: string, min: number, max: number, fallback = 0, step = 1) => {
+  const slider = (collection: "styleByBp" | "buttonStyleByBp" | "imageStyleByBp", key: string, label: string, min: number, max: number, fallback = 0, step = 1) => {
     const values = collection === "styleByBp" ? current : collection === "imageStyleByBp" ? image : button;
     const inherited = collection === "styleByBp" ? resolved : collection === "imageStyleByBp" ? imageResolved : buttonResolved;
     return <SliderField key={key} label={label} value={values[key]} inherited={inherited[key]} min={min} max={max} fallback={fallback} step={step}
       onChange={(value, group) => update(collection, key, value, min, max, group)} />;
   };
-  const change = (key: string, value: string) => update("styleByBp", key, value, key === "fw" ? 100 : 0, key === "fw" ? 900 : 512);
+  const change = (key: string, value: string) => key === "fw" ? update("styleByBp", key, value, 100, 900) : update("styleByBp", key, value);
   const buttonKey = (key: string) => buttonState === "normal" ? key : `${buttonState}${key[0].toUpperCase()}${key.slice(1)}`;
   const stateLabel = (normal: string, hover: string, active: string) => buttonState === "normal" ? normal : buttonState === "hover" ? hover : active;
   const sideSlider = (side: "Top" | "Right" | "Bottom" | "Left", label: string) => {
-    const key = buttonKey(`padding${side}`), styles = buttonStyle(block.buttonStyleByBp, device)[buttonState];
+    const key = buttonKey(`padding${side}`), styles = buttonStyle(buttonLayers, device)[buttonState];
     const cssSide = `padding-${side.toLowerCase()}`, axis = side === "Top" || side === "Bottom" ? "padding-block" : "padding-inline";
     const inherited = parseFloat(styles[cssSide] ?? styles[axis] ?? (side === "Top" || side === "Bottom" ? "12" : "18"));
     return <SliderField key={key} label={label} value={button[key]} inherited={inherited} min={0} max={256} fallback={inherited}
@@ -72,8 +83,9 @@ export default function StyleTab({ block, onPatch, device }: Props) {
         if (!linkPadding) return update("buttonStyleByBp", key, value, 0, 256, group);
         const parsed = value === "" ? undefined : Number(value);
         if (parsed !== undefined && !Number.isFinite(parsed)) return;
-        onPatch((latest: any) => {
-          const all = latest.buttonStyleByBp || {}, next = { ...(all[device] || {}) };
+        onPatch((latest) => {
+          if (latest.type !== "btn") return {};
+          const all = latest.buttonStyleByBp || {}, next: StyleLayer = { ...all[device] };
           for (const name of ["Top", "Right", "Bottom", "Left"]) {
             const property = buttonKey(`padding${name}`);
             if (parsed === undefined) delete next[property]; else next[property] = Math.max(0, Math.min(256, parsed));
@@ -89,9 +101,20 @@ export default function StyleTab({ block, onPatch, device }: Props) {
     return <div key={name} className="sb-color-control">
       <Field label={label}><input className={input} value={raw} onChange={e => update("buttonStyleByBp", name, e.target.value)} placeholder="Наследовать" /></Field>
       <input type="color" aria-label={`Выбрать: ${label}`} value={picker} onChange={e => update("buttonStyleByBp", name, e.target.value)} />
-      {raw && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(raw) && <p className="text-xs text-amber-300">Введите цвет в формате HEX.</p>}
+      {raw && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(String(raw)) && <p className="text-xs text-amber-300">Введите цвет в формате HEX.</p>}
     </div>;
   };
+  function styleChoice(key: string, label: string, options: readonly (readonly string[])[]) {
+    return <Field label={label}><select className={input} value={current[key] ?? ""} onChange={event => change(key, event.target.value)}>
+      <option value="">Наследовать</option>{options.map(([value, title]) => <option key={value} value={value}>{title}</option>)}
+    </select></Field>;
+  }
+  function styleColor(key: string, label: string) {
+    const value = String(current[key] ?? "");
+    return <div className="sb-color-control"><Field label={label}><input className={input} value={value} placeholder="Наследовать" onChange={e => change(key, e.target.value)} /></Field>
+      <input type="color" aria-label={`Выбрать: ${label}`} value={/^#[a-f0-9]{6}$/i.test(value) ? value : "#000000"} onChange={e => change(key, e.target.value)} />
+    </div>;
+  }
   return <div className="grid gap-3">
     <p className="text-xs text-[#c9d0e9]">Настройки для {device}. Пустое поле наследует значение предыдущего размера экрана; ↺ возвращает наследование.</p>
     {block.type === "btn" && <>
@@ -111,8 +134,9 @@ export default function StyleTab({ block, onPatch, device }: Props) {
         <div className="mt-3 grid gap-3">
           <Field label={stateLabel("Тип фона кнопки", "Тип фона при наведении", "Тип фона при нажатии")}><select className={input} value={button[buttonKey("backgroundType")] ?? ""} onChange={event => {
             const value = event.target.value, typeKey = buttonKey("backgroundType");
-            onPatch((latest: any) => {
-              const all = latest.buttonStyleByBp || {}, next = { ...(all[device] || {}) };
+            onPatch((latest) => {
+              if (latest.type !== "btn") return {};
+          const all = latest.buttonStyleByBp || {}, next: StyleLayer = { ...all[device] };
               if (!value) delete next[typeKey]; else next[typeKey] = value;
               if (value === "gradient") {
                 const effective = resolveResponsiveStyle({}, all, device);
@@ -141,6 +165,10 @@ export default function StyleTab({ block, onPatch, device }: Props) {
           </>}
         </div>
       </details>
+      <Field label="Тип рамки кнопки"><select className={input} value={button[buttonKey("borderType")] ?? ""} onChange={e => update("buttonStyleByBp", buttonKey("borderType"), e.target.value)}>
+        <option value="">Наследовать</option>{[["none","Без рамки"],["solid","Сплошная"],["double","Двойная"],["dotted","Точечная"],["dashed","Штриховая"],["groove","Объёмная"]].map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+      </select></Field>
+      <CornerControl key={block.id + device + buttonState} block={block} device={device} state={buttonState} onPatch={onPatch} />
       {slider("buttonStyleByBp", buttonKey("borderWidth"), stateLabel("Рамка кнопки, px", "Рамка при наведении, px", "Рамка при нажатии, px"), 0, 32, 1)}
       {slider("buttonStyleByBp", buttonKey("radius"), stateLabel("Скругление кнопки, px", "Скругление при наведении, px", "Скругление при нажатии, px"), 0, 256, 8)}
       {slider("buttonStyleByBp", buttonKey("paddingX"), stateLabel("Отступ кнопки по горизонтали, px", "Горизонтальный отступ при наведении, px", "Горизонтальный отступ при нажатии, px"), 0, 256, 16)}
@@ -156,7 +184,7 @@ export default function StyleTab({ block, onPatch, device }: Props) {
           {sideSlider("Left", stateLabel("Отступ кнопки слева, px", "Отступ слева при наведении, px", "Отступ слева при нажатии, px"))}
         </div>
       </details>
-      {buttonIconPath(block.icon) && buttonState === "normal" && <>
+      {buttonIconPath(block.type === "btn" ? block.icon : undefined) && buttonState === "normal" && <>
         {slider("buttonStyleByBp", "iconSize", "Размер иконки кнопки, px", 8, 128, 16)}
         {slider("buttonStyleByBp", "iconGap", "Расстояние до иконки, px", 0, 128, 8)}
       </>}
@@ -178,6 +206,7 @@ export default function StyleTab({ block, onPatch, device }: Props) {
       </>}
       {imageState === "hover" && <p className="text-xs text-[#c9d0e9]">Наведите курсор на изображение. Если задана ссылка, состояние также доступно при фокусе с клавиатуры.</p>}
       {slider("imageStyleByBp", imageState === "normal" ? "opacity" : "hoverOpacity", imageState === "normal" ? "Непрозрачность изображения, %" : "Непрозрачность при наведении, %", 0, 100, 100)}
+      <CornerControl key={block.id + device + imageState} block={block} device={device} state={imageState} onPatch={onPatch} />
       {slider("imageStyleByBp", imageState === "normal" ? "radius" : "hoverRadius", imageState === "normal" ? "Скругление изображения, px" : "Скругление при наведении, px", 0, 512)}
       <Field label={imageState === "normal" ? "Тип рамки изображения" : "Тип рамки изображения при наведении"}><select className={input} value={image[imageState === "normal" ? "borderType" : "hoverBorderType"] ?? ""} onChange={e => update("imageStyleByBp", imageState === "normal" ? "borderType" : "hoverBorderType", e.target.value)}><option value="">Наследовать</option><option value="none">Без рамки</option><option value="solid">Сплошная</option><option value="double">Двойная</option><option value="dotted">Точечная</option><option value="dashed">Штриховая</option><option value="groove">Объёмная</option></select></Field>
       {slider("imageStyleByBp", imageState === "normal" ? "borderWidth" : "hoverBorderWidth", imageState === "normal" ? "Рамка изображения, px" : "Рамка изображения при наведении, px", 0, 32)}
@@ -204,18 +233,20 @@ export default function StyleTab({ block, onPatch, device }: Props) {
       </div></details>}
     </>}
     <div className="text-sm font-semibold">Оформление блока</div>
-    {([["pt", "Внутренний отступ сверху, px"], ["pr", "Внутренний отступ справа, px"], ["pb", "Внутренний отступ снизу, px"], ["pl", "Внутренний отступ слева, px"], ["mt", "Внешний отступ сверху, px"], ["mr", "Внешний отступ справа, px"], ["mb", "Внешний отступ снизу, px"], ["ml", "Внешний отступ слева, px"], ["br", "Скругление, px"]] as const).map(([key, label]) => slider("styleByBp", key, label, key.startsWith("m") ? -512 : 0, 512))}
+    <SpacingControl block={block} device={device} kind="padding" onPatch={onPatch} />
+    <SpacingControl block={block} device={device} kind="margin" onPatch={onPatch} />
+    {slider("styleByBp", "br", "Скругление, px", 0, 512)}
     {slider("styleByBp", "w", "Ширина блока, %", 1, 200, 100)}
     {slider("styleByBp", "minh", "Минимальная высота блока, px", 0, 1200)}
     {slider("styleByBp", "op", "Непрозрачность блока, %", 0, 100, 100)}
     <Field label="Цвет фона (HEX)"><input className={input} value={current.bg ?? ""} onChange={e => change("bg", e.target.value)} placeholder="#ffffff" /></Field>
-    {current.bg && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(current.bg) && <p className="text-xs text-amber-300">Для публикации введите цвет в формате HEX, например #ffffff.</p>}
+    {current.bg && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(String(current.bg)) && <p className="text-xs text-amber-300">Для публикации введите цвет в формате HEX, например #ffffff.</p>}
     {slider("styleByBp", "bw", "Ширина рамки, px", 0, 512)}
     <Field label="Стиль рамки"><select className={input} value={current.bs ?? ""} onChange={e => change("bs", e.target.value)}>
       <option value="">Наследовать</option><option value="none">Без рамки</option><option value="solid">Сплошная</option><option value="dashed">Штриховая</option><option value="dotted">Точечная</option>
     </select></Field>
     <Field label="Цвет рамки (HEX)"><input className={input} value={current.bc ?? ""} onChange={e => change("bc", e.target.value)} placeholder="#ffffff" /></Field>
-    {current.bc && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(current.bc) && <p className="text-xs text-amber-300">Цвет рамки должен быть задан в формате HEX.</p>}
+    {current.bc && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(String(current.bc)) && <p className="text-xs text-amber-300">Цвет рамки должен быть задан в формате HEX.</p>}
     {["h1", "heading", "p", "btn"].includes(block.type) && <>
       <div className="text-sm font-semibold">Типографика</div>
       <Field label="Шрифт"><select className={input} value={current.ff ?? ""} onChange={e => change("ff", e.target.value)}>
@@ -224,8 +255,28 @@ export default function StyleTab({ block, onPatch, device }: Props) {
       {slider("styleByBp", "fs", "Размер текста, px", 1, 256, 16)}
       <Field label="Насыщенность"><select className={input} value={current.fw ?? ""} onChange={e => change("fw", e.target.value)}><option value="">Наследовать</option>{[100, 200, 300, 400, 500, 600, 700, 800, 900].map(n => <option key={n} value={n}>{n}</option>)}</select></Field>
       {slider("styleByBp", "lh", "Межстрочный интервал", 0.5, 4, 1.5, 0.1)}
+      {styleChoice("fontStyle", "Начертание", [["normal", "Обычное"], ["italic", "Курсив"], ["oblique", "Наклонное"]])}
+      {styleChoice("textTransform", "Регистр букв", [["none", "Исходный"], ["uppercase", "Прописные"], ["lowercase", "Строчные"], ["capitalize", "С заглавной"]])}
+      {styleChoice("decoration", "Украшение текста", [["none", "Без линии"], ["underline", "Подчёркивание"], ["overline", "Линия сверху"], ["line-through", "Зачёркивание"]])}
+      {slider("styleByBp", "letterSpacing", "Межбуквенный интервал, px", -32, 100, 0, 0.1)}
+      {slider("styleByBp", "wordSpacing", "Межсловный интервал, px", -32, 100, 0, 0.1)}
+      <details className="rounded border px-2 py-1"><summary>Тень и обводка текста</summary><div className="grid gap-2 py-2">
+        {styleChoice("textShadow", "Тень текста", [["off","Без тени"],["on","Настроить"]])}
+        {resolved.textShadow === "on" && <>
+          {styleColor("textShadowColor","Цвет тени текста (HEX)")}
+          {slider("styleByBp", "textShadowX", "Смещение тени текста по X, px", -128, 128)}
+          {slider("styleByBp", "textShadowY", "Смещение тени текста по Y, px", -128, 128, 2)}
+          {slider("styleByBp", "textShadowBlur", "Размытие тени текста, px", 0, 128, 4)}
+        </>}
+        {slider("styleByBp", "strokeWidth", "Обводка текста, px", 0, 20, 0, 0.1)}
+        {styleColor("strokeColor", "Цвет обводки текста (HEX)")}
+      </div></details>
+      {(block.type === "h1" || block.type === "heading") && <>
+        {styleColor("textHoverColor", "Цвет заголовка при наведении (HEX)")}
+        {styleChoice("blend", "Режим смешивания", blendModes.map((value, i) => [value, ["Обычный","Умножение","Экран","Перекрытие","Затемнение","Осветление","Осветление основы","Затемнение основы","Жёсткий свет","Мягкий свет","Разница","Исключение","Цветовой тон","Насыщенность","Цвет","Яркость"][i]]))}
+      </>}
       <Field label="Цвет текста (HEX)"><input className={input} value={current.tc ?? ""} onChange={e => change("tc", e.target.value)} placeholder="#000000" /></Field>
-      {current.tc && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(current.tc) && <p className="text-xs text-amber-300">Цвет текста должен быть задан в формате HEX.</p>}
+      {current.tc && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(String(current.tc)) && <p className="text-xs text-amber-300">Цвет текста должен быть задан в формате HEX.</p>}
       <Field label="Выравнивание текста"><select className={input} value={current.ta ?? ""} onChange={e => change("ta", e.target.value)}><option value="">Наследовать</option><option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option><option value="justify">По ширине</option></select></Field>
     </>}
   </div>;

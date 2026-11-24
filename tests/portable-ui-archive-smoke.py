@@ -29,6 +29,13 @@ def check(path, browser):
         raise ValueError("UI index missing from " + str(path))
 
     class Handler(BaseHTTPRequestHandler):
+        def handle(self):
+            try:
+                super().handle()
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                # A closing Chrome profile can cancel a request while reading headers or sending the response.
+                pass
+
         def do_GET(self):
             name = urlsplit(self.path).path.lstrip("/") or "index.html"
             payload = files.get(name)
@@ -49,7 +56,7 @@ def check(path, browser):
     thread.start()
     try:
         url = f"http://127.0.0.1:{server.server_port}/"
-        for flag in ("--image-style-smoke", "--mobile-touch-smoke", "--mobile-grid-touch-smoke", "--mobile-sort-touch-smoke"):
+        for flag in ("--builder-chrome-smoke", "--elementor-custom-grid-smoke", "--image-style-smoke", "--mobile-touch-smoke", "--mobile-grid-touch-smoke", "--mobile-sort-touch-smoke"):
             print(path.name, flag, flush=True)
             subprocess.run([sys.executable, "-B", str(TEST), browser, "--url", url, flag], check=True, timeout=90)
     finally:

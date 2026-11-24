@@ -1,3 +1,4 @@
+import type { GridTemplate } from "./types";
 // src/screens/SiteBuilder/registry.ts
 // Единый реестр создания блоков и утилиты для SiteBuilder.
 
@@ -28,9 +29,69 @@ export function newId(prefix = "blk"): string {
   return `${prefix}_${rnd}${t}`;
 }
 
+const flexPresets: Record<FlexPreset, number[]> = {
+  "1col": [1], "2col-equal": [1,1], "2col-wide-left": [2,1], "2col-wide-right": [1,2], "3col-equal": [1,1,1],
+  "3col-wide-center": [1,2,1], "4col": [1,1,1,1], "5col": [1,1,1,1,1], "6col": [1,1,1,1,1,1],
+  "hero-left": [2,1], "hero-right": [1,2], "hero-center": [1],
+};
+
+/** New insertions always expose real drop targets. Legacy imports retain their original data model. */
+export function createInsertedBlock(type: InsertChoice, preset?: number[] | GridTemplate): Block {
+  if (type === "grid" && !preset) return createDefaultBlock("grid", {columns:[1,1,1], rows:1});
+  if (type === "section" && !preset) return createDefaultBlock("section", [1]);
+  return createDefaultBlock(type, preset);
+}
+
+export function editableLegacyLayout(block: Extract<Block,{type:"grid"|"section"|"container"}>) {
+  if (block.type === "container") return {layoutPreset:[1],layoutCells:[[]]};
+  const preset = block.layoutPreset;
+  const restored = createDefaultBlock(block.type, preset);
+  if (block.type === "section")
+    return {layoutPreset:restored.layoutPreset ?? [1],layoutCells:restored.layoutCells ?? [[]]};
+  const widths = Array.isArray(restored.layoutPreset) && restored.layoutPreset.length
+    ? restored.layoutPreset.slice(0,12) : Array.from({length:block.cols || 3},()=>1);
+  const rows = Math.ceil(Math.max(block.items?.length ?? 0,1)/widths.length);
+  if (rows * widths.length > 64)
+    return {layoutPreset:widths,layoutColumns:widths.length,layoutCells:widths.map(()=>[])};
+  const layoutPreset = Array.from({length:rows},()=>widths).flat();
+  return {layoutPreset,layoutColumns:widths.length,items:[],layoutCells:layoutPreset.map((_,index)=>{
+    const item=block.items?.[index];
+    return item ? [{...createDefaultBlock("img"), cid:item.src,src:item.src,alt:item.alt ?? "",
+      caption:item.caption ?? "",captionSource:"custom" as const}] : [];
+  })};
+}
+
 // Создание дефолтного блока по типу InsertChoice
-export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPreset | number[]): Block {
+export function createDefaultBlock<T extends BlockType>(type: T, preset?: FlexPreset | GridPreset | number[] | GridTemplate): Extract<Block, { type: T }>;
+export function createDefaultBlock(type: InsertChoice, template?: FlexPreset | GridPreset | number[] | GridTemplate): Block;
+export function createDefaultBlock(type: InsertChoice, template?: FlexPreset | GridPreset | number[] | GridTemplate): Block {
+  if (type === "bio-card") {
+    const section = createDefaultBlock("section", [1, 2]);
+    return {
+      ...section,
+      bg: "card",
+      layoutCells: [
+        [{ ...createDefaultBlock("img"), alt: "Портрет автора" }],
+        [
+          { ...createDefaultBlock("heading"), text: "Имя автора" },
+          { ...createDefaultBlock("p"), text: "Краткая биография" },
+          createDefaultBlock("social"),
+        ],
+      ],
+    };
+  }
+  let grid = template && typeof template === "object" && !Array.isArray(template) ? template : undefined;
+  if (type === "grid" && typeof template === "string" && /^\d+x\d+$/.test(template)) {
+    const [columns, rows] = template.split("x").map(Number);
+    grid = { columns: Array(columns).fill(1), rows };
+  }
+  const weights = grid?.columns ?? (Array.isArray(template) ? template : typeof template === "string" && Object.hasOwn(flexPresets, template) ? flexPresets[template as FlexPreset] : undefined);
+  const preset = weights?.length ? weights.slice(0, 12).map(weight => Number.isInteger(weight) ? Math.min(16, Math.max(1, weight)) : 1) : undefined;
   switch (type) {
+    case "soundcloud": return {id:newId("audio"),type:"soundcloud",track:"",label:"SoundCloud"};
+    case "readmore": return { id:newId("more"),type:"readmore",label:"Читать дальше" };
+    case "textpath": return { id:newId("path"),type:"textpath",text:"Текст по контуру",shape:"wave" };
+    case "loopgrid": return { id: newId("loop"),type:"loopgrid",source:"post",sort:"date",descending:true,pageSize:6,filter:true };
     case "h1": {
       const b: H1Block = { id: newId("h1"), type: "h1", text: "Заголовок", align: "left" };
       return b;
@@ -48,7 +109,7 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
       return b;
     }
     case "img": {
-      const b: ImgBlock = { id: newId("img"), type: "img", cid: "", alt: "Изображение" };
+      const b: ImgBlock = { id: newId("img"), type: "img", cid: "", alt: "", captionSource: "none", linkTo: "none" };
       return b;
     }
     case "divider": {
@@ -92,8 +153,12 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
       return b;
     }
     case "grid": {
-      const b: GridBlock = { id: newId("grid"), type: "grid", cols: 3, items: [], layoutPreset: preset,
-        ...(Array.isArray(preset) ? { layoutCells: preset.map(() => []) } : {}) };
+      const columns = grid ? (preset?.length ?? 0) : 0;
+      const rows = grid && columns && Number.isInteger(grid.rows) ? Math.max(1, Math.min(Math.floor(64 / columns), grid.rows)) : 1;
+      const layoutPreset = grid && preset ? Array.from({ length: rows }, () => preset).flat() : preset;
+      const b: GridBlock = { id: newId("grid"), type: "grid", cols: 3, items: [], layoutPreset,
+        ...(Array.isArray(layoutPreset) ? { layoutCells: layoutPreset.map(() => []) } : {}),
+        ...(columns ? { layoutColumns: columns } : {}) };
       return b;
     }
 
@@ -434,7 +499,7 @@ export function createDefaultBlock(type: BlockType, preset?: FlexPreset | GridPr
       return b;
     }
     case "lottie": {
-      const b: LottieBlock = { id: newId("lot"), type: "lottie", src: "", poster: "", autoplay: true, loop: true, caption: "Lottie (превью)" };
+      const b: LottieBlock = { id: newId("lot"), type: "lottie", src: "", poster: "", autoplay: true, loop: true, caption: "" };
       return b;
     }
     case "mediacarousel": {

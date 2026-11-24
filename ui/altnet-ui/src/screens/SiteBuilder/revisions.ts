@@ -13,7 +13,7 @@ async function transact<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore
     return await new Promise<T>((resolve, reject) => {
       const tx = db.transaction("drafts", mode);
       let value: T, settled = false;
-      const finish = (error?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(value); };
+      const finish = (error?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); if (error !== undefined) reject(error); else resolve(value); };
       const fail = (error: unknown) => { try { tx.abort(); } catch { /* уже завершено */ } finish(error || new Error("Операция с версией не выполнена.")); };
       const timer = setTimeout(() => fail(new Error("Операция с версией заняла слишком много времени.")), 30000);
       tx.oncomplete = () => finish();

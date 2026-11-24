@@ -9,6 +9,16 @@ import time
 from urllib.parse import urlparse
 
 CASES = [
+    ("всплывающее окно, триггеры и возврат фокуса", "--elementor-popup-smoke"),
+    ("текст вдоль SVG и плеер по выбору посетителя", "--elementor-publishing-smoke"),
+    ("общие классы, адаптивное оформление и экспорт", "--elementor-classes-smoke"),
+    ("вкладки каждого виджета на трёх размерах и в двух темах", "--elementor-matrix-smoke"),
+    ("свои пропорции и колонки CSS Grid", "--elementor-custom-grid-smoke"),
+    ("Flexbox, размерности и трансформация", "--elementor-layout-smoke"),
+    ("медиатека и лайтбокс в изолированном просмотре", "--elementor-library-smoke"),
+    ("записи, рубрики и пагинация Loop Grid", "--elementor-loop-smoke"),
+    ("общая шапка сайта и условия", "--elementor-templates-smoke"),
+    ("локальная анимация и карта", "--elementor-animation-smoke"),
     ("редактор и темы", "--builder-chrome-smoke"),
     ("размеры редактора и темы", "--viewport-audit"),
     ("касание на телефоне", "--mobile-touch-smoke"),

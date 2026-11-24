@@ -1,3 +1,5 @@
+import { asRecord } from "../../core/records";
+import { cornerStyles } from "./corners";
 import { resolveResponsiveStyle } from "./responsiveStyle";
 
 type Device = "desktop" | "tablet" | "mobile";
@@ -28,17 +30,21 @@ export function buttonStyle(byDevice: unknown, device: Device): ButtonStyle {
       const raw = source[name];
       if (typeof raw === "number" && Number.isFinite(raw)) target[property[key]] = `${Math.max(0, Math.min(key === "borderWidth" ? 32 : 256, raw))}px`;
     }
-    const layers = byDevice && typeof byDevice === "object" ? byDevice as Record<string, any> : {};
+    const borderType = source[key("borderType")];
+    if (typeof borderType === "string" && ["none", "solid", "double", "dotted", "dashed", "groove"].includes(borderType)) target["border-style"] = borderType;
+    for (const [name, value] of Object.entries(cornerStyles(byDevice, device, prefix || "normal", 256))) {
+      target[name.replace(/[A-Z]/g, letter => "-" + letter.toLowerCase())] = value;
+    }
+    const layers = asRecord(byDevice);
     const sideNames = ["Top", "Right", "Bottom", "Left"] as const;
     const keyFor = (name: string) => prefix ? `${prefix}${name}` : name[0].toLowerCase() + name.slice(1);
     const devices = device === "desktop" ? ["desktop"] : device === "tablet" ? ["desktop", "tablet"] : ["desktop", "tablet", "mobile"];
-    const sideUsed = devices.some(bp => sideNames.some(side => typeof layers[bp]?.[keyFor(`Padding${side}`)] === "number" && Number.isFinite(layers[bp][keyFor(`Padding${side}`)])));
+    const sideUsed = devices.some(bp => sideNames.some(side => typeof asRecord(layers[bp])[keyFor(`Padding${side}`)] === "number" && Number.isFinite(asRecord(layers[bp])[keyFor(`Padding${side}`)])));
     if (sideUsed) {
       const sides: Record<string, number> = {};
       const number = (raw: unknown) => typeof raw === "number" && Number.isFinite(raw) ? Math.max(0, Math.min(256, raw)) : undefined;
       for (const bp of devices) {
-        const layer = layers[bp];
-        if (!layer || typeof layer !== "object" || Array.isArray(layer)) continue;
+        const layer = asRecord(layers[bp]);
         const x = number(layer[keyFor("PaddingX")]), y = number(layer[keyFor("PaddingY")]);
         if (x !== undefined) { sides.Right = x; sides.Left = x; }
         if (y !== undefined) { sides.Top = y; sides.Bottom = y; }

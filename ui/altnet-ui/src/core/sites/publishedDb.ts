@@ -1,3 +1,5 @@
+import { isRecord } from "../records";
+
 export type PublishedPage = { path: string; title: string; html: string };
 export type SiteMetaRecord = { slug: string; title: string; createdAt: number; updatedAt: number; pageCount?: number };
 export type SiteRecord = SiteMetaRecord & { html: string; pages?: PublishedPage[] };
@@ -29,7 +31,7 @@ async function transact<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore
     return await new Promise<T>((resolve, reject) => {
       const tx = db.transaction(STORE, mode);
       let value: T, settled = false;
-      const finish = (error?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(value); };
+      const finish = (error?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); if (error !== undefined) reject(error); else resolve(value); };
       const fail = (error: unknown) => { try { tx.abort(); } catch { /* уже завершено */ } finish(error || new Error("Операция с публикацией не выполнена.")); };
       const timer = setTimeout(() => fail(new Error("Хранилище публикаций не ответило вовремя.")), 30000);
       tx.oncomplete = () => finish();
@@ -40,11 +42,11 @@ async function transact<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore
   } finally { db.close(); }
 }
 
-function isMeta(value: any, slug?: string): value is SiteMetaRecord {
-  return value && typeof value.slug === "string" && /^[a-z0-9][a-z0-9-]{0,95}$/.test(value.slug) && (!slug || value.slug === slug) &&
+function isMeta(value: unknown, slug?: string): value is SiteMetaRecord {
+  return isRecord(value) && typeof value.slug === "string" && /^[a-z0-9][a-z0-9-]{0,95}$/.test(value.slug) && (!slug || value.slug === slug) &&
     typeof value.title === "string" && typeof value.createdAt === "number" && Number.isFinite(value.createdAt) &&
     typeof value.updatedAt === "number" && Number.isFinite(value.updatedAt) &&
-    (value.pageCount === undefined || (Number.isInteger(value.pageCount) && value.pageCount >= 2 && value.pageCount <= 500));
+    (value.pageCount === undefined || (typeof value.pageCount === "number" && Number.isInteger(value.pageCount) && value.pageCount >= 2 && value.pageCount <= 500));
 }
 
 function isPages(value: unknown, html: string, count: number): value is PublishedPage[] {
@@ -92,7 +94,8 @@ export async function readIndexedSite(slug: string): Promise<SiteRecord | null> 
 
 export async function writeIndexedSite(site: SiteRecord, replace: boolean): Promise<void> {
   if (!isMeta(site) || typeof site.html !== "string" || !site.html) throw new Error("Некорректные данные публикации.");
-  const { html, pages, pageCount: _pageCount, ...rest } = site;
+  const { html, pages, ...rest } = site;
+  delete rest.pageCount;
   if (pages !== undefined && (!isPages(pages, html, pages.length) || pages.length < 2 || pages.length > 500)) throw new Error("Некорректный список страниц публикации.");
   const meta: SiteMetaRecord = { ...rest, ...(pages ? { pageCount: pages.length } : {}) };
   await transact<void>("readwrite", store => {

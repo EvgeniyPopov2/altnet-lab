@@ -33,6 +33,10 @@ export type PaletteMeta =
 
 // ⚠️ Здесь — только те, что уже умеем вставлять + несколько «скоро».
 export const paletteMeta: PaletteMeta[] = [
+  { id: "soundcloud", title: "SoundCloud", group: "Контент/Медиа", icon: "basic-video.svg", description: "Трек или плейлист SoundCloud", type: "soundcloud" },
+  { id: "text-path", title: "Text Path", group: "Базовые", icon: "basic-text.svg", description: "Надпись вдоль кривой SVG", type: "textpath" },
+  { id: "read-more", title: "Read More", group: "Контент/Медиа", icon: "nav-content-nav.svg", description: "Граница анонса записи и переход к продолжению", type: "readmore" },
+  { id: "loop-grid", title: "Loop Grid", group: "Контент/Медиа", icon: "layout-grid.svg", description: "Цикл записей и страниц, рубрики, шаблон карточки и пагинация", type: "loopgrid" },
   // — Базовые
   { id: "basic-heading", title: "Heading", group: "Базовые", icon: "basic-heading.svg", description: "Заголовок H1–H6, текст и ссылка", type: "heading" },
   { id: "basic-text",    title: "Text",    group: "Базовые", icon: "basic-text.svg",    description: "Абзац текста",       type: "p" },
@@ -71,7 +75,7 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "emb-html",      title: "HTML (Safe)", group: "Встраивания", icon: "emb-html.svg", description: "Санитизированный HTML", type: "html" },
 
   // — Планировка
-  { id: "layout-grid",   title: "Grid",     group: "Планировка", icon: "layout-grid.svg",     description: "Сетка 1–4",          type: "grid" },
+  { id: "layout-grid",   title: "Grid",     group: "Планировка", icon: "layout-grid.svg",     description: "Колонки, строки и объединение ячеек",          type: "grid" },
   { id: "layout-section", title: "Section", group: "Планировка", icon: "layout-container.svg", description: "Секция / контейнер", type: "section" },
 
   // — Утилиты
@@ -96,8 +100,8 @@ export const paletteMeta: PaletteMeta[] = [
   { id: "layout-sidebar",   title: "Sidebar",   group: "Планировка", icon: "layout-sidebar.svg",   description: "Боковая панель",         type: "sidebar" },
   { id: "layout-offcanvas", title: "Offcanvas", group: "Планировка", icon: "layout-offcanvas.svg", description: "Выезжающая панель",       type: "offcanvas" },
 
-  // — Пресеты (позже, составные)
-  { id: "preset-bio-card", title: "Bio card", group: "Пресеты", icon: "preset-bio-card.svg", description: "Готовая карточка", type: "unsupported" },
+  // — Составные макеты
+  { id: "preset-bio-card", title: "Bio card", group: "Пресеты", icon: "preset-bio-card.svg", description: "Портрет, имя, биография и ссылки в редактируемых колонках", type: "bio-card" },
 ];
 
 // Удобный порядок групп в UI:

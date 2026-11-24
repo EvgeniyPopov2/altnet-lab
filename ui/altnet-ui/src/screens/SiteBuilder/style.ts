@@ -16,8 +16,8 @@ export function styleInline(style?: ResponsiveStyle, w?: number): CSSProperties 
   const device = deviceFromViewport(w);
   const s = style?.[device] || {};
   const out: CSSProperties = {};
-  if (s.padding) out.padding = s.padding as any;
-  if (s.margin) out.margin = s.margin as any;
-  if (s.radius) out.borderRadius = s.radius as any;
+  if (s.padding) out.padding = s.padding;
+  if (s.margin) out.margin = s.margin;
+  if (s.radius) out.borderRadius = s.radius;
   return out;
 }

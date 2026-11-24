@@ -1,5 +1,7 @@
+import TextPathView from "./TextPathView";
 // src/screens/SiteBuilder/blocks/index.tsx
 import type { Block } from "../types";
+import LoopGridView from "./loopgrid/view";
 import H1View from "./h1/view";
 import PView from "./p/view";
 import BtnView from "./btn/view";
@@ -58,6 +60,9 @@ import PriceTableView from "./pricetable/view";
 /** Возвращает React-элемент превью для любого блока. */
 export function renderBlockView(b: Block) {
   switch (b.type) {
+    case "soundcloud": return <figure className="sb-audio-card"><strong>{b.label||"SoundCloud"}</strong><figcaption>{b.track || "Выберите трек в настройках"}</figcaption></figure>;
+    case "readmore": return <div className="sb-read-more-marker">{b.label?.trim() || "Читать дальше"}</div>;
+    case "textpath": return <TextPathView block={b}/>;
     case "h1":      return <H1View block={b} />;
     case "heading": return <HeadingView block={b} />;
     case "p":       return <PView block={b} />;
@@ -100,6 +105,7 @@ export function renderBlockView(b: Block) {
     case "search":      return <SearchView block={b} />;
     case "contentnav":  return <ContentNavView block={b} />;
     case "map":            return <MapView block={b} />;
+    case "loopgrid": return <LoopGridView block={b}/>;
     case "lottie":         return <LottieView block={b} />;
     case "mediacarousel":  return <MediaCarouselView block={b} />;
     case "slides":         return <SlidesView block={b} />;
@@ -108,8 +114,8 @@ export function renderBlockView(b: Block) {
     case "container":     return <ContainerView block={b} />;
     case "sidebar":       return <SidebarView block={b} />;
     case "offcanvas":     return <OffcanvasView block={b} />;
-    case "shortcode":      return <ShortcodeView block={b as any} />;
-    case "pricetable":     return <PriceTableView block={b as any} />;
+    case "shortcode":      return <ShortcodeView block={b} />;
+    case "pricetable":     return <PriceTableView block={b} />;
     default:
       return <div className="text-sm text-[#6b7390]">Превью для блока пока не реализовано.</div>;
   }

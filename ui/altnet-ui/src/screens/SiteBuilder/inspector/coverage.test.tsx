@@ -15,11 +15,11 @@ describe("панели доступных виджетов", () => {
     expect(html).toContain("Непрозрачность блока");
     expect(html).toContain('type="range"');
   });
-  it("явно выявляет виджеты без отдельной панели содержимого", () => {
+  it("каждый виджет палитры открывает собственные настройки содержимого", () => {
     const missing = entries.filter(item => {
       const block = createDefaultBlock(item.type as BlockType, [1]);
       return renderToStaticMarkup(<ContentTab block={block} device="desktop" onPatch={() => {}} />).includes("редактор Content будет добавлен");
     }).map(item => item.type);
-    expect(missing).toEqual(["lottie", "map"]);
+    expect(missing).toEqual([]);
   });
 });

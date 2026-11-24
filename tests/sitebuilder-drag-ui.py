@@ -1,6 +1,7 @@
 import argparse,base64,io,json,os,struct,subprocess,sys,tempfile,time,urllib.request,zipfile,zlib
 from pathlib import Path
 import websocket
+import sitebuilder_elementor_controls as elementor_checks
 parser=argparse.ArgumentParser(description="Проверка перетаскивания в изолированном профиле браузера")
 parser.add_argument("browser")
 parser.add_argument("--url", default="http://127.0.0.1:5179/")
@@ -30,6 +31,8 @@ parser.add_argument("--button-style-smoke", action="store_true", help="Пров�
 parser.add_argument("--button-icon-padding-smoke", action="store_true", help="Проверить иконку и отступы кнопки по сторонам")
 parser.add_argument("--button-effects-smoke", action="store_true", help="Проверить градиент и тень кнопки")
 parser.add_argument("--heading-semantics-smoke", action="store_true", help="Проверить семантику и ссылку заголовка")
+for case in ("layout","library","animation","templates","loop","matrix","custom-grid","classes","publishing","popup"):
+ parser.add_argument("--elementor-"+case+"-smoke", action="store_const", dest="elementor_case", const=case)
 args=parser.parse_args()
 with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
  p=subprocess.Popen([args.browser,"--headless=new","--no-first-run","--disable-background-networking","--host-resolver-rules=MAP example.invalid ~NOTFOUND","--remote-debugging-port=0","--user-data-dir="+d,args.url],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
@@ -54,7 +57,7 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
      return v["result"]
   def js(expr):
    x=call("Runtime.evaluate",{"expression":expr,"returnByValue":True,"awaitPromise":True})
-   if "exceptionDetails" in x:raise RuntimeError("JS exception")
+   if "exceptionDetails" in x:raise RuntimeError(x["exceptionDetails"].get("exception",{}).get("description") or x["exceptionDetails"].get("text","JS exception"))
    return x["result"].get("value")
   def wait(expr):
    for _ in range(150):
@@ -78,6 +81,7 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
   call("Network.enable",{})
   wait("!!document.querySelector('[aria-label=\"Браузер .alt\"]')")
   doc={"title":"Drag","blocks":[{"id":"one","type":"h1","text":"Первый"},{"id":"two","type":"h1","text":"Второй"}]}
+  if args.elementor_case: doc=elementor_checks.fixture(args.elementor_case)
   if args.builder_chrome_smoke: doc={"title":"Макеты","blocks":[]}
   if args.grid_rows_smoke: doc={"title":"Сетка","blocks":[{"id":"grid1","type":"grid","cols":2,"items":[],"layoutPreset":[2,1],"layoutCells":[[],[]]}]}
   if args.mobile_grid_touch_smoke: doc={"title":"Сетка","blocks":[{"id":"grid1","type":"grid","cols":2,"items":[],"layoutPreset":[1,1],"layoutCells":[[],[]]}]}
@@ -114,6 +118,9 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
    sys.exit(0)
   js("[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Создать сайт').click()")
   wait("!!document.querySelector('[data-insert-slot=\"slot-0\"]')")
+  if args.elementor_case:
+   elementor_checks.run(args.elementor_case,js,wait,call,d)
+   sys.exit(0)
   if args.mobile_sort_touch_smoke:
    js("document.querySelector('[aria-label=\"Закрыть все\"]')?.click()")
    time.sleep(.8)
@@ -223,6 +230,7 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
    sys.exit(0)
   if args.image_style_smoke:
    js("document.querySelector('[data-canvas-block=\"pic\"] .cursor-pointer').click()")
+   wait("!!document.querySelector('.builder-inspector')")
    def image_input(label,value,tag="input"):
     js("(()=>{const e=[...document.querySelectorAll('label')].find(x=>x.querySelector('span')?.textContent==="+json.dumps(label,ensure_ascii=False)+").querySelector('"+tag+"');Object.getOwnPropertyDescriptor("+("HTMLTextAreaElement" if tag=="textarea" else "HTMLInputElement")+".prototype,'value').set.call(e,"+json.dumps(str(value),ensure_ascii=False)+");e.dispatchEvent(new Event('input',{bubbles:true}))})()")
    def image_select(label,value):
@@ -304,6 +312,7 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
    sys.exit(0)
   if args.heading_semantics_smoke:
    js("document.querySelector('[data-canvas-block=\"heading1\"] .cursor-pointer').click()")
+   wait("!!document.querySelector('.builder-inspector')")
    def heading_select(label,value):
     js("(()=>{const e=[...document.querySelectorAll('label')].find(x=>x.querySelector('span')?.textContent==="+json.dumps(label,ensure_ascii=False)+").querySelector('select');e.value="+json.dumps(value)+";e.dispatchEvent(new Event('change',{bubbles:true}))})()")
    def heading_input(label,value):
@@ -343,6 +352,7 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
    sys.exit(0)
   if args.button_effects_smoke:
    js("document.querySelector('[data-canvas-block=\"button1\"] .cursor-pointer').click()")
+   wait("!!document.querySelector('.builder-inspector')")
    js("document.querySelector('#inspector-tab-style').click()")
    js("[...document.querySelectorAll('summary')].find(x=>x.textContent.trim()==='Градиент и тень').click()")
    def effect_select(label,value):
@@ -405,6 +415,7 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
    sys.exit(0)
   if args.button_icon_padding_smoke:
    js("document.querySelector('[data-canvas-block=\"button1\"] .cursor-pointer').click()")
+   wait("!!document.querySelector('.builder-inspector')")
    def select_button(label,value):
     js("(()=>{const e=[...document.querySelectorAll('label')].find(x=>x.querySelector('span')?.textContent==="+json.dumps(label,ensure_ascii=False)+").querySelector('select');e.value="+json.dumps(value)+";e.dispatchEvent(new Event('change',{bubbles:true}))})()")
    def input_button(label,value):
@@ -628,19 +639,31 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
    print("PASS multi-row grid, content protection, persistence and layout insertion")
    sys.exit(0)
   if args.builder_chrome_smoke:
+   def capture_choices(suffix):
+    if not args.screenshot:return
+    bounds=js("""(()=>{const e=document.querySelector('[data-layout-preview]').closest('div.relative.w-full'),r=e.getBoundingClientRect();
+      return {x:r.x+scrollX,y:r.y+scrollY,width:r.width,height:r.height,scale:1}})()""")
+    path=Path(args.screenshot)
+    path.with_name(path.stem+'-'+suffix+'.png').write_bytes(base64.b64decode(call("Page.captureScreenshot",{"format":"png","clip":bounds})["data"]))
    js("document.querySelector('[title=\"Добавить секцию\"]').click()")
    js("[...document.querySelectorAll('button')].find(x=>x.textContent.trim().startsWith('Flexbox')).click()")
-   wait("document.querySelectorAll('[data-layout-preview]').length===12")
+   wait("document.querySelectorAll('[data-layout-preview]').length===13")
    assert js("document.querySelector('[data-layout-preview=\"2-1\"]').children.length") == 2
    result=js("(()=>{const e=document.querySelector('[data-layout-preview=\"2-1\"]');return {gap:getComputedStyle(e).gap,a:e.children[0].getBoundingClientRect().width,b:e.children[1].getBoundingClientRect().width,background:getComputedStyle(e).backgroundColor,cell:getComputedStyle(e.children[0]).backgroundColor}})()")
    assert result["gap"] != "0px" and result["a"] > result["b"]*1.8 and result["background"] != result["cell"], result
+   capture_choices("flex")
    js("[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='←').click()")
    js("[...document.querySelectorAll('button')].find(x=>x.textContent.trim().startsWith('CSS Grid')).click()")
    wait("document.querySelectorAll('[data-layout-preview]').length===6")
+   js("(()=>{const e=document.querySelector('.sb-preset-rows select');e.value='3';e.dispatchEvent(new Event('change',{bubbles:true}))})()")
+   wait("document.querySelector('[data-layout-preview=\"2-1-1\"]').children.length===9")
+   measures=js("Array.from(document.querySelector('[data-layout-preview=\"2-1-1\"]').children,e=>{const r=e.getBoundingClientRect();return [r.x,r.y,r.width,r.height]})")
+   assert len(set(round(m[1]) for m in measures))==3 and min(m[3] for m in measures)>3 and measures[0][2]>1.8*measures[1][2],measures
+   capture_choices("columns")
    if args.screenshot:
     Path(args.screenshot).write_bytes(base64.b64decode(call("Page.captureScreenshot",{"format":"png"})["data"]))
    js("document.querySelector('[data-layout-preview=\"2-1-1\"]').closest('button').click()")
-   wait("document.querySelectorAll('[data-layout-cell]').length===3")
+   wait("document.querySelectorAll('[data-layout-cell]').length===9")
    js("document.querySelector('[data-canvas-block] .cursor-pointer').click()")
    js("document.querySelector('#inspector-tab-style').click()")
    wait("!!document.querySelector('.sb-slider')")
@@ -665,7 +688,7 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
    wait("!![...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Создать сайт')")
    js("[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Создать сайт').click()")
    wait("document.querySelector('.altnet-builder')?.dataset.editorTheme==='light'")
-   wait("document.querySelectorAll('[data-layout-cell]').length===3")
+   wait("document.querySelectorAll('[data-layout-cell]').length===9")
    print("PASS readable layout previews, insertion, compact inspector and persisted theme")
    sys.exit(0)
   if args.inspector_sliders_smoke:
@@ -932,7 +955,8 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
    wait("document.querySelector('section[aria-label=\"Страницы сайта\"]').innerText.includes('about.html')")
    wait("JSON.parse(localStorage.getItem('altnet.sitebuilder.v1')).blocks.find(x=>x.id==='link').href==='./about.html#details'")
    assert js("JSON.parse(localStorage.getItem('altnet.sitebuilder.v1')).sitePages.pages.find(x=>x.id==='home').document.blocks.find(x=>x.id==='link').href")=='./about.html#details'
-   js("document.querySelector('section[aria-label=\"Страницы сайта\"] details summary').click()")
+   js("""[...document.querySelectorAll('section[aria-label="Страницы сайта"] summary')].find(s=>s.textContent.trim()==='Поиск и соцсети').click()""")
+   wait("""!![...document.querySelectorAll('section[aria-label="Страницы сайта"] details[open] label')].find(l=>l.textContent.includes('Описание страницы'))""")
    js("(()=>{const e=[...document.querySelectorAll('label')].find(x=>x.innerText==='Описание страницы').querySelector('textarea');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(e,'Как с нами связаться');e.dispatchEvent(new Event('input',{bubbles:true}))})()")
    js("(()=>{const e=[...document.querySelectorAll('label')].find(x=>x.innerText==='Адрес изображения для соцсетей').querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,'https://example.invalid/cover.png');e.dispatchEvent(new Event('input',{bubbles:true}))})()")
    js("(()=>{const e=[...document.querySelectorAll('label')].find(x=>x.innerText==='Канонический адрес страницы').querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,'https://example.invalid/about');e.dispatchEvent(new Event('input',{bubbles:true}))})()")
@@ -1429,11 +1453,11 @@ with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:
   assert js("document.querySelector('#inspector-tab-advanced').getAttribute('aria-selected')")=="true"
   js("document.querySelector('#inspector-tab-advanced').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}))")
   assert js("document.querySelector('#inspector-tab-style').getAttribute('aria-selected')")=="true"
-  wait("!![...document.querySelectorAll('label')].find(x=>x.innerText.includes('Внутренний отступ сверху'))?.querySelector('input')")
-  js("(()=>{const e=[...document.querySelectorAll('label')].find(x=>x.innerText.includes('Внутренний отступ сверху')).querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,'24');e.dispatchEvent(new Event('input',{bubbles:true}))})()")
+  wait("!!document.querySelector('[aria-label=\"Внутренний отступ сверху\"]')")
+  js("(()=>{const e=document.querySelector('[aria-label=\"Внутренний отступ сверху\"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,'24');e.dispatchEvent(new Event('input',{bubbles:true}))})()")
   wait("document.querySelector('[data-styled-block=\"list1\"]').style.paddingTop==='24px'")
   js("[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Mobile').click()")
-  js("(()=>{const e=[...document.querySelectorAll('label')].find(x=>x.innerText.includes('Внутренний отступ сверху')).querySelector('input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,'8');e.dispatchEvent(new Event('input',{bubbles:true}))})()")
+  js("(()=>{const e=document.querySelector('[aria-label=\"Внутренний отступ сверху\"]');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,'8');e.dispatchEvent(new Event('input',{bubbles:true}))})()")
   wait("JSON.parse(localStorage.getItem('altnet.sitebuilder.v1')).blocks[2].styleByBp.mobile.pt===8")
   js("document.querySelector('[title=\"Мобильный (≤767)\"]').click()")
   wait("document.querySelector('[data-styled-block=\"list1\"]').style.paddingTop==='8px'")

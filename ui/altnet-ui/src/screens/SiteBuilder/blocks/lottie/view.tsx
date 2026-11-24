@@ -1,28 +1,32 @@
+import { useEffect, useMemo, useState } from "react";
+import { animationCss, animationMarkup, loadLottieRenderer, LOTTIE_HASH } from "../../../../builder/lottieRenderer";
+import { readAnimation, lottieOptions } from "../../lottie";
 import type { LottieBlock } from "../../types";
 
-function safeUrl(s?: string) {
-  const u = (s || "").trim().toLowerCase();
-  if (!u) return "";
-  if (u.startsWith("javascript:")) return "";
-  if (u.startsWith("http:") || u.startsWith("https:") || u.startsWith("ipfs:") || u.startsWith("altfs:") || u.startsWith("data:")) return s!;
-  return "";
-}
-
 export default function LottieView({ block }: { block: LottieBlock }) {
-  const poster = safeUrl(block.poster);
-  const src = safeUrl(block.src);
-  return (
-    <figure className="grid gap-2 rounded-2xl border border-[#1f2751] bg-[#0b1022] p-3">
-      {poster ? (
-        <img className="w-full rounded-xl border border-[#2a2f45]" src={poster} alt={block.caption || "Lottie"} />
-      ) : (
-        <div className="aspect-video w-full grid place-items-center rounded-xl border border-[#1f2751] bg-[#101735] text-[#9aa3b2]">
-          Lottie (превью)
-        </div>
-      )}
-      <figcaption className="text-xs text-[#9aa3b2]">
-        {block.caption || (src ? `JSON: ${src}` : "Задайте JSON или постер")}
-      </figcaption>
-    </figure>
-  );
+  const [engine, setEngine] = useState("");
+  const [failed, setFailed] = useState(false);
+  const source = block.animationJson;
+  const info = useMemo(() => {
+    if (!source) return null;
+    try { return readAnimation(source); } catch { return null; }
+  }, [source]);
+  useEffect(() => {
+    if (!info) return;
+    let active = true;
+    loadLottieRenderer().then(value => { if (active) setEngine(value); }).catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [info]);
+  if (!info || !source || failed) return <figure className="grid min-h-20 place-content-center gap-2 rounded border border-dashed p-3 text-center text-xs">
+    {block.poster && <img src={block.poster} alt="" />}
+    <figcaption>{failed ? "Не удалось загрузить проигрыватель" : source ? "Файл анимации повреждён" : "Выберите файл Lottie JSON в настройках блока"}</figcaption></figure>;
+  const options = lottieOptions(block);
+  const policy = "default-src 'none'; script-src 'sha256-" + LOTTIE_HASH + "'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'";
+  const html = '<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + policy +
+    '"><style>body{margin:0;font:13px system-ui}' + animationCss + '</style>' + animationMarkup(source, "", options, block.poster) + '<script>' + engine + '</script>';
+  return <figure style={{ width: options.width + "%", maxWidth: options.maxWidth, marginInline: options.align === "center" ? "auto" : options.align === "right" ? "auto 0" : "0 auto" }}>
+    {engine && <iframe sandbox="allow-scripts" title={block.caption || "Анимация Lottie"} srcDoc={html} loading={options.lazy ? "lazy" : "eager"}
+      style={{ width: "100%", aspectRatio: Number(info.w) / Number(info.h), minHeight: 90, border: 0 }} />}
+    {block.caption && <figcaption>{block.caption}</figcaption>}
+  </figure>;
 }

@@ -1,17 +1,30 @@
+import {popupSettings} from "../screens/SiteBuilder/popup";
+import {soundSettings} from "../screens/SiteBuilder/soundCloud";
+import {textPathOptions} from "../screens/SiteBuilder/textPath";
+import {moreFragment} from "../screens/SiteBuilder/postExcerpt";
+import { asRecord, oneOf, recordList } from "../core/records";
 // ui/altnet-ui/src/builder/exporter.ts
 // Экспорт статического сайта в ZIP: index.html + styles.css + manifest.json + assets/*
 // Безопасность: CSP запрещает произвольные скрипты; для интерактивных компонентов разрешён фиксированный код по хешу.
 // Дополнительно: дедупликация ассетов по SHA-256 и безопасные rel для внешних ссылок.
 
-import JSZip from "jszip";
+import type JSZip from "jszip";
 import { buildSitemap } from "./sitemap";
 import { serializeBlock } from "./registry";
 import { buttonLinkOptions, placeholderDataUrl, sanitizeHref, externalLinkRels } from "./cdr";
 import { resolveResponsiveStyle } from "../screens/SiteBuilder/responsiveStyle";
+import { spacingStyle } from "../screens/SiteBuilder/boxDimensions";
+import { transformStyle } from "../screens/SiteBuilder/transforms";
+import { animationCss, LOTTIE_HASH, loadLottieRenderer } from "./lottieRenderer";
+import { loopSettings } from "../screens/SiteBuilder/dynamicContent";
+import { mapSettings } from "../screens/SiteBuilder/blocks/map/geometry";
+import { readAnimation, lottieOptions } from "../screens/SiteBuilder/lottie";
+import { imageCaption } from "../screens/SiteBuilder/mediaLibrary";
 import { SITE_RUNTIME, SITE_RUNTIME_HASH } from "./siteRuntime";
-import { resolveGridGaps, resolveLayout } from "../screens/SiteBuilder/layoutResponsive";
+import { resolveFlexLayout, resolveGridGaps, resolveLayout } from "../screens/SiteBuilder/layoutResponsive";
 import { spacerHeight } from "../screens/SiteBuilder/blocks/spacer/size";
 import { imageAlignment, imageCaptionStyle, imageHoverStyle, imageStyle, imageTransition } from "../screens/SiteBuilder/imageStyle";
+import { textAppearance } from "../screens/SiteBuilder/textAppearance";
 import { buttonStyle } from "../screens/SiteBuilder/buttonStyle";
 import { buttonIconPath } from "../screens/SiteBuilder/buttonIcons";
 import { gridColumnCount, gridCoveredCells, gridTracks, readGridMerges } from "../screens/SiteBuilder/gridLayout";
@@ -19,7 +32,7 @@ import { gridColumnCount, gridCoveredCells, gridTracks, readGridMerges } from ".
 export type BlockInstance = {
   id?: string;
   type: string;
-  props?: Record<string, any>;
+  props?: Record<string, unknown>;
 };
 
 export type SiteModel = {
@@ -100,7 +113,7 @@ function sanitizeSocialHref(value: unknown): string {
 }
 
 export function sanitizeSocialImage(value: unknown): string {
-  if (typeof value !== "string" || /[\\\x00-\x20\x7f]/.test(value) || !/^https?:\/\//i.test(value)) return "";
+  if (typeof value !== "string" || (value.includes("\\") || /[^\x21-\x7e\u0080-\uffff]/.test(value)) || !/^https?:\/\//i.test(value)) return "";
   try { const url = new URL(value); return !url.username && !url.password ? url.href : ""; }
   catch { return ""; }
 }
@@ -226,6 +239,17 @@ p{margin:8px 0;font-size:16px;color:var(--fg)}
 
 /* Карточки/изображения */
 img.responsive, video.responsive{border-radius:var(--radius);box-shadow:var(--shadow-soft)}
+${animationCss}
+.sb-loop>[data-loop-list]{display:grid}.sb-loop article{min-width:0;overflow-wrap:anywhere}.sb-loop [hidden]{display:none!important}.sb-loop>nav{display:flex;align-items:center;gap:6px;margin-top:8px}.sb-loop>label{display:block;margin-bottom:8px}.sb-loop button,.sb-loop select{font:inherit;border:1px solid #8886;border-radius:4px;padding:4px 8px}.sb-loop h3{margin:4px 0}
+.sb-map{margin:0}.sb-map-view{display:grid;place-items:center;overflow:hidden}.sb-map-view :is(svg,iframe){width:100%;height:100%;border:0}.sb-map small{display:block;font-size:10px}.sb-map button{cursor:pointer;border:1px solid #8886;border-radius:4px;padding:5px 8px;color:inherit;background:transparent}
+@media(prefers-color-scheme:dark){.sb-map-auto svg rect{fill:#202f46}.sb-map-auto svg use{fill:#647d85}}
+.sb-lightbox-trigger{background:transparent;border:0;padding:0;margin:0;cursor:zoom-in;color:inherit;font:inherit;display:block;width:100%;text-align:inherit}
+.sb-lightbox-trigger:focus-visible img{outline:2px solid #8b78ff;outline-offset:2px}
+.sb-lightbox{box-sizing:border-box;width:min(96vw,1440px);height:min(92dvh,1000px);max-width:96vw;max-height:92dvh;padding:12px;background:#111522;color:#fff;border:1px solid #454d61;border-radius:12px;margin:auto}
+.sb-lightbox[open]{display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:8px}.sb-lightbox::backdrop{background:#080a10dd}
+.sb-lightbox-toolbar{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px}.sb-lightbox-toolbar span{margin-right:auto}.sb-lightbox-toolbar button{min-height:36px;background:#23293a;color:#fff;border:1px solid #59637b;border-radius:5px;padding:4px 9px}.sb-lightbox-toolbar button[aria-pressed=true]{background:#504099}.sb-lightbox button:focus-visible{outline:2px solid #bdb1ff}
+.sb-lightbox-stage{display:grid;place-items:center;min-width:0;min-height:0;overflow:auto}.sb-lightbox-stage img{display:block;width:100%;height:100%;max-width:none;object-fit:contain}.sb-lightbox-stage[data-zoomed=true]{display:block}.sb-lightbox-stage[data-zoomed=true] img{width:auto;height:auto;margin:auto}
+.sb-lightbox-caption{white-space:pre-wrap;text-align:center;margin:0}.sb-lightbox-caption:empty{display:none}
 .sb-image-figure{margin:0}.sb-image-figure figcaption{margin-top:8px;white-space:pre-wrap}.sb-image-link:focus-visible{outline:2px solid #8b78ff;outline-offset:3px}
 video.responsive{display:block;width:100%;max-width:100%;height:auto}
 .card{
@@ -264,6 +288,11 @@ footer{opacity:.8;padding:26px 0;text-align:center;font-size:14px}
 .section-band.pad-md{padding:40px 0}
 .section-band.pad-lg{padding:64px 0}
 
+.sb-popup{box-sizing:border-box;max-height:calc(100dvh - 2rem);padding:1.1rem;border:0;border-radius:.6rem;color:var(--fg);background:var(--card);box-shadow:var(--shadow);overflow:auto}
+.sb-popup::backdrop{background:rgb(13 16 29 / .55)}.sb-popup-top{margin:1rem auto auto}.sb-popup-bottom{margin:auto auto 1rem}
+.sb-popup-bar{display:flex;justify-content:flex-end}.sb-popup-bar button{padding:.3rem .5rem}
+.sb-audio-card{display:grid;gap:.5rem;margin:1rem 0}.sb-audio-card iframe{border:0;max-width:100%}.sb-audio-card button{justify-self:start}
+.sb-text-path{display:block;max-width:100%;height:auto;overflow:visible}.sb-text-path:hover text{fill:var(--sb-path-hover)}.sb-text-path:hover use{stroke:var(--sb-path-stroke)}
 /* themes (локальные) */
 .section-band.theme-auto{ /* оставляем фон страницы */ }
 .section-band.theme-light{background:#f5f7fb;color:#0b0d12}
@@ -348,21 +377,21 @@ function flattenBlockTree(blocks: BlockInstance[]): BlockInstance[] {
 
 export function unsupportedBlockTypes(model: SiteModel): string[] {
   return [...new Set(flattenBlockTree(model.blocks || []).filter(block => block.type === "unknown")
-    .map(block => String(block.props?.raw?.type || "неизвестный")))];
+    .map(block => String(asRecord(block.props?.raw).type || "неизвестный")))];
 }
 
 function prepareStyleRules(model: SiteModel): string {
   const rules: string[] = [];
-  const declarations = (style: any, typography: boolean): string => {
+  const declarations = (style: Record<string, unknown>, typography: boolean): string => {
     if (!style || typeof style !== "object") return "";
     const values: string[] = [];
     const add = (property: string, raw: unknown, negative = false) => {
       if (typeof raw !== "number" || !Number.isFinite(raw)) return;
       values.push(`${property}:${Math.max(negative ? -512 : 0, Math.min(512, raw))}px`);
     };
-    add("padding-top", style.pt ?? style.py); add("padding-bottom", style.pb ?? style.py);
-    add("padding-left", style.pl); add("padding-right", style.pr);
-    add("margin-top", style.mt, true); add("margin-bottom", style.mb, true); add("margin-left", style.ml, true); add("margin-right", style.mr, true);
+    for (const [key, value] of Object.entries({ ...spacingStyle(style), ...transformStyle(style) })) {
+      values.push(key.replace(/[A-Z]/g, char => "-" + char.toLowerCase()) + ":" + value);
+    }
     add("border-radius", style.br); add("border-width", style.bw);
     if (typeof style.w === "number" && Number.isFinite(style.w)) values.push(`width:${Math.max(1, Math.min(200, style.w))}%`);
     if (typeof style.minh === "number" && Number.isFinite(style.minh)) values.push(`min-height:${Math.max(0, Math.min(1200, style.minh))}px`);
@@ -382,44 +411,63 @@ function prepareStyleRules(model: SiteModel): string {
   };
   flattenBlockTree(model.blocks).forEach((block, index) => {
     const p = block.props || {};
-    if (Array.isArray(p.layoutCells) && p.layoutCells.length) {
+    if (["grid","container","section","offcanvas"].includes(block.type) && Array.isArray(p.layoutCells) && p.layoutCells.length) {
       p.__layoutClass = `sb-layout-${index}`;
-      const layoutBase = { layoutCells: p.layoutCells, layoutPreset: p.layoutWeights, layoutColumns: p.layoutColumns, layoutMerges: p.layoutMerges, layoutByBp: p.layoutByBp, layoutGap: p.layoutGap, layoutGapX: p.layoutGapX, layoutGapY: p.layoutGapY };
-      const desktopLayout = resolveLayout(layoutBase, "desktop");
-      const gridColumns = (device: "desktop" | "tablet" | "mobile") => resolveLayout(layoutBase, device).mode === "stack" ? "minmax(0,1fr)" : gridTracks(layoutBase, device).map(weight => `minmax(0,${weight}fr)`).join(" ");
-      const gapCss = (device: "desktop" | "tablet" | "mobile") => {
-        const gap = resolveGridGaps(layoutBase, device);
-        return gap.x === gap.y ? `gap:${gap.x}px` : `column-gap:${gap.x}px;row-gap:${gap.y}px`;
-      };
-      rules.push(`.${p.__layoutClass}{${block.type === "grid" ? `${gapCss("desktop")};display:grid;align-items:stretch;grid-template-columns:${gridColumns("desktop")}` : `gap:${desktopLayout.gap}px`}}`);
-      const merges = block.type === "grid" ? readGridMerges(layoutBase) || [] : [];
-      const covered = block.type === "grid" ? gridCoveredCells(layoutBase) : new Set<number>();
-      const count = block.type === "grid" ? gridColumnCount(layoutBase) : 0;
-      const positions = (mode: "columns" | "stack") => merges.length ? p.layoutCells.map((_: unknown, cell: number) => {
-        const selector = `.${p.__layoutClass}>.layout-cell:nth-child(${cell + 1})`;
-        if (covered.has(cell)) return `${selector}{display:none}`;
-        if (mode === "stack") return `${selector}{grid-column:auto;grid-row:auto}`;
-        const merge = merges.find(item => item.start === cell);
-        return `${selector}{grid-column:${cell % count + 1}/span ${merge?.columns || 1};grid-row:${Math.floor(cell / count) + 1}/span ${merge?.rows || 1}}`;
-      }).join("") : "";
-      if (merges.length) rules.push(positions("columns"));
-      for (const [device, width] of [["tablet", 1024], ["mobile", 767]] as const) {
-        const layout = resolveLayout(layoutBase, device);
-        if (block.type === "grid") {
-          rules.push(`@media(max-width:${width}px){.${p.__layoutClass}{${gapCss(device)};grid-template-columns:${gridColumns(device)}}${positions(layout.mode)}}`);
-          continue;
+      const layoutBase = { layoutCells: p.layoutCells, layoutPreset: p.layoutWeights, layoutColumns: p.layoutColumns, layoutMerges: p.layoutMerges, layoutByBp: asRecord(p.layoutByBp), layoutGap: p.layoutGap, layoutGapX: p.layoutGapX, layoutGapY: p.layoutGapY };
+      if (block.type === "section" || block.type === "container") {
+        for (const [device, width] of [["desktop", 0], ["tablet", 1024], ["mobile", 767]] as const) {
+          const flex = resolveFlexLayout({ ...layoutBase, flexByBp: p.flexByBp }, device);
+          const selector = `.${p.__layoutClass}`;
+          const declarations = Object.entries(flex.row).map(([name, value]) => `${name.replace(/[A-Z]/g, c => "-" + c.toLowerCase())}:${value}`).join(";");
+          const row = `${selector}{${declarations}}`;
+          const wrapper = block.type === "container" && flex.contentWidth ? `.sb-container:has(>${selector}){max-width:none}` : "";
+          const cells = flex.cells.map((value, i) => `${selector}>.layout-cell:nth-child(${i + 1}){flex:${value}}`).join("");
+          rules.push(width ? `@media(max-width:${width}px){${wrapper}${row}${cells}}` : wrapper + row + cells);
         }
-        const cells = layout.weights.map((weight, cell) => `.${p.__layoutClass}>.layout-cell:nth-child(${cell + 1}){flex:${layout.mode === "stack" ? "1 1 100%" : `${weight} 1 0`}}`).join("");
-        rules.push(`@media(max-width:${width}px){.${p.__layoutClass}{gap:${layout.gap}px;flex-wrap:${layout.mode === "stack" ? "wrap" : "nowrap"}}${cells}}`);
+      } else {
+        const desktopLayout = resolveLayout(layoutBase, "desktop");
+        const gridColumns = (device: "desktop" | "tablet" | "mobile") => resolveLayout(layoutBase, device).mode === "stack" ? "minmax(0,1fr)" : gridTracks(layoutBase, device).map(weight => `minmax(0,${weight}fr)`).join(" ");
+        const gapCss = (device: "desktop" | "tablet" | "mobile") => {
+          const gap = resolveGridGaps(layoutBase, device);
+          return gap.x === gap.y ? `gap:${gap.x}px` : `column-gap:${gap.x}px;row-gap:${gap.y}px`;
+        };
+        rules.push(`.${p.__layoutClass}{${block.type === "grid" ? `${gapCss("desktop")};display:grid;align-items:stretch;grid-template-columns:${gridColumns("desktop")}` : `gap:${desktopLayout.gap}px`}}`);
+        const merges = block.type === "grid" ? readGridMerges(layoutBase) || [] : [];
+        const covered = block.type === "grid" ? gridCoveredCells(layoutBase) : new Set<number>();
+        const count = block.type === "grid" ? gridColumnCount(layoutBase) : 0;
+        const positions = (mode: "columns" | "stack") => merges.length ? layoutBase.layoutCells.map((_: unknown, cell: number) => {
+          const selector = `.${p.__layoutClass}>.layout-cell:nth-child(${cell + 1})`;
+          if (covered.has(cell)) return `${selector}{display:none}`;
+          if (mode === "stack") return `${selector}{grid-column:auto;grid-row:auto}`;
+          const merge = merges.find(item => item.start === cell);
+          return `${selector}{grid-column:${cell % count + 1}/span ${merge?.columns || 1};grid-row:${Math.floor(cell / count) + 1}/span ${merge?.rows || 1}}`;
+        }).join("") : "";
+        if (merges.length) rules.push(positions("columns"));
+        for (const [device, width] of [["tablet", 1024], ["mobile", 767]] as const) {
+          const layout = resolveLayout(layoutBase, device);
+          if (block.type === "grid") {
+            rules.push(`@media(max-width:${width}px){.${p.__layoutClass}{${gapCss(device)};grid-template-columns:${gridColumns(device)}}${positions(layout.mode)}}`);
+            continue;
+          }
+          const cells = layout.weights.map((weight, cell) => `.${p.__layoutClass}>.layout-cell:nth-child(${cell + 1}){flex:${layout.mode === "stack" ? "1 1 100%" : `${weight} 1 0`}}`).join("");
+          rules.push(`@media(max-width:${width}px){.${p.__layoutClass}{gap:${layout.gap}px;flex-wrap:${layout.mode === "stack" ? "wrap" : "nowrap"}}${cells}}`);
+        }
       }
     }
     if (block.type === "rating") p.__ratingName = `sb-rating-${index}`;
+    if (block.type==="site-popup" && typeof p.id==="string" && /^popup-[a-z0-9_-]+$/i.test(p.id))
+      rules.push("#"+p.id+"{width:min(calc(100% - 2rem),"+popupSettings(p.options).width+"px)}");
+    if (block.type === "textpath") {
+      const cls="sb-path-"+index, s=textPathOptions(p);
+      p.__pathId=cls;
+      rules.push("."+cls+"{--sb-path-hover:"+s.hoverColor+";--sb-path-stroke:"+s.hoverStroke+"}");
+    }
     if (block.type === "button") {
       const cls = `sb-button-${index}`;
-      const declarations = (rules: Record<string, string>) => Object.entries(rules).map(([key, value]) => `${key}:${value}${key === "color" ? "!important" : ""}`).join(";") + (rules["border-width"] !== undefined ? ";border-style:solid" : "");
+      const declarations = (rules: Record<string, string>, base = false) => Object.entries(rules).map(([key, value]) => `${key}:${value}${key === "color" ? "!important" : ""}`).join(";") + (base && rules["border-width"] && !rules["border-style"] ? ";border-style:solid" : "");
       const css = (device: "desktop" | "tablet" | "mobile") => {
         const style = buttonStyle(p.buttonStyleByBp, device);
-        const normal = declarations(style.normal), hover = declarations(style.hover), active = declarations(style.active);
+        const normal = declarations(style.normal, true), hover = declarations(style.hover), active = declarations(style.active);
         const transition = style.duration === undefined ? "" : `transition-property:transform,box-shadow,opacity,color,background-color,border-color,border-radius,border-width,padding;transition-duration:${style.duration}ms`;
         const iconGap = style.iconGap === undefined ? "" : `gap:${style.iconGap}px`;
         const iconSize = style.iconSize === undefined ? "" : `.${cls}.btn>.sb-button-icon{width:${style.iconSize}px;height:${style.iconSize}px}`;
@@ -438,7 +486,7 @@ function prepareStyleRules(model: SiteModel): string {
     }
     if (block.type === "image") {
       const cls = `sb-image-${index}`;
-      const declarations = (style: Record<string, string | number>) => Object.entries(style).map(([key, value]) => `${key.replace(/[A-Z]/g, char => "-" + char.toLowerCase())}:${value}${key === "borderRadius" || key === "boxShadow" ? "!important" : ""}`).join(";");
+      const declarations = (style: Record<string, string | number>) => Object.entries(style).map(([key, value]) => `${key.replace(/[A-Z]/g, char => "-" + char.toLowerCase())}:${value}${key.endsWith("Radius") || key === "boxShadow" ? "!important" : ""}`).join(";");
       const deviceRules = (selector: string, values: string[]) => {
         if (values[0]) rules.push(`${selector}{${values[0]}}`);
         if (values[1]) rules.push(`@media(max-width:1024px){${selector}{${values[1]}}}`);
@@ -472,7 +520,7 @@ function prepareStyleRules(model: SiteModel): string {
       const width = typeof p.width === "number" && Number.isFinite(p.width) ? Math.max(1, Math.min(100, p.width)) : 100;
       const thickness = typeof p.thickness === "number" && Number.isFinite(p.thickness) ? Math.max(1, Math.min(12, p.thickness)) : 1;
       const color = typeof p.color === "string" && /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(p.color) ? p.color : "#2a2f45";
-      const style = ["solid", "dashed", "dotted", "double"].includes(p.lineStyle) ? p.lineStyle : "solid";
+      const style = oneOf(p.lineStyle, ["solid", "dashed", "dotted", "double"]) ? p.lineStyle : "solid";
       const margin = p.align === "right" ? "16px 0 16px auto" : p.align === "center" ? "16px auto" : "16px auto 16px 0";
       p.__dividerClass = `sb-divider-${index}`;
       rules.push(`.${p.__dividerClass}{width:${width}%;border-top:${thickness}px ${style} ${color};margin:${margin}}`);
@@ -481,6 +529,22 @@ function prepareStyleRules(model: SiteModel): string {
       const gap = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(512, value)) : 16;
       p.__gridClass = `sb-grid-${index}`;
       rules.push(`.${p.__gridClass}{--gx:${gap(p.gapX)}px;--gy:${gap(p.gapY)}px}`);
+    }
+    if (block.type === "loopgrid") {
+      const s=loopSettings(p),cls=`sb-loop-${index}`;
+      p.__loopClass=cls;
+      const columns=(n:number)=>`.${cls}>[data-loop-list]{grid-template-columns:repeat(${n},minmax(0,1fr));gap:${s.gap}px}`;
+      rules.push(columns(s.columns.desktop),`@media(max-width:1024px){${columns(s.columns.tablet)}}`,`@media(max-width:767px){${columns(s.columns.mobile)}}`);
+    }
+    if (block.type === "map") {
+      p.__mapClass = `sb-map-${index}`;
+      rules.push(`.${p.__mapClass} .sb-map-view{height:${mapSettings(p).height}px}`);
+    }
+    if (block.type === "lottie") {
+      const {width, maxWidth, align} = lottieOptions(p);
+      p.__animationClass = `sb-animation-${index}`;
+      const margin = align === "center" ? "auto" : align === "right" ? "auto 0" : "0 auto";
+      rules.push(`.${p.__animationClass}{width:${width}%;max-width:${maxWidth}px;margin-inline:${margin}}`);
     }
     if (block.type === "sidebar") {
       const width = typeof p.width === "number" && Number.isFinite(p.width) ? Math.max(160, Math.min(520, p.width)) : 260;
@@ -494,7 +558,7 @@ function prepareStyleRules(model: SiteModel): string {
     }
     if (block.type === "hotspot" && Array.isArray(p.markers)) {
       p.__hotspotClass = `sb-hotspot-${index}`;
-      p.markers.forEach((marker: any, i: number) => {
+      recordList(p.markers).forEach((marker, i: number) => {
         const pct = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 50;
         rules.push(`.${p.__hotspotClass}-${i}{left:${pct(marker?.x)}%;top:${pct(marker?.y)}%}`);
       });
@@ -504,10 +568,10 @@ function prepareStyleRules(model: SiteModel): string {
       p.tabs.forEach((_: unknown, i: number) => rules.push(`.${p.__tabsName}:has(#${p.__tabsName}-tab-${i}:checked) #${p.__tabsName}-panel-${i}{display:block}`));
     }
     if (block.type === "accordion") p.__accordionName = `sb-accordion-${index}`;
-    const builder = p.__builder;
+    const builder = asRecord(p.__builder);
     if (!builder || typeof builder !== "object") return;
     if (builder.hideOn && typeof builder.hideOn === "object") {
-      const visibility = builder.hideOn;
+      const visibility = asRecord(builder.hideOn);
       const cls = `sb-visibility-${index}`;
       if (visibility.desktop === true || visibility.tablet === true || visibility.mobile === true) p.__visibilityClass = cls;
       if (visibility.desktop === true) rules.push(`@media(min-width:1025px){.${cls}{display:none!important}}`);
@@ -535,6 +599,28 @@ function prepareStyleRules(model: SiteModel): string {
         if (has("ta")) rules.push(`.${cls}>section{text-align:inherit}`);
       }
     }
+    if (typography) {
+      const cls = `sb-style-${index}`;
+      const target = `.${cls}>section>:is(h1,h2,h3,h4,h5,h6,div,span,p,a)`;
+      for (const [i, width] of [0, 1024, 767].entries()) {
+        const appearance = textAppearance(layers[i]);
+        const normal = Object.entries(appearance.normal).map(([k, v]) => k + ":" + v).join(";");
+        const hover = appearance.hover.color;
+        if (!normal && !hover) continue;
+        p.__styleClass = cls;
+        const css = (normal ? `${target}{${normal}}` : "") + (hover ? `${target}:is(:hover,:focus-within),${target}:is(:hover,:focus-within)>a{color:${hover}!important}` : "");
+        rules.push(width ? `@media(max-width:${width}px){${css}}` : css);
+      }
+    }
+    for (const [i, width] of [0, 1024, 767].entries()) {
+      const hover = transformStyle(layers[i], true);
+      if (!Object.keys(hover).length) continue;
+      p.__styleClass = `sb-style-${index}`;
+      const declarations = Object.entries(hover).map(([k,v]) => k.replace(/[A-Z]/g, c => "-" + c.toLowerCase()) + ":" + v).join(";");
+      const css = `.${p.__styleClass}:is(:hover,:focus-within){${declarations}}`;
+      rules.push(width ? `@media(max-width:${width}px){${css}}` : css);
+    }
+    if (layers.some(layer => layer.transformDuration !== undefined)) rules.push(`@media(prefers-reduced-motion:reduce){.sb-style-${index}{transition-duration:0ms!important}}`);
     if (typeof builder.className === "string") p.__safeClass = builder.className;
     const anchor = builder.anchorId || builder.anchor;
     if (typeof anchor === "string") p.__safeAnchor = anchor;
@@ -574,46 +660,47 @@ function imageReferences(blocks: BlockInstance[]): ImageReference[] {
   return refs;
 }
 
-function sanitizeImageProperties(type: string, p: Record<string, any>): void {
+function sanitizeImageProperties(type: string, p: Record<string, unknown>): void {
+  if (type === "lottie") p.poster = sanitizeImageUrl(p.poster);
   if (type === "image") p.src = sanitizeImageUrl(p.src);
   if (type === "hotspot") {
     p.src = sanitizeImageUrl(p.src);
-    if (Array.isArray(p.markers)) p.markers = p.markers.map((marker: any) => ({ ...marker, href: typeof marker?.href === "string" && marker.href.trim() ? sanitizeHref(marker.href) : "" }));
+    if (Array.isArray(p.markers)) p.markers = recordList(p.markers).map((marker) => ({ ...marker, href: typeof marker?.href === "string" && marker.href.trim() ? sanitizeHref(marker.href) : "" }));
   }
   if (type === "cols2") p.img = sanitizeImageUrl(p.img);
   if (type === "video") {
     p.src = sanitizeUrl(typeof p.src === "string" ? p.src : "", "");
     p.poster = sanitizeImageUrl(p.poster);
   }
-  if (type === "grid" && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({ ...item, src: sanitizeImageUrl(item?.src) }));
-  if (type === "imagebox" && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({ ...item, src: sanitizeImageUrl(item?.src) }));
-  if (type === "testimonials" && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({ ...item, avatar: sanitizeImageUrl(item?.avatar) }));
-  if (type === "carousel" && Array.isArray(p.slides)) p.slides = p.slides.map((slide: any) => ({ ...slide, src: sanitizeImageUrl(slide?.src) }));
-  if (type === "mediacarousel" && Array.isArray(p.slides)) p.slides = p.slides.map((slide: any) => ({ ...slide, src: slide?.kind === "video" ? sanitizeVideoUrl(slide?.src) : sanitizeImageUrl(slide?.src) }));
-  if (type === "videoplaylist" && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({ ...item, src: sanitizeVideoUrl(item?.src), poster: sanitizeImageUrl(item?.poster) }));
-  if (type === "slides" && Array.isArray(p.slides)) p.slides = p.slides.map((slide: any) => ({ ...slide, ctaHref: typeof slide?.ctaHref === "string" && slide.ctaHref.trim() ? sanitizeHref(slide.ctaHref) : "" }));
+  if (type === "grid" && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({ ...item, src: sanitizeImageUrl(item?.src) }));
+  if (type === "imagebox" && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({ ...item, src: sanitizeImageUrl(item?.src) }));
+  if (type === "testimonials" && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({ ...item, avatar: sanitizeImageUrl(item?.avatar) }));
+  if (type === "carousel" && Array.isArray(p.slides)) p.slides = recordList(p.slides).map((slide) => ({ ...slide, src: sanitizeImageUrl(slide?.src) }));
+  if (type === "mediacarousel" && Array.isArray(p.slides)) p.slides = recordList(p.slides).map((slide) => ({ ...slide, src: slide?.kind === "video" ? sanitizeVideoUrl(slide?.src) : sanitizeImageUrl(slide?.src) }));
+  if (type === "videoplaylist" && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({ ...item, src: sanitizeVideoUrl(item?.src), poster: sanitizeImageUrl(item?.poster) }));
+  if (type === "slides" && Array.isArray(p.slides)) p.slides = recordList(p.slides).map((slide) => ({ ...slide, ctaHref: typeof slide?.ctaHref === "string" && slide.ctaHref.trim() ? sanitizeHref(slide.ctaHref) : "" }));
 }
 
-function sanitizeListProperties(type: string, p: Record<string, any>): void {
-  if ((type === "iconlist" || type === "breadcrumbs" || type === "sidebar") && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({
+function sanitizeListProperties(type: string, p: Record<string, unknown>): void {
+  if ((type === "iconlist" || type === "breadcrumbs" || type === "sidebar") && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({
     ...item, href: typeof item?.href === "string" && item.href.trim() ? sanitizeHref(item.href) : "",
   }));
   if (type === "cta") p.btnHref = typeof p.btnHref === "string" && p.btnHref.trim() ? sanitizeHref(p.btnHref) : "";
   if (type === "search") p.action = sanitizeSearchAction(p.action);
-  if (type === "social" && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({ ...item, href: sanitizeSocialHref(item?.href) }));
+  if (type === "social" && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({ ...item, href: sanitizeSocialHref(item?.href) }));
   if (type === "share") {
     const safe = typeof p.url === "string" && p.url.trim() ? sanitizeHref(p.url) : "";
     p.url = safe === "#" ? "" : safe;
   }
-  if (type === "tabs" && Array.isArray(p.tabs)) p.tabs = p.tabs.map((tab: any) => ({ label: String(tab?.label ?? ""), content: String(tab?.content ?? ""), disabled: Boolean(tab?.disabled) }));
-  if (type === "accordion" && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({ title: String(item?.title ?? ""), content: String(item?.content ?? ""), open: Boolean(item?.open) }));
-  if (type === "pricelist" && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({ ...item, ctaHref: typeof item?.ctaHref === "string" && item.ctaHref.trim() ? sanitizeHref(item.ctaHref) : "" }));
-  if (type === "toc" && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({ ...item, href: typeof item?.href === "string" && item.href.trim().startsWith("#") ? sanitizeHref(item.href) : "#" }));
-  if (type === "contentnav" && Array.isArray(p.items)) p.items = p.items.map((item: any) => ({ ...item, href: typeof item?.href === "string" && item.href.trim().startsWith("#") ? sanitizeHref(item.href) : "#" }));
+  if (type === "tabs" && Array.isArray(p.tabs)) p.tabs = recordList(p.tabs).map((tab) => ({ label: String(tab?.label ?? ""), content: String(tab?.content ?? ""), disabled: Boolean(tab?.disabled) }));
+  if (type === "accordion" && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({ title: String(item?.title ?? ""), content: String(item?.content ?? ""), open: Boolean(item?.open) }));
+  if (type === "pricelist" && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({ ...item, ctaHref: typeof item?.ctaHref === "string" && item.ctaHref.trim() ? sanitizeHref(item.ctaHref) : "" }));
+  if (type === "toc" && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({ ...item, href: typeof item?.href === "string" && item.href.trim().startsWith("#") ? sanitizeHref(item.href) : "#" }));
+  if (type === "contentnav" && Array.isArray(p.items)) p.items = recordList(p.items).map((item) => ({ ...item, href: typeof item?.href === "string" && item.href.trim().startsWith("#") ? sanitizeHref(item.href) : "#" }));
   if (type === "menu" && Array.isArray(p.items)) {
-    const sanitizeItems = (items: any[], depth = 0): any[] => {
+    const sanitizeItems = (items: unknown[], depth = 0): Record<string, unknown>[] => {
       if (depth > 64) throw new Error("Слишком глубокая вложенность меню");
-      return items.map(item => ({ ...item, href: typeof item?.href === "string" ? sanitizeHref(item.href) : "#", ...(Array.isArray(item?.children) ? { children: sanitizeItems(item.children, depth + 1) } : {}) }));
+      return recordList(items).map(item => ({ ...item, href: typeof item?.href === "string" ? sanitizeHref(item.href) : "#", ...(Array.isArray(item?.children) ? { children: sanitizeItems(item.children, depth + 1) } : {}) }));
     };
     p.items = sanitizeItems(p.items);
   }
@@ -627,28 +714,45 @@ function ensureRelOnLinks(html: string): string {
   });
 }
 
-function buildIndexHtml(model: SiteModel, ogImage?: string, restrictExternalMedia = false): string {
+async function buildIndexHtml(model: SiteModel, ogImage?: string, restrictExternalMedia = false): Promise<string> {
   const title = esc(model.title || "AltNet Site");
   const desc = esc(model.description || "") || "Статический экспорт сайта, созданного в AltNet Конструкторе.";
-  const bodyRaw = renderBlocksToHtml(model.blocks || []);
+  const blocks = flattenBlockTree(model.blocks || []);
+  const remoteMap = !restrictExternalMedia && blocks.some(b => b.type === "map" && b.props?.detailMap === true);
+  for (const b of blocks) if (b.type === "map" && b.props) b.props.__allowMap = remoteMap;
+  const remoteSound=!restrictExternalMedia && blocks.some(b=>b.type==="soundcloud" && !!soundSettings(b.props).track);
+  for(const block of blocks) if(block.type==="soundcloud" && block.props) block.props.__allowSound=remoteSound;
+  const frameSources=[...(remoteMap?["https://www.openstreetmap.org"]:[]),...(remoteSound?["https://w.soundcloud.com"]:[])];
+  const renderArea = (slot: string) => {
+    const part = model.blocks.find(block => block.type === "theme-" + slot);
+    if (!part) return undefined;
+    const cells = part.props?.layoutCells;
+    return ensureRelOnLinks(renderBlocksToHtml(Array.isArray(cells) && Array.isArray(cells[0]) ? cells[0] : []));
+  };
+  const pageHeader = renderArea("header"), pageFooter = renderArea("footer");
+  const popups=ensureRelOnLinks(renderBlocksToHtml(model.blocks.filter(block=>block.type==="site-popup")));
+  const bodyRaw = renderBlocksToHtml(model.blocks.filter(block => block.type !== "theme-header" && block.type !== "theme-footer" && block.type!=="site-popup"));
   const body = ensureRelOnLinks(bodyRaw);
-  const runtimeNeeded = flattenBlockTree(model.blocks || []).some(block => block.type === "accordion" || block.type === "share" || block.type === "carousel" || block.type === "mediacarousel" || block.type === "videoplaylist" || block.type === "slides" || block.type === "countdown" || block.type === "offcanvas" || (block.type === "counter" && block.props?.animate === true) || (block.type === "contentnav" && block.props?.spy));
+  const runtimeNeeded = remoteSound || remoteMap || blocks.some(block => block.type === "site-popup" || block.type === "loopgrid" || ((block.type === "image" || block.type === "grid") && block.props?.lightbox === true) || block.type === "accordion" || block.type === "share" || block.type === "carousel" || block.type === "mediacarousel" || block.type === "videoplaylist" || block.type === "slides" || block.type === "countdown" || block.type === "offcanvas" || (block.type === "counter" && block.props?.animate === true) || (block.type === "contentnav" && block.props?.spy));
 
+  const hasAnimation = blocks.some(block => block.type === "lottie");
+  const animationRuntime = hasAnimation ? await loadLottieRenderer() : "";
+  const scriptHashes = [runtimeNeeded && SITE_RUNTIME_HASH, hasAnimation && LOTTIE_HASH].filter(Boolean).map(hash => "'sha256-" + hash + "'").join(" ");
   const CSP = [
     "default-src 'self'",
-    runtimeNeeded ? `script-src 'sha256-${SITE_RUNTIME_HASH}'` : "script-src 'none'",
+    scriptHashes ? "script-src " + scriptHashes : "script-src 'none'",
     "connect-src 'none'",
     restrictExternalMedia ? "img-src 'self' data:" : "img-src 'self' https: data: ipfs: altfs:",
     restrictExternalMedia ? "media-src 'self' data:" : "media-src 'self' https: data: ipfs: altfs:",
     "style-src 'self'",
     "font-src 'self'",
     "object-src 'none'",
-    "frame-src 'none'",
+    frameSources.length ? "frame-src "+frameSources.join(" ") : "frame-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
   ].join("; ");
 
-  const header =
+  const header = pageHeader !== undefined ? `<header class="container" data-site-template="header">${pageHeader}</header>` :
     model.title && model.title.trim()
       ? `<header class="container"><h1 class="site-title">${esc(model.title)}</h1></header>`
       : "";
@@ -681,10 +785,10 @@ ${ogImage ? `<meta name="twitter:image" content="${esc(ogImage)}"/>` : ""}
   <main class="container">
     ${body}
   </main>
-  <footer>
-    Сгенерировано в AltNet · ${new Date().toISOString()}
-  </footer>
+  ${popups}
+  ${pageFooter !== undefined ? `<footer class="container" data-site-template="footer">${pageFooter}</footer>` : `<footer>Сгенерировано в AltNet · ${new Date().toISOString()}</footer>`}
   ${runtimeNeeded ? `<script>${SITE_RUNTIME}</script>` : ""}
+  ${animationRuntime ? `<script data-altnet-lottie>${animationRuntime}</script>` : ""}
 </body>
 </html>`;
 }
@@ -764,8 +868,8 @@ function pickOgImage(model: SiteModel, assets: string[]): string {
   if (first) return `./${first}`;
 
   // 2) иначе — ищем первый image-блок с http(s)
-  const img = (model.blocks || []).find(b => b.type === "image" && typeof (b as any)?.props?.src === "string") as any;
-  const src = img?.props?.src || "";
+  const img = (model.blocks || []).find(b => b.type === "image" && typeof b.props?.src === "string");
+  const src = typeof img?.props?.src === "string" ? img.props.src : "";
   if (/^https?:\/\//i.test(src)) return src;
 
   // 3) запасной вариант
@@ -775,7 +879,8 @@ function pickOgImage(model: SiteModel, assets: string[]): string {
 // -------- Публичный API --------
 export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions): Promise<Blob> {
   const opts: ExportOptions = { bundleAssets: true, ...(options || {}) };
-  const zip = new JSZip();
+  const { default: Zip } = await import("jszip");
+  const zip = new Zip();
 
   // 1) Санация URL на уровне модели + rel для внешних ссылок (не ломает, если serializeBlock это игнорит).
   const sanitized: SiteModel = {
@@ -794,7 +899,7 @@ export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions)
       }
 
       if (b.type === "button") {
-        const href = sanitizeHref(p.href || "#");
+        const href = sanitizeHref(typeof p.href === "string" ? p.href : "#");
         const open = p.linkOpen ?? (p.target === "_blank" ? "new" : p.target === "_self" ? "same" : "auto");
         const { target, rel } = buttonLinkOptions(href, open, p.linkIndexing);
         p.href = href;
@@ -802,13 +907,14 @@ export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions)
         p.rel = rel;
       }
       if ((b.type === "heading" || b.type === "image") && typeof p.href === "string" && p.href.trim()) {
-        p.href = sanitizeHref(p.href);
-        const { target, rel } = buttonLinkOptions(p.href, p.linkOpen, p.linkIndexing);
+        const href = sanitizeHref(p.href);
+        p.href = href;
+        const { target, rel } = buttonLinkOptions(href, p.linkOpen, p.linkIndexing);
         p.target = target; p.rel = rel;
       }
 
       if (b.type === "hero") {
-        const href = sanitizeHref(p.ctaHref || "#");
+        const href = sanitizeHref(typeof p.ctaHref === "string" ? p.ctaHref : "#");
         const rel = externalLinkRels(href);
         p.ctaHref = href;
         if (rel) p.ctaRel = rel;
@@ -832,7 +938,7 @@ export async function exportSiteZip(modelIn: SiteModel, options?: ExportOptions)
 
   // 3) Файлы ZIP
   zip.file("favicon.svg", FAVICON_SVG);
-  zip.file("index.html", buildIndexHtml(model, ogImage, opts.restrictExternalMedia));
+  zip.file("index.html", await buildIndexHtml(model, ogImage, opts.restrictExternalMedia));
   zip.file("styles.css", buildStylesCss(model.theme, styleRules));
   zip.file("manifest.json", buildManifest(model, assets));
   const sitemap = buildSitemap(model.seo?.index === false ? [] : [model.seo?.canonical || ""]);
@@ -861,7 +967,7 @@ export async function exportSingleHtml(modelIn: SiteModel, options?: ExportOptio
         p.src = sanitizeImageUrl(p.src);
       }
       if (b.type === "button") {
-        const href = sanitizeHref(p.href || "#");
+        const href = sanitizeHref(typeof p.href === "string" ? p.href : "#");
         const open = p.linkOpen ?? (p.target === "_blank" ? "new" : p.target === "_self" ? "same" : "auto");
         const { target, rel } = buttonLinkOptions(href, open, p.linkIndexing);
         p.href = href;
@@ -869,12 +975,13 @@ export async function exportSingleHtml(modelIn: SiteModel, options?: ExportOptio
         p.rel = rel;
       }
       if ((b.type === "heading" || b.type === "image") && typeof p.href === "string" && p.href.trim()) {
-        p.href = sanitizeHref(p.href);
-        const { target, rel } = buttonLinkOptions(p.href, p.linkOpen, p.linkIndexing);
+        const href = sanitizeHref(p.href);
+        p.href = href;
+        const { target, rel } = buttonLinkOptions(href, p.linkOpen, p.linkIndexing);
         p.target = target; p.rel = rel;
       }
       if (b.type === "hero") {
-        const href = sanitizeHref(p.ctaHref || "#");
+        const href = sanitizeHref(typeof p.ctaHref === "string" ? p.ctaHref : "#");
         const rel = externalLinkRels(href);
         p.ctaHref = href;
         if (rel) p.ctaRel = rel;
@@ -908,7 +1015,7 @@ export async function exportSingleHtml(modelIn: SiteModel, options?: ExportOptio
 
   // Готовый index.html → single-file: inline CSS, data:-favicon, CSP без script
   const styleRules = prepareStyleRules(model);
-  let html = buildIndexHtml(model, model.ogImage || undefined, opts.restrictExternalMedia);
+  let html = await buildIndexHtml(model, model.ogImage || undefined, opts.restrictExternalMedia);
   html = html
     .replace(`<link rel="stylesheet" href="./styles.css"/>`, `<style>${buildStylesCss(model.theme, styleRules)}</style>`)
     .replace(`style-src 'self'`, `style-src 'unsafe-inline'`)
@@ -928,14 +1035,15 @@ export function downloadBlob(blob: Blob, filename: string = "altnet-site.zip") {
   URL.revokeObjectURL(href);
 }
 
-export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
-  const rawBlocks: any[] = Array.isArray(builderDoc?.blocks) ? builderDoc.blocks : [];
+export function adaptFromSiteBuilderDoc(document: unknown): SiteModel {
+  const builderDoc = asRecord(document);
+  const rawBlocks = Array.isArray(builderDoc.blocks) ? builderDoc.blocks.map(asRecord) : [];
 
-  const blocks: BlockInstance[] = rawBlocks.map((b: any): BlockInstance => {
+  const blocks: BlockInstance[] = rawBlocks.map((b): BlockInstance => {
     const id = typeof b?.id === "string" ? b.id : undefined;
     const t = String(b?.type || "").toLowerCase();
     const layoutCells = Array.isArray(b?.layoutCells)
-      ? b.layoutCells.map((cell: any) => adaptFromSiteBuilderDoc({ blocks: Array.isArray(cell) ? cell.filter((child: any) => !child?.hidden) : [] }).blocks)
+      ? b.layoutCells.map((cell: unknown) => adaptFromSiteBuilderDoc({ blocks: Array.isArray(cell) ? cell.filter((child: unknown) => !asRecord(child).hidden) : [] }).blocks)
       : undefined;
     const layoutWeights = Array.isArray(b?.layoutPreset) ? b.layoutPreset : undefined;
     const layoutByBp = b?.layoutByBp && typeof b.layoutByBp === "object" ? b.layoutByBp : undefined;
@@ -946,7 +1054,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
         const href = sanitizeHref(String(b?.ctaLink ?? b?.ctaHref ?? "#"));
         const target = href.startsWith("http") ? "_blank" : "_self";
         const rel = externalLinkRels(href);
-        const align = ["left", "center", "right"].includes(b?.align) ? b.align : "left";
+        const align = oneOf(b?.align, ["left", "center", "right"]) ? b.align : "left";
         const src = typeof b?.src === "string" ? b.src : (typeof b?.img === "string" ? b.img : "");
         return {
           id,
@@ -972,13 +1080,13 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
           type: "h1",
           props: {
             text: String(b?.text ?? ""),
-            align: ["left", "center", "right"].includes(b?.align) ? b.align : "left",
+            align: oneOf(b?.align, ["left", "center", "right"]) ? b.align : "left",
           },
         };
 
       case "heading": {
-        const level = ["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].includes(b?.level) ? b.level : "h2";
-        const align = (["left", "center", "right"].includes(b?.align) ? b.align : "left") as "left" | "center" | "right";
+        const level = oneOf(b?.level, ["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"]) ? b.level : "h2";
+        const align = (oneOf(b?.align, ["left", "center", "right"]) ? b.align : "left") as "left" | "center" | "right";
         return {
           id,
           type: "heading",
@@ -987,8 +1095,8 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
             level,
             align,
             href: typeof b?.href === "string" && b.href.trim() ? sanitizeHref(b.href) : "",
-            linkOpen: ["same", "new"].includes(b?.linkOpen) ? b.linkOpen : "auto",
-            linkIndexing: ["nofollow", "follow"].includes(b?.linkIndexing) ? b.linkIndexing : "auto",
+            linkOpen: oneOf(b?.linkOpen, ["same", "new"]) ? b.linkOpen : "auto",
+            linkIndexing: oneOf(b?.linkIndexing, ["nofollow", "follow"]) ? b.linkIndexing : "auto",
           },
         };
       }
@@ -999,8 +1107,8 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
           id,
           type: "text",
           props: {
-            text: String(b?.text ?? ""),
-            align: ["left", "center", "right"].includes(b?.align) ? b.align : "left",
+            text: String(b?.text ?? ""), richRuns:b.richRuns,
+            align: oneOf(b?.align, ["left", "center", "right"]) ? b.align : "left",
           },
         };
 
@@ -1012,8 +1120,8 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
           props: {
             src: sanitizeImageUrl(b?.src ?? b?.cid ?? ""),
             alt: String(b?.alt ?? ""),
-            caption: String(b?.caption ?? ""),
-            href: typeof b?.href === "string" && b.href.trim() ? sanitizeHref(b.href) : "",
+            caption: imageCaption(b), linkTo: b.linkTo, lightbox: b.linkTo === "media" && b.lightbox !== false,
+            href: (!b.linkTo || b.linkTo === "custom") && typeof b?.href === "string" && b.href.trim() ? sanitizeHref(b.href) : "",
             linkOpen: b?.linkOpen,
             linkIndexing: b?.linkIndexing,
             imageStyleByBp: b?.imageStyleByBp,
@@ -1032,20 +1140,20 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
             href,
             target,
             rel,
-            variant: ["primary", "secondary", "ghost"].includes(b?.variant) ? b.variant : "primary",
-            align: ["left", "center", "right"].includes(b?.align) ? b.align : "center",
+            variant: oneOf(b?.variant, ["primary", "secondary", "ghost"]) ? b.variant : "primary",
+            align: oneOf(b?.align, ["left", "center", "right"]) ? b.align : "center",
             buttonStyleByBp: b?.buttonStyleByBp,
             icon: buttonIconPath(b?.icon) ? b.icon : "",
             iconPosition: b?.iconPosition === "after" ? "after" : "before",
-            accessibleLabel: typeof b?.accessibleLabel === "string" ? b.accessibleLabel.replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 300) : "",
-            linkOpen: ["same", "new"].includes(b?.linkOpen) ? b.linkOpen : "auto",
-            linkIndexing: ["nofollow", "follow"].includes(b?.linkIndexing) ? b.linkIndexing : "auto",
+            accessibleLabel: typeof b?.accessibleLabel === "string" ? b.accessibleLabel.replace(/[^\x20-\x7e\u0080-\uffff]/g, "").trim().slice(0, 300) : "",
+            linkOpen: oneOf(b?.linkOpen, ["same", "new"]) ? b.linkOpen : "auto",
+            linkIndexing: oneOf(b?.linkIndexing, ["nofollow", "follow"]) ? b.linkIndexing : "auto",
           },
         };
       }
 
       case "cols2": {
-        const ratio = ["5-7", "6-6", "7-5"].includes(b?.ratio) ? b.ratio : "6-6";
+        const ratio = oneOf(b?.ratio, ["5-7", "6-6", "7-5"]) ? b.ratio : "6-6";
         return {
           id,
           type: "cols2",
@@ -1061,7 +1169,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
       }
 
       case "spacer": {
-        const size = ["xs", "sm", "md", "lg", "xl"].includes(b?.size) ? b.size : "md";
+        const size = oneOf(b?.size, ["xs", "sm", "md", "lg", "xl"]) ? b.size : "md";
         return { id, type: "spacer", props: { size, heightByBp: b?.heightByBp } };
       }
 
@@ -1082,7 +1190,7 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
       case "iconlist":
         return { id, type: "iconlist", props: {
           variant: b?.variant, size: b?.size, gap: b?.gap, align: b?.align,
-          items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ label: String(item?.label ?? ""), description: String(item?.description ?? ""), icon: String(item?.icon ?? ""), href: typeof item?.href === "string" && item.href.trim() ? sanitizeHref(item.href) : "" })),
+          items: recordList(b.items).map((item) => ({ label: String(item?.label ?? ""), description: String(item?.description ?? ""), icon: String(item?.icon ?? ""), href: typeof item?.href === "string" && item.href.trim() ? sanitizeHref(item.href) : "" })),
         } };
       case "anchor":
         return { id, type: "anchor", props: { name: String(b?.name ?? "") } };
@@ -1091,22 +1199,22 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
       case "cta":
         return { id, type: "cta", props: { title: String(b?.title ?? ""), text: String(b?.text ?? ""), btnLabel: String(b?.btnLabel ?? ""), btnHref: typeof b?.btnHref === "string" && b.btnHref.trim() ? sanitizeHref(b.btnHref) : "", variant: b?.variant, align: b?.align, emphasis: b?.emphasis } };
       case "toc":
-        return { id, type: "toc", props: { items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ label: String(item?.label ?? ""), href: typeof item?.href === "string" && item.href.trim().startsWith("#") ? sanitizeHref(item.href) : "#" })) } };
+        return { id, type: "toc", props: { items: recordList(b.items).map((item) => ({ label: String(item?.label ?? ""), href: typeof item?.href === "string" && item.href.trim().startsWith("#") ? sanitizeHref(item.href) : "#" })) } };
       case "breadcrumbs":
-        return { id, type: "breadcrumbs", props: { separator: b?.separator, size: b?.size, ariaLabel: String(b?.ariaLabel ?? ""), items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ label: String(item?.label ?? ""), href: typeof item?.href === "string" && item.href.trim() ? sanitizeHref(item.href) : "" })) } };
+        return { id, type: "breadcrumbs", props: { separator: b?.separator, size: b?.size, ariaLabel: String(b?.ariaLabel ?? ""), items: recordList(b.items).map((item) => ({ label: String(item?.label ?? ""), href: typeof item?.href === "string" && item.href.trim() ? sanitizeHref(item.href) : "" })) } };
 
       case "section": {
-        const align = ["left", "center", "right"].includes(b?.align) ? b.align : "left";
-        const theme = ["auto", "light", "dark"].includes(b?.theme) ? b.theme : "auto";
-        const pad = ["sm", "md", "lg"].includes(b?.pad) ? b.pad : "md";
-        const bg = ["none", "subtle", "card", "accent"].includes(b?.bg) ? b.bg : "none";
+        const align = oneOf(b?.align, ["left", "center", "right"]) ? b.align : "left";
+        const theme = oneOf(b?.theme, ["auto", "light", "dark"]) ? b.theme : "auto";
+        const pad = oneOf(b?.pad, ["sm", "md", "lg"]) ? b.pad : "md";
+        const bg = oneOf(b?.bg, ["none", "subtle", "card", "accent"]) ? b.bg : "none";
         return {
           id,
           type: "section",
           props: {
             title: String(b?.title ?? ""),
             text: String(b?.text ?? ""),
-            align, theme, pad, bg, layoutCells, layoutWeights, layoutByBp, layoutGap,
+            align, theme, pad, bg, layoutCells, layoutWeights, layoutByBp, layoutGap, flexByBp: b.flexByBp, layoutGapX: b.layoutGapX, layoutGapY: b.layoutGapY,
           },
         };
       }
@@ -1115,8 +1223,8 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
         const cols = [1, 2, 3, 4].includes(Number(b?.cols)) ? (Number(b.cols) as 1 | 2 | 3 | 4) : 3;
         const gx = Number.isFinite(Number(b?.gapX)) ? Number(b.gapX) : 16;
         const gy = Number.isFinite(Number(b?.gapY)) ? Number(b.gapY) : 16;
-        const itemsSrc = Array.isArray(b?.items) ? b.items : [];
-        const items = itemsSrc.map((it: any) => ({
+        const itemsSrc = recordList(b.items);
+        const items = itemsSrc.map((it) => ({
           src: sanitizeImageUrl(it?.src),
           alt: String(it?.alt ?? ""),
           caption: String(it?.caption ?? ""),
@@ -1126,19 +1234,36 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
 
       case "gallery": {
         const cols = [2, 3, 4].includes(Number(b?.cols)) ? Number(b.cols) : 3;
-        const items = (Array.isArray(b?.items) ? b.items : []).map((it: any) => ({ src: sanitizeImageUrl(it?.src), alt: String(it?.alt ?? ""), caption: "" })).filter((item: any) => item.src);
-        return { id, type: "grid", props: { cols, gapX: 12, gapY: 12, items } };
+        const items = recordList(b.items).map((it) => ({ src: sanitizeImageUrl(it?.src), alt: String(it?.alt ?? ""), caption: typeof it.caption === "string" ? it.caption : "" })).filter((item) => item.src);
+        return { id, type: "grid", props: { cols, gapX: 12, gapY: 12, items, lightbox: b.lightbox === true } };
       }
 
+      case "soundcloud": return {id,type:"soundcloud",props:soundSettings(b)};
+      case "readmore": return {id,type:"readmore",props:{marker:moreFragment(id??"read-more")}};
+      case "textpath": return {id,type:"textpath",props:{...textPathOptions(b),href:typeof b.href==="string" && b.href?sanitizeHref(b.href):""}};
+      case "loopgrid": {
+        if (b.loopError) return {id,type:"unknown",props:{raw:{type:"Loop Grid · "+String(b.loopError)}}};
+        const cards=recordList(b.cards);
+        return {id,type:"loopgrid",props:{...loopSettings(b),
+          cards:cards.map(c=>({title:c.title,description:c.description,more:c.more,terms:c.terms,href:c.href,custom:Array.isArray(c.blocks)})),
+          layoutCells:cards.map(c=>adaptFromSiteBuilderDoc({blocks:c.blocks}).blocks)}};
+      }
+      case "map":
+        return { id, type: "map", props: mapSettings(b) };
+      case "lottie": {
+        if (typeof b.animationJson !== "string" || !b.animationJson) return { id, type: "unknown", props: { raw: b } };
+        try { readAnimation(b.animationJson); } catch { return { id, type: "unknown", props: { raw: b } }; }
+        return { id, type: "lottie", props: { ...lottieOptions(b), animationJson: b.animationJson, poster: sanitizeImageUrl(b.poster), caption: typeof b.caption === "string" ? b.caption : "" } };
+      }
       case "container":
-        return { id, type: "container", props: { width: b?.width, padding: b?.padding, bg: b?.bg, border: Boolean(b?.border), rounded: Boolean(b?.rounded), layoutCells, layoutWeights, layoutByBp, layoutGap } };
+        return { id, type: "container", props: { width: b?.width, padding: b?.padding, bg: b?.bg, border: Boolean(b?.border), rounded: Boolean(b?.rounded), layoutCells, layoutWeights, layoutByBp, layoutGap, flexByBp: b.flexByBp, layoutGapX: b.layoutGapX, layoutGapY: b.layoutGapY } };
       case "menu":
-        return { id, type: "menu", props: { orientation: b?.orientation, ariaLabel: String(b?.ariaLabel ?? ""), activeHref: String(b?.activeHref ?? ""), items: Array.isArray(b?.items) ? b.items : [] } };
+        return { id, type: "menu", props: { orientation: b?.orientation, ariaLabel: String(b?.ariaLabel ?? ""), activeHref: String(b?.activeHref ?? ""), items: recordList(b.items) } };
       case "iconbox":
       case "imagebox": {
-        const source = Array.isArray(b?.items) ? b.items : [b];
-        const items = source.map((item: any) => ({ title: String(item?.title ?? item?.label ?? ""), text: String(item?.text ?? item?.description ?? ""), icon: String(item?.icon ?? ""), src: sanitizeImageUrl(item?.src ?? item?.cid), alt: String(item?.alt ?? "") }));
-        const columns = [1, 2, 3, 4].includes(b?.columns) ? b.columns : Array.isArray(b?.items) ? 3 : 1;
+        const source = Array.isArray(b?.items) ? recordList(b.items) : [b];
+        const items = source.map((item) => ({ title: String(item?.title ?? item?.label ?? ""), text: String(item?.text ?? item?.description ?? ""), icon: String(item?.icon ?? ""), src: sanitizeImageUrl(item?.src ?? item?.cid), alt: String(item?.alt ?? "") }));
+        const columns = oneOf(b?.columns, [1, 2, 3, 4]) ? b.columns : Array.isArray(b?.items) ? 3 : 1;
         return { id, type: t, props: { items, columns } };
       }
       case "icon":
@@ -1146,43 +1271,43 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
       case "rating":
         return { id, type: "rating", props: { value: b?.value, max: b?.max, readonly: Boolean(b?.readonly) } };
       case "pricelist":
-        return { id, type: "pricelist", props: { items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ title: String(item?.title ?? ""), price: String(item?.price ?? ""), period: String(item?.period ?? ""), desc: String(item?.desc ?? ""), features: Array.isArray(item?.features) ? item.features.map(String) : [], ctaLabel: String(item?.ctaLabel ?? ""), ctaHref: typeof item?.ctaHref === "string" && item.ctaHref.trim() ? sanitizeHref(item.ctaHref) : "" })) } };
+        return { id, type: "pricelist", props: { items: recordList(b.items).map((item) => ({ title: String(item?.title ?? ""), price: String(item?.price ?? ""), period: String(item?.period ?? ""), desc: String(item?.desc ?? ""), features: Array.isArray(item?.features) ? item.features.map(String) : [], ctaLabel: String(item?.ctaLabel ?? ""), ctaHref: typeof item?.ctaHref === "string" && item.ctaHref.trim() ? sanitizeHref(item.ctaHref) : "" })) } };
       case "pricetable":
-        return { id, type: "pricetable", props: { plans: (Array.isArray(b?.plans) ? b.plans : []).map((plan: any) => ({ name: String(plan?.name ?? ""), price: String(plan?.price ?? ""), period: String(plan?.period ?? ""), popular: Boolean(plan?.popular), ctaLabel: String(plan?.ctaLabel ?? ""), ctaHref: typeof plan?.ctaHref === "string" && plan.ctaHref.trim() ? sanitizeHref(plan.ctaHref) : "", features: (Array.isArray(plan?.features) ? plan.features : []).map((feature: any) => ({ label: String(feature?.label ?? ""), included: Boolean(feature?.included) })) })) } };
+        return { id, type: "pricetable", props: { plans: recordList(b.plans).map((plan) => ({ name: String(plan?.name ?? ""), price: String(plan?.price ?? ""), period: String(plan?.period ?? ""), popular: Boolean(plan?.popular), ctaLabel: String(plan?.ctaLabel ?? ""), ctaHref: typeof plan?.ctaHref === "string" && plan.ctaHref.trim() ? sanitizeHref(plan.ctaHref) : "", features: recordList(plan.features).map((feature) => ({ label: String(feature?.label ?? ""), included: Boolean(feature?.included) })) })) } };
       case "testimonials":
-        return { id, type: "testimonials", props: { items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ author: String(item?.author ?? ""), role: String(item?.role ?? ""), text: String(item?.text ?? item?.quote ?? ""), avatar: sanitizeImageUrl(item?.avatar) })) } };
+        return { id, type: "testimonials", props: { items: recordList(b.items).map((item) => ({ author: String(item?.author ?? ""), role: String(item?.role ?? ""), text: String(item?.text ?? item?.quote ?? ""), avatar: sanitizeImageUrl(item?.avatar) })) } };
       case "search":
         return { id, type: "search", props: { placeholder: String(b?.placeholder ?? ""), action: sanitizeSearchAction(b?.action), method: b?.method === "POST" ? "POST" : "GET" } };
       case "social":
-        return { id, type: "social", props: { items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ label: String(item?.label ?? ""), href: sanitizeSocialHref(item?.href) })) } };
+        return { id, type: "social", props: { items: recordList(b.items).map((item) => ({ label: String(item?.label ?? ""), href: sanitizeSocialHref(item?.href) })) } };
       case "progresstracker":
-        return { id, type: "progresstracker", props: { current: b?.current, steps: (Array.isArray(b?.steps) ? b.steps : []).map((step: any) => ({ label: String(step?.label ?? "") })) } };
+        return { id, type: "progresstracker", props: { current: b?.current, steps: recordList(b.steps).map((step) => ({ label: String(step?.label ?? "") })) } };
       case "pagination":
         return { id, type: "pagination", props: { current: b?.current, total: b?.total, siblings: b?.siblings, boundary: b?.boundary, baseHref: b?.baseHref, size: b?.size, ariaLabel: String(b?.ariaLabel ?? "") } };
       case "sidebar":
-        return { id, type: "sidebar", props: { title: String(b?.title ?? ""), width: b?.width, side: b?.side, items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ label: String(item?.label ?? ""), href: typeof item?.href === "string" && item.href.trim() ? sanitizeHref(item.href) : "" })) } };
+        return { id, type: "sidebar", props: { title: String(b?.title ?? ""), width: b?.width, side: b?.side, items: recordList(b.items).map((item) => ({ label: String(item?.label ?? ""), href: typeof item?.href === "string" && item.href.trim() ? sanitizeHref(item.href) : "" })) } };
       case "tabs":
-        return { id, type: "tabs", props: { tabs: (Array.isArray(b?.tabs) ? b.tabs : []).map((tab: any) => ({ label: String(tab?.label ?? ""), content: String(tab?.content ?? ""), disabled: Boolean(tab?.disabled) })), active: b?.active, variant: b?.variant, size: b?.size, align: b?.align, orientation: b?.orientation } };
+        return { id, type: "tabs", props: { tabs: recordList(b.tabs).map((tab) => ({ label: String(tab?.label ?? ""), content: String(tab?.content ?? ""), disabled: Boolean(tab?.disabled) })), active: b?.active, variant: b?.variant, size: b?.size, align: b?.align, orientation: b?.orientation } };
       case "accordion":
-        return { id, type: "accordion", props: { items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ title: String(item?.title ?? ""), content: String(item?.content ?? ""), open: Boolean(item?.open) })), allowMultiple: Boolean(b?.allowMultiple), allowToggle: b?.allowToggle !== false, variant: b?.variant, size: b?.size } };
+        return { id, type: "accordion", props: { items: recordList(b.items).map((item) => ({ title: String(item?.title ?? ""), content: String(item?.content ?? ""), open: Boolean(item?.open) })), allowMultiple: Boolean(b?.allowMultiple), allowToggle: b?.allowToggle !== false, variant: b?.variant, size: b?.size } };
       case "share":
         return { id, type: "share", props: { url: typeof b?.url === "string" && b.url.trim() && sanitizeHref(b.url) !== "#" ? sanitizeHref(b.url) : "", networks: Array.isArray(b?.networks) ? b.networks : [] } };
       case "contentnav":
-        return { id, type: "contentnav", props: { orientation: b?.orientation, spy: Boolean(b?.spy), spyOffset: b?.spyOffset, activeHref: typeof b?.activeHref === "string" && b.activeHref.startsWith("#") ? sanitizeHref(b.activeHref) : "", ariaLabel: String(b?.ariaLabel ?? ""), items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ label: String(item?.label ?? ""), href: typeof item?.href === "string" && item.href.trim().startsWith("#") ? sanitizeHref(item.href) : "#" })) } };
+        return { id, type: "contentnav", props: { orientation: b?.orientation, spy: Boolean(b?.spy), spyOffset: b?.spyOffset, activeHref: typeof b?.activeHref === "string" && b.activeHref.startsWith("#") ? sanitizeHref(b.activeHref) : "", ariaLabel: String(b?.ariaLabel ?? ""), items: recordList(b.items).map((item) => ({ label: String(item?.label ?? ""), href: typeof item?.href === "string" && item.href.trim().startsWith("#") ? sanitizeHref(item.href) : "#" })) } };
       case "html":
         return { id, type: "html", props: { html: String(b?.html ?? b?.content ?? "") } };
       case "carousel":
-        return { id, type: "carousel", props: { initial: b?.initial, slides: (Array.isArray(b?.slides) ? b.slides : []).map((slide: any) => ({ src: sanitizeImageUrl(slide?.src), alt: String(slide?.alt ?? ""), caption: String(slide?.caption ?? "") })) } };
+        return { id, type: "carousel", props: { initial: b?.initial, slides: recordList(b.slides).map((slide) => ({ src: sanitizeImageUrl(slide?.src), alt: String(slide?.alt ?? ""), caption: String(slide?.caption ?? "") })) } };
       case "mediacarousel":
-        return { id, type: "mediacarousel", props: { initial: b?.initial, slides: (Array.isArray(b?.slides) ? b.slides : Array.isArray(b?.items) ? b.items : []).map((slide: any) => { const kind = (slide?.kind ?? slide?.type) === "video" ? "video" : "img"; const src = slide?.src ?? slide?.cid ?? ""; return { kind, src: kind === "video" ? sanitizeVideoUrl(src) : sanitizeImageUrl(src), alt: String(slide?.alt ?? ""), caption: String(slide?.caption ?? "") }; }) } };
+        return { id, type: "mediacarousel", props: { initial: b?.initial, slides: (Array.isArray(b?.slides) ? b.slides : recordList(b.items)).map((slide) => { const kind = (slide?.kind ?? slide?.type) === "video" ? "video" : "img"; const src = slide?.src ?? slide?.cid ?? ""; return { kind, src: kind === "video" ? sanitizeVideoUrl(src) : sanitizeImageUrl(src), alt: String(slide?.alt ?? ""), caption: String(slide?.caption ?? "") }; }) } };
       case "hotspot":
-        return { id, type: "hotspot", props: { src: sanitizeImageUrl(b?.src), alt: String(b?.alt ?? ""), markers: (Array.isArray(b?.markers) ? b.markers : []).map((marker: any) => ({ x: typeof marker?.x === "number" ? marker.x : 50, y: typeof marker?.y === "number" ? marker.y : 50, label: String(marker?.label ?? ""), href: typeof marker?.href === "string" && marker.href.trim() ? sanitizeHref(marker.href) : "" })) } };
+        return { id, type: "hotspot", props: { src: sanitizeImageUrl(b?.src), alt: String(b?.alt ?? ""), markers: recordList(b.markers).map((marker) => ({ x: typeof marker?.x === "number" ? marker.x : 50, y: typeof marker?.y === "number" ? marker.y : 50, label: String(marker?.label ?? ""), href: typeof marker?.href === "string" && marker.href.trim() ? sanitizeHref(marker.href) : "" })) } };
       case "videoplaylist":
-        return { id, type: "videoplaylist", props: { initial: b?.initial, items: (Array.isArray(b?.items) ? b.items : []).map((item: any) => ({ src: sanitizeVideoUrl(item?.src), poster: sanitizeImageUrl(item?.poster), title: String(item?.title ?? "") })) } };
+        return { id, type: "videoplaylist", props: { initial: b?.initial, items: recordList(b.items).map((item) => ({ src: sanitizeVideoUrl(item?.src), poster: sanitizeImageUrl(item?.poster), title: String(item?.title ?? "") })) } };
       case "countdown":
         return { id, type: "countdown", props: { target: typeof b?.target === "string" ? b.target : "" } };
       case "slides":
-        return { id, type: "slides", props: { initial: b?.initial, slides: (Array.isArray(b?.slides) ? b.slides : []).map((slide: any) => ({ title: String(slide?.title ?? ""), text: String(slide?.text ?? ""), ctaLabel: String(slide?.ctaLabel ?? ""), ctaHref: typeof slide?.ctaHref === "string" && slide.ctaHref.trim() ? sanitizeHref(slide.ctaHref) : "" })) } };
+        return { id, type: "slides", props: { initial: b?.initial, slides: recordList(b.slides).map((slide) => ({ title: String(slide?.title ?? ""), text: String(slide?.text ?? ""), ctaLabel: String(slide?.ctaLabel ?? ""), ctaHref: typeof slide?.ctaHref === "string" && slide.ctaHref.trim() ? sanitizeHref(slide.ctaHref) : "" })) } };
       case "offcanvas":
         return { id, type: "offcanvas", props: { title: String(b?.title ?? ""), body: String(b?.body ?? ""), side: b?.side, width: b?.width, layoutCells, layoutWeights } };
 
@@ -1197,18 +1322,29 @@ export function adaptFromSiteBuilderDoc(builderDoc: any): SiteModel {
     block.props = { ...(block.props || {}), __builder: { style: source?.style, styleByBp: source?.styleByBp, className: source?.className, anchorId: source?.anchorId, anchor: source?.anchor, hideOn: source?.hideOn } };
   });
 
+  for(const popup of recordList(builderDoc.popups)){
+    if(typeof popup.id!=="string" || !/^popup-[a-z0-9_-]+$/i.test(popup.id))continue;
+    blocks.push({type:"site-popup",props:{id:popup.id,title:typeof popup.title==="string"?popup.title:"",options:popupSettings(popup.options),
+      layoutCells:[adaptFromSiteBuilderDoc({blocks:popup.blocks}).blocks]}});
+  }
+  const areas = asRecord(builderDoc.themeAreas);
+  for (const kind of ["header","footer"] as const) {
+    const content = areas[kind];
+    if (Array.isArray(content)) blocks.push({type:"theme-" + kind,props:{layoutCells:[adaptFromSiteBuilderDoc({blocks:content}).blocks]}});
+  }
+  const seo = asRecord(builderDoc.seo), theme = asRecord(builderDoc.theme);
   return {
     title: String(builderDoc?.title ?? "Мой сайт"),
     description: String(builderDoc?.description ?? ""),
     ogImage: typeof builderDoc?.ogImage === "string" ? builderDoc.ogImage : "",
     seo: {
-      canonical: typeof builderDoc?.seo?.canonical === "string" ? builderDoc.seo.canonical : "",
-      index: builderDoc?.seo?.index !== false,
-      follow: builderDoc?.seo?.follow !== false,
+      canonical: typeof seo.canonical === "string" ? seo.canonical : "",
+      index: seo.index !== false,
+      follow: seo.follow !== false,
     },
     theme: {
-      accent: typeof builderDoc?.theme?.accent === "string" ? builderDoc.theme.accent : undefined,
-      container: Number.isFinite(builderDoc?.theme?.container) ? Number(builderDoc.theme.container) : undefined,
+      accent: typeof theme.accent === "string" ? theme.accent : undefined,
+      container: Number.isFinite(theme.container) ? Number(theme.container) : undefined,
     },
     blocks,
   };

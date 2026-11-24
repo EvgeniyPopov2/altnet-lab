@@ -2,7 +2,11 @@ import { slugify } from "../../core/sites/published";
 import type { Doc, PageDocument, SitePage, SitePages } from "./types";
 
 function pageDocument(doc: Doc): PageDocument {
-  const { sitePages: _sitePages, siteProjects: _siteProjects, ...page } = doc;
+  const page = { ...doc };
+  delete page.sitePages;
+  delete page.siteProjects;
+  delete page.mediaLibrary;
+  delete page.styleClasses;
   return page;
 }
 
@@ -26,10 +30,10 @@ export function switchPage(doc: Doc, id: string): Doc {
   if (!target?.document) return doc;
   const pages = workspace.pages.map(page => {
     if (page.id === workspace.activeId) return { ...page, document: pageDocument(doc) };
-    if (page.id === id) { const { document: _document, ...rest } = page; return rest; }
+    if (page.id === id) { const rest = { ...page }; delete rest.document; return rest; }
     return page;
   });
-  return { ...target.document, sitePages: { ...workspace, activeId: id, pages }, ...(doc.siteProjects ? { siteProjects: doc.siteProjects } : {}) };
+  return { ...target.document, ...(doc.styleClasses ? {styleClasses:doc.styleClasses} : {}), ...(doc.mediaLibrary ? { mediaLibrary: doc.mediaLibrary } : {}), sitePages: { ...workspace, activeId: id, pages }, ...(doc.siteProjects ? { siteProjects: doc.siteProjects } : {}) };
 }
 
 function uniquePath(title: string, pages: SitePage[]): string {

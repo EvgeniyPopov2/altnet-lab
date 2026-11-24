@@ -146,12 +146,12 @@ function deliveryClass(d?: DmMessage["delivery"]): string {
   }
 }
 
-function seedJournal(dm: DmContact): DmJournalV1 {
-  const base = createEmptyJournal(dm.id);
+function seedJournal(contactId: string): DmJournalV1 {
+  const base = createEmptyJournal(contactId);
   const now = Date.now();
 
   const m1: DmMessage = {
-    id: `seed:${dm.id}:1`,
+    id: `seed:${contactId}:1`,
     createdAt: now - 2 * 60_000,
     updatedAt: now - 2 * 60_000,
     author: "them",
@@ -159,7 +159,7 @@ function seedJournal(dm: DmContact): DmJournalV1 {
   };
 
   const m2: DmMessage = {
-    id: `seed:${dm.id}:2`,
+    id: `seed:${contactId}:2`,
     createdAt: now - 90_000,
     updatedAt: now - 90_000,
     author: "me",
@@ -268,7 +268,7 @@ export default function Messages({
   const [journal, setJournal] = useState<DmJournalV1>(() => {
     const loaded = loadDmJournal(dm.id);
     if (loaded) return loaded;
-    const seeded = seedJournal(dm);
+    const seeded = seedJournal(dm.id);
     saveDmJournal(dm.id, seeded);
     return seeded;
   });
@@ -282,7 +282,7 @@ export default function Messages({
   useEffect(() => {
     // при смене диалога
     const loaded = loadDmJournal(dm.id);
-    const next = loaded ?? seedJournal(dm);
+    const next = loaded ?? seedJournal(dm.id);
     setJournal(next);
     if (!loaded) saveDmJournal(dm.id, next);
 
@@ -292,6 +292,9 @@ export default function Messages({
     setAttachBusy(false);
     setMenu({ open: false });
     setMergeHint(null);
+  }, [dm.id]);
+
+  useEffect(() => {
     setPresence(inferPresence(dm.subtitle));
     setRemoteTyping(inferTyping(dm.subtitle));
   }, [dm.id, dm.subtitle]);
@@ -518,7 +521,8 @@ export default function Messages({
 
       if (arr.length === 0) {
         // Не используем delete (ts(2790)): убираем ключ через rest-оператор.
-        const { [emoji]: _removed, ...rest } = next.reactions ?? {};
+        const rest = { ...next.reactions };
+          delete rest[emoji];
         next.reactions = rest;
       } else {
         next.reactions = { ...(next.reactions ?? {}), [emoji]: arr };
@@ -682,7 +686,7 @@ export default function Messages({
 
   function resetChat() {
     clearDmJournal(dm.id);
-    const seeded = seedJournal(dm);
+    const seeded = seedJournal(dm.id);
     commit(seeded);
     setDraft("");
     setReplyToId(null);

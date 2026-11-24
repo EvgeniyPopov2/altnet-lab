@@ -45,7 +45,7 @@ function safeBaseName(name: string): string {
   // Запрещаем пути вида C:\... или ../../...
   const base = v.split("/").pop()?.split("\\").pop() ?? "file";
   // Убираем нулевые/служебные символы
-  const cleaned = base.replace(/[\u0000-\u001F\u007F]/g, "");
+  const cleaned = base.replace(/[^\x20-\x7e\u0080-\uffff]/g, "");
   return cleaned || "file";
 }
 

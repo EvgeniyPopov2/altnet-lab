@@ -21,7 +21,7 @@ describe("адаптивное оформление кнопки", () => {
   it("ограничивает размер и отступ локальных иконок", () => {
     expect(buttonStyle({ desktop: { iconSize: 500, iconGap: -4 } }, "desktop")).toMatchObject({ iconSize: 128, iconGap: 0 });
     expect(buttonIconPath("arrow-right")).toBeTruthy();
-    expect(buttonIconPath('x\" onload=\"evil')).toBeUndefined();
+    expect(buttonIconPath('x" onload="evil')).toBeUndefined();
     expect(buttonIconPath("__proto__")).toBeUndefined();
   });
   it("строит только проверенные градиенты и тени и наследует их по устройствам", () => {

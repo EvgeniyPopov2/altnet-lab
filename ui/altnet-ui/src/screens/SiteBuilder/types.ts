@@ -2,19 +2,10 @@
 // Типы документа и блоков Конструктора (извлечено из SiteBuilder.tsx)
 // Никакой логики — только описательные интерфейсы/типы.
 
-export type BlockType =
-  | "hero" | "h1" | "heading" | "p" | "btn" | "img" | "divider" | "spacer"
-  | "cols2" | "section" | "grid"
-  | "icon" | "iconlist" | "alert" | "html" | "code"
-  | "tabs" | "accordion" | "blockquote" | "cta" | "rating"
-  | "counter" | "progress" | "breadcrumbs" | "pagination" | "social"
-  | "iconbox" | "imagebox"
-  | "pricelist" | "testimonials" | "share" | "progresstracker" | "anchor" | "toc"
-  | "video" | "gallery" | "carousel" | "countdown" | "menu" | "search" | "contentnav"
-  | "map" | "lottie" | "mediacarousel" | "slides" | "videoplaylist" | "hotspot"
-  | "container" | "sidebar" | "offcanvas" | "shortcode" | "pricetable";
+export type BlockType = Block["type"];
 
-import type { LayoutByBreakpoint } from "./layoutResponsive";
+import type { CornerSettings } from "./corners";
+import type { FlexByBreakpoint, LayoutByBreakpoint } from "./layoutResponsive";
 
 export type ColsRatio = "5-7" | "6-6" | "7-5";
 
@@ -71,6 +62,7 @@ export type HeadingBlock = {
 };
 
 export type PBlock = {
+  richRuns?: import("./inlineText").TextRun[];
   id: string;
   hidden?: boolean;
   locked?: boolean;
@@ -84,11 +76,16 @@ export type PBlock = {
 };
 
 export type ImgBlock = {
-  imageStyleByBp?: Partial<Record<"desktop" | "tablet" | "mobile", { width?: number; maxWidth?: number; height?: number; opacity?: number; fit?: "contain" | "cover" | "fill" | "none" | "scale-down"; align?: "left" | "center" | "right"; borderType?: string; hoverBorderType?: string; captionAlign?: string; captionColor?: string; captionFont?: string; captionSize?: number; captionSpacing?: number; captionLineHeight?: number; captionWeight?: number; radius?: number; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturate?: number; blur?: number; shadowMode?: "on" | "off"; shadowColor?: string; shadowX?: number; shadowY?: number; shadowBlur?: number; shadowSpread?: number; hoverOpacity?: number; hoverRadius?: number; hoverBorderWidth?: number; hoverBorderColor?: string; hoverBrightness?: number; hoverContrast?: number; hoverSaturate?: number; hoverBlur?: number; hoverShadowMode?: "on" | "off"; hoverShadowColor?: string; hoverShadowX?: number; hoverShadowY?: number; hoverShadowBlur?: number; hoverShadowSpread?: number; duration?: number }>>;
+  imageStyleByBp?: Partial<Record<"desktop" | "tablet" | "mobile", CornerSettings & { width?: number; maxWidth?: number; height?: number; opacity?: number; fit?: "contain" | "cover" | "fill" | "none" | "scale-down"; align?: "left" | "center" | "right"; borderType?: string; hoverBorderType?: string; captionAlign?: string; captionColor?: string; captionFont?: string; captionSize?: number; captionSpacing?: number; captionLineHeight?: number; captionWeight?: number; radius?: number; borderWidth?: number; borderColor?: string; brightness?: number; contrast?: number; saturate?: number; blur?: number; shadowMode?: "on" | "off"; shadowColor?: string; shadowX?: number; shadowY?: number; shadowBlur?: number; shadowSpread?: number; hoverOpacity?: number; hoverRadius?: number; hoverBorderWidth?: number; hoverBorderColor?: string; hoverBrightness?: number; hoverContrast?: number; hoverSaturate?: number; hoverBlur?: number; hoverShadowMode?: "on" | "off"; hoverShadowColor?: string; hoverShadowX?: number; hoverShadowY?: number; hoverShadowBlur?: number; hoverShadowSpread?: number; duration?: number }>>;
   id: string;
   hidden?: boolean;
   locked?: boolean;
   type: "img";
+  mediaId?: string;
+  mediaCaption?: string;
+  captionSource?: "none" | "media" | "custom";
+  linkTo?: "none" | "media" | "custom";
+  lightbox?: boolean;
   cid: string; // altfs://CID, ipfs://, http(s) или data:
   src?: string; // совместимость с документами, сохранёнными прежним инспектором
   alt?: string;
@@ -120,7 +117,8 @@ export type BtnBlock = {
   className?: string;
   style?: { mt?: number; mb?: number; pt?: number; pb?: number; py?: number };
   styleByBp?: HeroBlock["styleByBp"];
-  buttonStyleByBp?: Partial<Record<"desktop" | "tablet" | "mobile", {
+  buttonStyleByBp?: Partial<Record<"desktop" | "tablet" | "mobile", CornerSettings & {
+    borderType?: string; hoverBorderType?: string; activeBorderType?: string;
     color?: string; bg?: string; borderColor?: string; borderWidth?: number; radius?: number; paddingX?: number; paddingY?: number;
     hoverColor?: string; hoverBg?: string; hoverBorderColor?: string; hoverBorderWidth?: number; hoverRadius?: number; hoverPaddingX?: number; hoverPaddingY?: number; duration?: number;
     paddingTop?: number; paddingRight?: number; paddingBottom?: number; paddingLeft?: number;
@@ -184,6 +182,9 @@ export type DividerBlock = {
 };
 
 export type SectionBlock = {
+  flexByBp?: FlexByBreakpoint;
+  layoutGapX?: number;
+  layoutGapY?: number;
   id: string;
   hidden?: boolean;
   locked?: boolean;
@@ -266,6 +267,7 @@ export type AlertBlock = {
 export type HtmlBlock = {
   id: string;
   type: "html";
+  content?: string; // старые документы
   html: string; // будет жёстко санитизироваться при рендере
 };
 
@@ -392,7 +394,12 @@ export type SocialBlock = {
   items: SocialItem[];
 };
 
-export type IconBoxBlock = {
+export type CardItem = {
+  id: string; title?: string; label?: string; text?: string; description?: string;
+  icon?: string; src?: string; cid?: string; alt?: string;
+};
+type CardCollection = { items?: CardItem[]; columns?: 1 | 2 | 3 | 4 };
+export type IconBoxBlock = CardCollection & {
   id: string;
   type: "iconbox";
   icon: IconName;
@@ -400,7 +407,7 @@ export type IconBoxBlock = {
   text?: string;
 };
 
-export type ImageBoxBlock = {
+export type ImageBoxBlock = CardCollection & {
   id: string;
   type: "imagebox";
   src?: string;     // url или cid
@@ -410,14 +417,14 @@ export type ImageBoxBlock = {
 };
 
 // ── B6.e: price/testimonials/share/tracker/anchor/toc ────────────────────────
-export type PriceItem = { id: string; title: string; price: string; desc?: string };
+export type PriceItem = { id: string; title: string; price: string; desc?: string; period?: string; features?: string[]; ctaLabel?: string; ctaHref?: string };
 export type PriceListBlock = {
   id: string;
   type: "pricelist";
   items: PriceItem[];
 };
 
-export type TestimonialItem = { id: string; author: string; text: string; role?: string };
+export type TestimonialItem = { id: string; author: string; text: string; role?: string; avatar?: string; quote?: string };
 export type TestimonialsBlock = {
   id: string;
   type: "testimonials";
@@ -465,12 +472,13 @@ export type VideoBlock = {
   controls?: boolean;
 };
 
-export type GalleryItem = { id: string; src: string; alt?: string };
+export type GalleryItem = { id: string; src: string; alt?: string; caption?: string };
 export type GalleryBlock = {
   id: string;
   type: "gallery";
   cols?: 2 | 3 | 4;
   items: GalleryItem[];
+  lightbox?: boolean;
 };
 
 export type CarouselSlide = { id: string; src: string; alt?: string; caption?: string };
@@ -522,6 +530,7 @@ export type ContentNavBlock = {
 export type MapBlock = {
   id: string;
   type: "map";
+  height?: number; detailMap?: boolean; mapTheme?: "auto" | "light" | "dark";
   lat: number;
   lon: number;
   zoom?: number;                 // 1..20
@@ -532,6 +541,11 @@ export type MapBlock = {
 export type LottieBlock = {
   id: string;
   type: "lottie";
+  animationJson?: string;
+  trigger?: "viewport" | "click" | "hover" | "scroll" | "none";
+  hoverOut?: "pause" | "stop" | "reverse" | "continue";
+  speed?: number; start?: number; end?: number; threshold?: number;
+  reverse?: boolean; lazy?: boolean; align?: Align; width?: number; maxWidth?: number;
   src?: string;                  // ссылка на .json (без внешних скриптов)
   autoplay?: boolean;
   loop?: boolean;
@@ -540,7 +554,9 @@ export type LottieBlock = {
 };
 
 export type MediaSlide = { id: string; kind: "img" | "video"; src: string; alt?: string; caption?: string };
+export type LegacyMediaSlide = Partial<MediaSlide> & { type?: string; cid?: string };
 export type MediaCarouselBlock = {
+  items?: LegacyMediaSlide[];
   id: string;
   type: "mediacarousel";
   slides: MediaSlide[];
@@ -578,6 +594,9 @@ export type ContainerPadding = "none" | "sm" | "md" | "lg";
 export type ContainerBg = "none" | "panel" | "brand";
 
 export type ContainerBlock = {
+  flexByBp?: FlexByBreakpoint;
+  layoutGapX?: number;
+  layoutGapY?: number;
   id: string;
   type: "container";
   hidden?: boolean;
@@ -642,7 +661,34 @@ export type PriceTableBlock = {
   plans: PriceTablePlan[];
 };
 
-export type Block =
+export type StyleLayer = Record<string, string | number | undefined>;
+export type DeviceStyles = Partial<Record<Device, StyleLayer>>;
+export type StyleClass = { id: string; name: string; layers: DeviceStyles };
+export type EntryDetails = { kind?: "page" | "post"; author?: string; date?: string; terms?: string[]; fields?: Record<string,string> };
+export type DynamicBinding = { source: string; fallback?: string; before?: string; after?: string };
+export type SoundCloudBlock = {id:string;type:"soundcloud";track?:string;label?:string;color?:string;flags?:Partial<Record<import("./soundCloud").SoundFlag,boolean>>};
+export type ReadMoreBlock = {id:string;type:"readmore";label?:string};
+export type TextPathBlock = {id:string;type:"textpath";text:string;shape?:string;d?:string;viewBox?:string;size?:number;unit?:string;
+  rotate?:number;start?:number;align?:"start"|"middle"|"end";direction?:"auto"|"ltr"|"rtl";showPath?:boolean;color?:string;hoverColor?:string;
+  stroke?:string;hoverStroke?:string;strokeWidth?:number;fontSize?:number;wordSpacing?:number;href?:string};
+export type LoopCard = {more?:{label:string;fragment:string}; entryId: string; title: string; href: string; description: string; terms: string[]; blocks?: Block[] };
+export type LoopGridBlock = { id: string; type: "loopgrid"; source?: "all" | "page" | "post"; sort?: "menu" | "title" | "date";
+  descending?: boolean; omitCurrent?: boolean; terms?: string[]; templateId?: string; columns?: Partial<Record<Device,number>>;
+  pageSize?: number; offset?: number; filter?: boolean; gap?: number; emptyText?: string; cards?: LoopCard[]; loopError?: string };
+type BlockMetadata = {
+  styleClassIds?: string[];
+  dynamic?: Record<string,DynamicBinding>;
+  hidden?: boolean;
+  locked?: boolean;
+  hideOn?: Partial<Record<Device, boolean>>;
+  className?: string;
+  anchorId?: string;
+  anchor?: string;
+  style?: StyleLayer | MapBlock["style"];
+  styleByBp?: DeviceStyles;
+};
+
+export type Block = BlockMetadata & (
   | HeroBlock | H1Block | HeadingBlock | PBlock | ImgBlock | BtnBlock
   | DividerBlock | SpacerBlock | Cols2Block | SectionBlock | GridBlock
   | IconBlock | IconListBlock | AlertBlock | HtmlBlock | CodeBlock
@@ -652,11 +698,13 @@ export type Block =
   | ProgressTrackerBlock | AnchorBlock | TocBlock
   | VideoBlock | GalleryBlock | CarouselBlock | CountdownBlock | MenuBlock | SearchBlock | ContentNavBlock
   | MapBlock | LottieBlock | MediaCarouselBlock | SlidesBlock | VideoPlaylistBlock | HotspotBlock
-  | ContainerBlock | SidebarBlock | OffcanvasBlock | ShortcodeBlock | PriceTableBlock;
+  | ContainerBlock | SidebarBlock | OffcanvasBlock | ShortcodeBlock | PriceTableBlock | LoopGridBlock | SoundCloudBlock | ReadMoreBlock | TextPathBlock);
 
 // ─────────────────────────────────────────────
 // Пресеты FLEX (12 вариантов, как в Elementor)
 // ─────────────────────────────────────────────
+
+export type GridTemplate = { columns: number[]; rows: number };
 
 export type FlexPreset =
   | "1col"            // 100%
@@ -697,7 +745,12 @@ export type ResponsiveStyle = Partial<
 /** Утилита, если захочешь сузить типизацию блока в пропсах */
 export type WithStyle = { style?: ResponsiveStyle };
 
+export type MediaAsset = { id: string; name: string; dataUrl: string; alt: string; caption: string };
+
 export type Doc = {
+  entry?: EntryDetails;
+  mediaLibrary?: MediaAsset[];
+  styleClasses?: StyleClass[];
   title: string;
   description?: string; // meta description
   ogImage?: string;
@@ -713,8 +766,10 @@ export type Doc = {
   siteProjects?: SiteProjects;
 };
 
-export type PageDocument = Omit<Doc, "sitePages" | "siteProjects">;
-export type SitePage = { id: string; path: string; document?: PageDocument };
+export type PageDocument = Omit<Doc, "sitePages" | "siteProjects" | "mediaLibrary" | "styleClasses">;
+export type TemplateKind = "header" | "footer" | "section" | "popup";
+export type SiteTemplate = { popup?:import("./popup").PopupOptions; kind: TemplateKind; enabled: boolean; include?: string[]; exclude?: string[]; priority: number };
+export type SitePage = { id: string; path: string; document?: PageDocument; template?: SiteTemplate };
 export type SitePages = { version: 1; activeId: string; pages: SitePage[] };
 export type ProjectDocument = Omit<Doc, "siteProjects">;
 export type SiteProject = { id: string; name: string; document?: ProjectDocument };

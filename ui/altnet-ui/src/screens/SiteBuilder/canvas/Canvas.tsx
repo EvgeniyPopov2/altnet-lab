@@ -36,10 +36,10 @@ export default function Canvas(props: CanvasProps) {
       gapX={gapX}
       gapY={gapY}
       // Block гарантированно имеет id, значит совместим с SortableLike
-      blocks={blocks as unknown as any[]}
-      renderBlock={(b) => renderBlock(b as Block)}
-      onReorder={(next) => onReorder(next as Block[])}
-      onInsertAt={onInsertAt as NativeOnInsertAt}
+      blocks={blocks}
+      renderBlock={renderBlock}
+      onReorder={onReorder}
+      onInsertAt={onInsertAt}
       onMoveToRoot={onMoveToRoot}
     />
   );

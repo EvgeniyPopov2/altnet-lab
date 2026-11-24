@@ -1,4 +1,7 @@
+import type { Block } from "../types";
 import { useMemo } from "react";
+import StyleClassPanel from "./tabs/StyleClassPanel";
+import DynamicFields from "./tabs/DynamicFields";
 import ContentTab from "./tabs/ContentTab";
 import StyleTab from "./tabs/StyleTab";
 import AdvancedTab from "./tabs/AdvancedTab";
@@ -10,7 +13,7 @@ import type { InspectorTab } from "./InspectorTabs";
 type Device = "desktop" | "tablet" | "mobile";
 
 type Props = {
-  block?: any;                               // выбранный блок или undefined
+  block?: Block;                               // выбранный блок или undefined
   onPatch: (patch: BlockPatch, group?: string) => void; // патч или преобразование актуального блока
   device: Device;
   onDeviceChange: (device: Device) => void;
@@ -46,9 +49,9 @@ export default function Inspector({ block, onPatch, device, onDeviceChange, tab 
         {!block ? (
           <div className="text-xs text-[#c9d0e9]">Выберите блок на канвасе.</div>
         ) : tab === "content" ? (
-          <ContentTab block={block} onPatch={onPatch} device={device} />
+          <><ContentTab block={block} onPatch={onPatch} device={device} /><DynamicFields block={block} onPatch={onPatch} /></>
         ) : tab === "style" ? (
-          <StyleTab block={block} onPatch={onPatch} device={device} />
+          <><StyleClassPanel block={block} device={device} onPatch={onPatch}/><StyleTab block={block} onPatch={onPatch} device={device} /></>
         ) : (
           <AdvancedTab block={block} onPatch={onPatch} device={device} />
         )}

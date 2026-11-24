@@ -1,12 +1,4 @@
-type ImageBoxItem = {
-  id: string;
-  title?: string;
-  text?: string;
-  alt?: string;
-  src?: string;
-  cid?: string;
-};
-type ImageBoxLike = { items?: ImageBoxItem[]; columns?: 1 | 2 | 3 | 4 };
+import type { ImageBoxBlock, CardItem } from "../../types";
 
 function safeSrc(s?: string) {
   const u = (s || "").trim();
@@ -15,18 +7,17 @@ function safeSrc(s?: string) {
   return "";
 }
 
-export default function ImageBoxView({ block }: { block: any }) {
-  const bx = (block as Partial<ImageBoxLike>) || {};
+export default function ImageBoxView({ block }: { block: ImageBoxBlock }) {
 
-  const cols = bx.columns ?? (Array.isArray(bx.items) ? 3 : 1);
+  const cols = block.columns ?? (Array.isArray(block.items) ? 3 : 1);
   const grid =
     cols === 4 ? "md:grid-cols-4" : cols === 2 ? "md:grid-cols-2" : cols === 1 ? "grid-cols-1" : "md:grid-cols-3";
 
-  const items: ImageBoxItem[] = Array.isArray(bx.items) ? bx.items : [{ id: block.id, title: block.title, text: block.text, src: block.src, alt: block.alt }];
+  const items: CardItem[] = Array.isArray(block.items) ? block.items : [{ id: block.id, title: block.title, text: block.text, src: block.src, alt: block.alt }];
 
   return (
     <div className={`grid gap-3 ${grid}`}>
-      {items.map((it: ImageBoxItem) => (
+      {items.map((it: CardItem) => (
         <article
           key={it.id}
           className="rounded-2xl border border-[#1f2751] bg-[#0b1022] overflow-hidden"

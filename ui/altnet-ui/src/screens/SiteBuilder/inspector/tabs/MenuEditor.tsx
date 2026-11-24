@@ -1,8 +1,9 @@
+import type { MenuBlock } from "../../types";
 import type { MenuItem } from "../../types";
 import { newId } from "../../registry";
 import Field from "../../ui/Field";
 
-type Props = { block: any; onPatch: (patch: Record<string, any>) => void };
+type Props = { block: MenuBlock; onPatch: (patch: Record<string, unknown>) => void };
 const input = "w-full rounded-lg border border-[#1f2751] bg-[#0c0f1a] px-3 py-2";
 const newItem = (): MenuItem => ({ id: newId("mi"), label: "Новый пункт", href: "#" });
 

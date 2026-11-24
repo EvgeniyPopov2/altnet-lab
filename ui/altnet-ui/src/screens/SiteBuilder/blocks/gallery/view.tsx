@@ -11,6 +11,7 @@ export default function GalleryView({ block }: { block: GalleryBlock }) {
       {block.items.map((it) => (
         <div role="listitem" key={it.id} className="rounded-xl overflow-hidden border border-[#2a2f45]">
           {it.src ? <img src={it.src} alt={it.alt || ""} className="w-full h-auto block" draggable={false} referrerPolicy="no-referrer"/> : <div className="grid aspect-video place-items-center text-xs text-slate-500">Укажите адрес</div>}
+          {it.caption && <p className="px-2 py-1 text-sm">{it.caption}</p>}
         </div>
       ))}
     </div>

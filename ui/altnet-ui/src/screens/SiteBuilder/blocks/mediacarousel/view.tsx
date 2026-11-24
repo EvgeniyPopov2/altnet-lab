@@ -1,10 +1,11 @@
+import type { MediaCarouselBlock } from "../../types";
 import { useEffect, useState } from "react";
 
-export default function MediaCarouselView({ block }: { block: any }) {
-  const slides = Array.isArray(block.slides) ? block.slides : Array.isArray(block.items) ? block.items.map((item: any) => ({ ...item, kind: item.kind || item.type || "img", src: item.src || item.cid || "" })) : [];
+export default function MediaCarouselView({ block }: { block: MediaCarouselBlock }) {
+  const slides = Array.isArray(block.slides) ? block.slides : Array.isArray(block.items) ? block.items.map((item) => ({ ...item, kind: item.kind || item.type || "img", src: item.src || item.cid || "" })) : [];
   const initial = Math.max(0, Math.min(slides.length - 1, Math.floor(Number(block.initial) || 0)));
   const [index, setIndex] = useState(initial);
-  useEffect(() => { setIndex(initial); }, [block.initial, block.slides, block.items]);
+  useEffect(() => { setIndex(initial); }, [initial, block.slides, block.items]);
   const slide = slides[index];
   return <div className="relative overflow-hidden rounded-2xl border border-[#1f2751] bg-[#0b1022]">
     {slide ? <figure>

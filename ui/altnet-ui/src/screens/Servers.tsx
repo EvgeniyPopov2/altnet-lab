@@ -1,3 +1,4 @@
+import { isRecord } from "../core/records";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContactCapabilities, PrivacyProfile } from "../core/policy/types";
 import { computeEsm } from "../core/policy/esm";
@@ -160,9 +161,9 @@ function kindIcon(k: ChannelKind): string {
   }
 }
 
-function seedChannels(server: ServerItem): Channel[] {
+function seedChannels(serverId: string): Channel[] {
   // MVP: фиксированные каналы, роли — моки
-  if (server.id === "mid") {
+  if (serverId === "mid") {
     return [
       { id: "ann", kind: "text", title: "announcements", desc: "Новости и правила", minRole: "guest" },
       { id: "gen", kind: "text", title: "general", desc: "Общий чат", minRole: "member" },
@@ -180,7 +181,7 @@ function seedChannels(server: ServerItem): Channel[] {
   ];
 }
 
-function seedMessages(server: ServerItem, channels: Channel[]): Record<string, ChatMsg[]> {
+function seedMessages(server: Pick<ServerItem, "id" | "title">, channels: Channel[]): Record<string, ChatMsg[]> {
   const base: Record<string, ChatMsg[]> = {};
   for (const ch of channels) {
     if (ch.kind !== "text") continue;
@@ -235,7 +236,8 @@ function loadShelf(serverId: string): FileShelfItem[] {
     if (!Array.isArray(arr)) return [];
     return arr
       .slice(0, MAX_SHELF_ITEMS)
-      .map((x: any) => {
+      .filter(isRecord)
+      .map(x => {
         const cid = typeof x?.cid === "string" ? x.cid : "";
         if (!cid) return null;
         return {
@@ -308,7 +310,7 @@ export default function Servers({
 
   const esm = useMemo(() => computeEsm(profile, caps), [profile, caps]);
 
-  const channels = useMemo(() => seedChannels(server), [server.id]);
+  const channels = useMemo(() => seedChannels(server.id), [server.id]);
   const [channelId, setChannelId] = useState<string>(() => channels[0]?.id ?? "gen");
 
   const selectedChannel = useMemo(() => {
@@ -320,24 +322,28 @@ export default function Servers({
   const [messagesByCh, setMessagesByCh] = useState<Record<string, ChatMsg[]>>(() => seedMessages(server, channels));
   const endRef = useRef<HTMLDivElement | null>(null);
 
+  const activeServer = useRef(server.id);
   // При смене сервера — сбросить состояние
   useEffect(() => {
-    const chs = seedChannels(server);
+    if (server.id === activeServer.current) return;
+    activeServer.current = server.id;
+    const chs = channels;
     setChannelId(chs[0]?.id ?? "gen");
-    setMessagesByCh(seedMessages(server, chs));
+    setMessagesByCh(seedMessages({ id: server.id, title: server.title }, chs));
     setDraft("");
     setPendingAttachments([]);
     setAttachBusy(false);
     setShelfItems(loadShelf(server.id));
     setShelfBusy(false);
-  }, [server.id]);
+  }, [server.id, server.title, channels]);
 
 
+  const channelMessageCount = messagesByCh[selectedChannel?.id ?? ""]?.length;
   // Автоскролл для текста
   useEffect(() => {
     if (!selectedChannel || selectedChannel.kind !== "text") return;
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [selectedChannel?.id, messagesByCh[selectedChannel?.id ?? ""]?.length]);
+  }, [selectedChannel, channelMessageCount]);
 
   // При смене канала — не таскать вложения между каналами
   useEffect(() => {

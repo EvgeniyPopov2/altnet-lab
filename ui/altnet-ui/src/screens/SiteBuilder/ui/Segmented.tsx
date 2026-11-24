@@ -13,6 +13,8 @@ export default function Segmented({ items, value, onChange }: Props) {
         return (
           <button
             key={it.id}
+            type="button"
+            aria-pressed={active}
             onClick={() => onChange(it.id)}
             className={`px-3 py-1 text-xs ${active ? "bg-[#182047]" : "bg-[#101735]"} hover:bg-[#182047] border-r last:border-r-0 border-[#1f2751]`}
           >

@@ -1,3 +1,5 @@
+import { asRecord } from "../../core/records";
+
 type Device = "desktop" | "tablet" | "mobile";
 type Style = Record<string, unknown>;
 
@@ -10,10 +12,11 @@ function applyLayer(result: Style, value: unknown): Style {
   };
 }
 
-export function resolveResponsiveStyle(base: unknown, byDevice: any, device: Device): Style {
+export function resolveResponsiveStyle(base: unknown, byDevice: unknown, device: Device): Style {
+  const layers = asRecord(byDevice);
   let result = applyLayer({}, base);
-  result = applyLayer(result, byDevice?.desktop);
-  if (device !== "desktop") result = applyLayer(result, byDevice?.tablet);
-  if (device === "mobile") result = applyLayer(result, byDevice?.mobile);
+  result = applyLayer(result, layers.desktop);
+  if (device !== "desktop") result = applyLayer(result, layers.tablet);
+  if (device === "mobile") result = applyLayer(result, layers.mobile);
   return result;
 }

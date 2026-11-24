@@ -1,1 +1,3 @@
-export type BlockPatch = Record<string, any> | ((current: any) => Record<string, any>);
+import type { Block } from "../types";
+
+export type BlockPatch = Record<string, unknown> | ((current: Block) => Record<string, unknown>);

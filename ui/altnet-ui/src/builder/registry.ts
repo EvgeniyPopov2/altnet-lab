@@ -1,3 +1,11 @@
+import {popupSettings} from "../screens/SiteBuilder/popup";
+import {inlineMarkup} from "../screens/SiteBuilder/inlineText";
+import {soundSettings} from "../screens/SiteBuilder/soundCloud";
+import {textPathOptions} from "../screens/SiteBuilder/textPath";
+import { loopSettings } from "../screens/SiteBuilder/dynamicContent";
+import { mapSettings, mapUrls, overviewSvg } from "../screens/SiteBuilder/blocks/map/geometry";
+import { animationMarkup } from "./lottieRenderer";
+import { asRecord, oneOf, recordList } from "../core/records";
 // ui/altnet-ui/src/builder/registry.ts
 // Единый реестр блоков конструктора.
 // Версия без JSX — рендер через React.createElement, чтобы файл оставался .ts.
@@ -12,20 +20,20 @@ import { buttonLinkOptions, sanitizeHref } from "./cdr";
 export type BlockSpec = {
   id: string; // машинное имя (type)
   name: string; // человекочитаемое
-  defaults: Record<string, any>;
-  render: (args: { props: Record<string, any> }) => any; // без JSX/FC
-  serialize: (props: Record<string, any>) => string;
+  defaults: Record<string, unknown>;
+  render: (args: { props: Record<string, unknown> }) => React.ReactNode; // без JSX/FC
+  serialize: (props: Record<string, unknown>) => string;
 };
 
 // Утилиты
-const esc = (s: string = "") =>
-  s
+const esc = (s: unknown = "") =>
+  String(s ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-const nl2br = (s: string = "") => esc(s).replace(/\n/g, "<br/>");
+const nl2br = (s: unknown = "") => esc(s).replace(/\n/g, "<br/>");
 
 // Nested layout children use the same escaping and block serializers as the page root.
 function serializeLayout(cells: unknown, weights: unknown, layoutClass?: unknown): string {
@@ -63,8 +71,8 @@ const Hero: BlockSpec = {
       React.createElement(
         "div",
         { className: "card" },
-        React.createElement("h1", null, p.title),
-        React.createElement("p", { className: "muted" }, p.subtitle),
+        React.createElement("h1", null, String(p.title ?? "")),
+        React.createElement("p", { className: "muted" }, String(p.subtitle ?? "")),
         React.createElement(
           "div",
           { className: "mt-16" },
@@ -76,7 +84,7 @@ const Hero: BlockSpec = {
               rel: p.ctaRel,
               target: p.ctaTarget,
             },
-            p.ctaLabel
+            String(p.ctaLabel ?? "")
           )
         )
       )
@@ -104,7 +112,7 @@ const H1: BlockSpec = {
     return React.createElement(
       "section",
       { className: `section t-${p.align || "left"}` },
-      React.createElement("h1", null, p.text)
+      React.createElement("h1", null, String(p.text ?? ""))
     );
   },
   serialize: (props) => {
@@ -125,8 +133,8 @@ const Heading: BlockSpec = {
   },
   render: ({ props }) => {
     const p = { ...Heading.defaults, ...(props || {}) };
-    const lvl = ["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].includes(p.level) ? p.level : "h2";
-    const Tag: any = lvl;
+    const lvl = oneOf(p.level, ["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"]) ? p.level : "h2";
+    const Tag = lvl;
     return React.createElement(
       "section",
       { className: `section t-${p.align || "left"}` },
@@ -135,7 +143,7 @@ const Heading: BlockSpec = {
   },
   serialize: (props) => {
     const p = { ...Heading.defaults, ...(props || {}) };
-    const lvl = ["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"].includes(p.level) ? p.level : "h2";
+    const lvl = oneOf(p.level, ["h1", "h2", "h3", "h4", "h5", "h6", "div", "span", "p"]) ? p.level : "h2";
     const align = p.align || "left";
     const href = typeof p.href === "string" && p.href.trim() ? sanitizeHref(p.href) : "";
     const open = p.linkOpen ?? (p.target === "_blank" ? "new" : p.target === "_self" ? "same" : "auto");
@@ -155,13 +163,13 @@ const Text: BlockSpec = {
     return React.createElement(
       "section",
       { className: `section t-${p.align || "left"}` },
-      React.createElement("p", null, p.text)
+      React.createElement("p", null, String(p.text ?? ""))
     );
   },
   serialize: (props) => {
     const p = { ...Text.defaults, ...props };
     const cls = `section t-${p.align || "left"}`;
-    return `<section class="${cls}"><p>${nl2br(p.text)}</p></section>`;
+    return `<section class="${cls}"><p>${inlineMarkup(String(p.text??""),p.richRuns,esc)}</p></section>`;
   },
 };
 
@@ -189,7 +197,8 @@ const Image: BlockSpec = {
     const p = { ...Image.defaults, ...props };
     const cls = typeof p.__imageClass === "string" && /^sb-image-\d+$/.test(p.__imageClass) ? ` ${p.__imageClass}` : "";
     const image = `<img class="responsive${cls}" src="${esc(p.src)}" alt="${esc(p.alt)}" loading="lazy" decoding="async" referrerpolicy="no-referrer"/>`;
-    const link = p.href ? `<a class="sb-image-link" href="${esc(String(p.href))}"${p.target ? ` target="${esc(String(p.target))}"` : ""}${p.rel ? ` rel="${esc(String(p.rel))}"` : ""}>${image}</a>` : image;
+    const href = p.linkTo === "media" ? p.src : p.href;
+    const link = p.lightbox === true && p.src ? lightboxTrigger(image, p.alt) : href ? `<a class="sb-image-link" href="${esc(String(href))}"${p.linkTo === "media" && String(href).startsWith("data:image/") ? ' download="image"' : ""}${p.target ? ` target="${esc(String(p.target))}"` : ""}${p.rel ? ` rel="${esc(String(p.rel))}"` : ""}>${image}</a>` : image;
     const captionClass = typeof p.__imageCaptionClass === "string" && /^sb-image-caption-\d+$/.test(p.__imageCaptionClass) ? ` class="${p.__imageCaptionClass}"` : "";
     const content = p.caption ? `<figure class="sb-image-figure">${link}<figcaption${captionClass}>${esc(String(p.caption))}</figcaption></figure>` : link;
     const wrap = typeof p.__imageWrapClass === "string" && /^sb-image-wrap-\d+$/.test(p.__imageWrapClass) ? `<div class="${p.__imageWrapClass}">${content}</div>` : content;
@@ -273,7 +282,7 @@ const Button: BlockSpec = {
     const buttonClass = typeof p.__buttonClass === "string" && /^sb-button-\d+$/.test(p.__buttonClass) ? ` ${p.__buttonClass}` : "";
     const icon = iconPath ? `<svg class="sb-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="${iconPath}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>` : "";
     const label = esc(String(p.label));
-    const aria = typeof p.accessibleLabel === "string" ? p.accessibleLabel.replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, 300) : "";
+    const aria = typeof p.accessibleLabel === "string" ? p.accessibleLabel.replace(/[^\x20-\x7e\u0080-\uffff]/g, "").trim().slice(0, 300) : "";
     return `<section class="${clsSec}"><a class="${clsBtn}${buttonClass}" href="${esc(p.href)}"${p.rel ? ` rel="${esc(p.rel)}"` : ""}${p.target ? ` target="${esc(p.target)}"` : ""}${aria ? ` aria-label="${esc(aria)}"` : ""}>${p.iconPosition === "after" ? label + icon : icon + label}</a></section>`;
   },
 };
@@ -295,8 +304,8 @@ const Cols2: BlockSpec = {
     const [l, r] = String(p.ratio || "6-6").split("-");
     // порядок колонок
     const left = React.createElement("div", { className: `col c-xs-12 c-md-${l}` },
-      React.createElement("h2", null, p.title),
-      React.createElement("p", null, p.text)
+      React.createElement("h2", null, String(p.title ?? "")),
+      React.createElement("p", null, String(p.text ?? ""))
     );
     const right = React.createElement("div", { className: `col c-xs-12 c-md-${r}` },
       React.createElement("img", { className: "responsive", loading: "lazy", src: p.img, alt: p.alt })
@@ -388,6 +397,11 @@ const Section: BlockSpec = {
 };
 
 // === Grid 1–4 (галерея карточек)
+function lightboxTrigger(image: string, alt: unknown): string {
+  const name = typeof alt === "string" && alt.trim() ? "Увеличить изображение «" + alt + "»" : "Увеличить изображение";
+  return `<button type="button" class="sb-image-link sb-lightbox-trigger" data-lightbox-open aria-haspopup="dialog" aria-label="${esc(name)}">${image}</button>`;
+}
+
 const Grid: BlockSpec = {
   id: "grid",
   name: "Сетка 1–4",
@@ -399,10 +413,10 @@ const Grid: BlockSpec = {
   },
   render: ({ props }) => {
     const p = { ...Grid.defaults, ...(props || {}) };
-    const cols = (p.cols >= 1 && p.cols <= 4 ? p.cols : 3) as 1 | 2 | 3 | 4;
+    const cols = oneOf(p.cols, [1, 2, 3, 4]) ? p.cols : 3;
     const wrapCls = `grid-wrap gc-${cols}`;
 
-    const children = (Array.isArray(p.items) ? p.items : []).map((it, i) =>
+    const children = recordList(p.items).map((it, i) =>
       React.createElement(
         "figure",
         { key: i, className: "grid-card" },
@@ -415,39 +429,40 @@ const Grid: BlockSpec = {
           : null
       )
     );
-    const style: any = { "--gx": `${Number(p.gapX ?? 16)}px`, "--gy": `${Number(p.gapY ?? 16)}px` };
+    const style = { "--gx": `${Number(p.gapX ?? 16)}px`, "--gy": `${Number(p.gapY ?? 16)}px` };
     return React.createElement("section", { className: "section" },
       React.createElement("div", { className: wrapCls, style }, ...children)
     );
   },
   serialize: (props) => {
     const p = { ...Grid.defaults, ...(props || {}) };
-    const cols = (p.cols >= 1 && p.cols <= 4 ? p.cols : 3) as 1 | 2 | 3 | 4;
+    const cols = oneOf(p.cols, [1, 2, 3, 4]) ? p.cols : 3;
     const gridClass = typeof p.__gridClass === "string" && /^sb-grid-\d+$/.test(p.__gridClass) ? p.__gridClass : "";
     const wrapCls = `grid-wrap gc-${cols}${gridClass ? ` ${gridClass}` : ""}`;
 
-    const items = (Array.isArray(p.items) ? p.items : []).map((it) => {
+    const items = recordList(p.items).map((it) => {
       const src = esc(String(it?.src || ""));
       const alt = esc(String(it?.alt || ""));
       const caption = it?.caption ? `<figcaption class="body">${esc(String(it.caption))}</figcaption>` : "";
 
-      return `<figure class="grid-card"><img src="${src}" alt="${alt}"/>${caption}</figure>`;
+      const image = `<img src="${src}" alt="${alt}" loading="lazy" decoding="async" referrerpolicy="no-referrer"/>`;
+      return `<figure class="grid-card">${p.lightbox === true && src ? lightboxTrigger(image, it.alt) : image}${caption}</figure>`;
     }).join("");
-    return `<section class="section">${items ? `<div class="${wrapCls}">${items}</div>` : ""}${serializeLayout(p.layoutCells, p.layoutWeights, p.__layoutClass)}</section>`;
+    return `<section class="section">${items ? `<div class="${wrapCls}"${p.lightbox === true ? " data-lightbox-group" : ""}>${items}</div>` : ""}${serializeLayout(p.layoutCells, p.layoutWeights, p.__layoutClass)}</section>`;
   },
 };
 
 const Alert: BlockSpec = {
   id: "alert", name: "Уведомление", defaults: {},
-  render: ({ props }) => React.createElement("aside", null, props.title, props.text),
+  render: ({ props }) => React.createElement("aside", null, String(props.title ?? ""), String(props.text ?? "")),
   serialize: p => {
-    const variant = ["info", "success", "warning", "danger"].includes(p.variant) ? p.variant : "info";
+    const variant = oneOf(p.variant, ["info", "success", "warning", "danger"]) ? p.variant : "info";
     return `<aside class="notice notice-${variant}">${p.title ? `<strong>${esc(String(p.title))}</strong>` : ""}${p.text ? `<p>${nl2br(String(p.text))}</p>` : ""}</aside>`;
   },
 };
 const Blockquote: BlockSpec = {
   id: "blockquote", name: "Цитата", defaults: {},
-  render: ({ props }) => React.createElement("blockquote", null, props.text),
+  render: ({ props }) => React.createElement("blockquote", null, String(props.text ?? "")),
   serialize: p => `<blockquote class="quote"><p>${nl2br(String(p.text || ""))}</p>${p.cite ? `<cite>${esc(String(p.cite))}</cite>` : ""}</blockquote>`,
 };
 const Progress: BlockSpec = {
@@ -461,7 +476,7 @@ const Progress: BlockSpec = {
 };
 const Counter: BlockSpec = {
   id: "counter", name: "Счётчик", defaults: {},
-  render: ({ props }) => React.createElement("span", null, props.value),
+  render: ({ props }) => React.createElement("span", null, String(props.value ?? "")),
   serialize: p => {
     const target = Number.isFinite(Number(p.value)) ? Number(p.value) : 0;
     const prefix = esc(String(p.prefix || "")), suffix = esc(String(p.suffix || ""));
@@ -475,13 +490,13 @@ const Counter: BlockSpec = {
 };
 const IconList: BlockSpec = {
   id: "iconlist", name: "Список", defaults: {},
-  render: ({ props }) => React.createElement("ul", null, (props.items || []).map((item: any, i: number) => React.createElement("li", { key: i }, item.label))),
+  render: ({ props }) => React.createElement("ul", null, recordList(props.items).map((item, i: number) => React.createElement("li", { key: i }, String(item.label ?? "")))),
   serialize: p => {
-    const size = ["sm", "md", "lg"].includes(p.size) ? p.size : "md";
-    const gap = ["sm", "md", "lg"].includes(p.gap) ? p.gap : "md";
-    const align = ["start", "center", "end"].includes(p.align) ? p.align : "start";
-    const variant = ["dot", "check", "star", "custom"].includes(p.variant) ? p.variant : "dot";
-    const items = (Array.isArray(p.items) ? p.items : []).map((item: any) => {
+    const size = oneOf(p.size, ["sm", "md", "lg"]) ? p.size : "md";
+    const gap = oneOf(p.gap, ["sm", "md", "lg"]) ? p.gap : "md";
+    const align = oneOf(p.align, ["start", "center", "end"]) ? p.align : "start";
+    const variant = oneOf(p.variant, ["dot", "check", "star", "custom"]) ? p.variant : "dot";
+    const items = recordList(p.items).map((item) => {
       const marker = variant === "check" ? "✓" : variant === "star" ? "★" : variant === "custom" ? String(item.icon || "•").slice(0, 2) : "•";
       const text = `<span><span>${esc(String(item.label || ""))}</span>${item.description ? `<small>${esc(String(item.description))}</small>` : ""}</span>`;
       return `<li><span aria-hidden="true" class="icon-list-marker">${esc(marker)}</span>${item.href ? `<a href="${esc(String(item.href))}">${text}</a>` : text}</li>`;
@@ -496,7 +511,7 @@ const Anchor: BlockSpec = {
 };
 const Code: BlockSpec = {
   id: "code", name: "Код", defaults: {},
-  render: ({ props }) => React.createElement("pre", null, React.createElement("code", null, props.code)),
+  render: ({ props }) => React.createElement("pre", null, React.createElement("code", null, String(props.code ?? ""))),
   serialize: p => {
     const language = typeof p.lang === "string" && /^[a-z0-9_+.-]{1,40}$/i.test(p.lang) ? p.lang : "";
     return `<pre class="code-block"><code${language ? ` class="language-${esc(language)}"` : ""}>${esc(String(p.code || ""))}</code></pre>`;
@@ -504,28 +519,28 @@ const Code: BlockSpec = {
 };
 const Cta: BlockSpec = {
   id: "cta", name: "Призыв", defaults: {},
-  render: ({ props }) => React.createElement("section", null, props.title, props.text),
+  render: ({ props }) => React.createElement("section", null, String(props.title ?? ""), String(props.text ?? "")),
   serialize: p => {
-    const variant = ["primary", "secondary", "outline", "ghost"].includes(p.variant) ? p.variant : "primary";
-    const align = ["start", "center", "end"].includes(p.align) ? p.align : "start";
-    const emphasis = ["none", "panel", "brand"].includes(p.emphasis) ? p.emphasis : "panel";
+    const variant = oneOf(p.variant, ["primary", "secondary", "outline", "ghost"]) ? p.variant : "primary";
+    const align = oneOf(p.align, ["start", "center", "end"]) ? p.align : "start";
+    const emphasis = oneOf(p.emphasis, ["none", "panel", "brand"]) ? p.emphasis : "panel";
     const button = p.btnLabel && p.btnHref ? `<a class="btn cta-button-${variant}" href="${esc(String(p.btnHref))}">${esc(String(p.btnLabel))}</a>` : "";
     return `<section class="cta cta-${align} cta-${emphasis}">${p.title ? `<h3>${esc(String(p.title))}</h3>` : ""}${p.text ? `<p>${nl2br(String(p.text))}</p>` : ""}${button}</section>`;
   },
 };
 const Toc: BlockSpec = {
   id: "toc", name: "Содержание", defaults: {},
-  render: ({ props }) => React.createElement("nav", null, (props.items || []).map((item: any, i: number) => React.createElement("a", { key: i, href: item.href }, item.label))),
-  serialize: p => `<nav class="toc" aria-label="Содержание"><ol>${(Array.isArray(p.items) ? p.items : []).map((item: any) => `<li><a href="${esc(String(item.href || "#"))}">${esc(String(item.label || ""))}</a></li>`).join("")}</ol></nav>`,
+  render: ({ props }) => React.createElement("nav", null, recordList(props.items).map((item, i: number) => React.createElement("a", { key: i, href: item.href }, String(item.label ?? "")))),
+  serialize: p => `<nav class="toc" aria-label="Содержание"><ol>${recordList(p.items).map((item) => `<li><a href="${esc(String(item.href || "#"))}">${esc(String(item.label || ""))}</a></li>`).join("")}</ol></nav>`,
 };
 const Breadcrumbs: BlockSpec = {
   id: "breadcrumbs", name: "Навигационная цепочка", defaults: {},
-  render: ({ props }) => React.createElement("nav", null, props.ariaLabel || "Навигация"),
+  render: ({ props }) => React.createElement("nav", null, String(props.ariaLabel || "Навигация")),
   serialize: p => {
-    const items = Array.isArray(p.items) ? p.items : [];
-    const separator = ["/", "›", "»"].includes(p.separator) ? p.separator : "›";
-    const size = ["sm", "md", "lg"].includes(p.size) ? p.size : "sm";
-    const result = items.map((item: any, index: number) => {
+    const items = recordList(p.items);
+    const separator = oneOf(p.separator, ["/", "›", "»"]) ? p.separator : "›";
+    const size = oneOf(p.size, ["sm", "md", "lg"]) ? p.size : "sm";
+    const result = items.map((item, index: number) => {
       const last = index === items.length - 1;
       const label = esc(String(item.label || ""));
       const body = !last && item.href ? `<a href="${esc(String(item.href))}">${label}</a>` : `<span${last ? ' aria-current="page"' : ""}>${label}</span>`;
@@ -538,32 +553,32 @@ const Container: BlockSpec = {
   id: "container", name: "Контейнер", defaults: {},
   render: () => React.createElement("section", null),
   serialize: p => {
-    const width = ["sm", "md", "lg", "xl", "full"].includes(p.width) ? p.width : "md";
-    const padding = ["none", "sm", "md", "lg"].includes(p.padding) ? p.padding : "md";
-    const bg = ["none", "panel", "brand"].includes(p.bg) ? p.bg : "none";
+    const width = oneOf(p.width, ["sm", "md", "lg", "xl", "full"]) ? p.width : "md";
+    const padding = oneOf(p.padding, ["none", "sm", "md", "lg"]) ? p.padding : "md";
+    const bg = oneOf(p.bg, ["none", "panel", "brand"]) ? p.bg : "none";
     const cls = `sb-container sb-container-${width} sb-container-pad-${padding} sb-container-bg-${bg}${p.border ? " sb-container-border" : ""}${p.rounded ? " sb-container-rounded" : ""}`;
     return `<section class="${cls}">${serializeLayout(p.layoutCells, p.layoutWeights, p.__layoutClass)}</section>`;
   },
 };
 const Menu: BlockSpec = {
   id: "menu", name: "Меню", defaults: {},
-  render: ({ props }) => React.createElement("nav", null, props.ariaLabel || "Меню"),
+  render: ({ props }) => React.createElement("nav", null, String(props.ariaLabel || "Меню")),
   serialize: p => {
     const active = String(p.activeHref || "");
-    const renderItems = (items: any[], nested: boolean): string => `<ul class="${nested ? "site-menu-children" : `site-menu site-menu-${p.orientation === "vertical" ? "vertical" : "horizontal"}`}">${items.map(item => {
+    const renderItems = (items: unknown[], nested: boolean): string => `<ul class="${nested ? "site-menu-children" : `site-menu site-menu-${p.orientation === "vertical" ? "vertical" : "horizontal"}`}">${recordList(items).map(item => {
       const href = String(item.href || "#");
       const sub = Array.isArray(item.children) && item.children.length ? renderItems(item.children, true) : "";
       return `<li><a href="${esc(href)}"${active && href === active ? ' aria-current="page"' : ""}>${esc(String(item.label || ""))}</a>${sub}</li>`;
     }).join("")}</ul>`;
-    return `<nav aria-label="${esc(String(p.ariaLabel || "Меню"))}">${renderItems(Array.isArray(p.items) ? p.items : [], false)}</nav>`;
+    return `<nav aria-label="${esc(String(p.ariaLabel || "Меню"))}">${renderItems(recordList(p.items), false)}</nav>`;
   },
 };
-function serializeCards(p: Record<string, any>, image: boolean): string {
-  const columns = [1, 2, 3, 4].includes(p.columns) ? p.columns : 1;
+function serializeCards(p: Record<string, unknown>, image: boolean): string {
+  const columns = oneOf(p.columns, [1, 2, 3, 4]) ? p.columns : 1;
   const icons: Record<string, string> = { star: "★", check: "✓", heart: "♥", shield: "⬡", alert: "!" };
-  const items = (Array.isArray(p.items) ? p.items : []).map((item: any) => {
+  const items = recordList(p.items).map((item) => {
     const visual = image ? (item.src ? `<img src="${esc(String(item.src))}" alt="${esc(String(item.alt || ""))}" loading="lazy" referrerpolicy="no-referrer"/>` : "")
-      : `<span class="site-card-icon" aria-hidden="true">${esc(icons[item.icon] || String(item.icon || "•").slice(0, 2))}</span>`;
+      : `<span class="site-card-icon" aria-hidden="true">${esc(icons[String(item.icon)] || String(item.icon || "•").slice(0, 2))}</span>`;
     return `<article class="site-card">${visual}<div class="site-card-content">${item.title ? `<h3>${esc(String(item.title))}</h3>` : ""}${item.text ? `<p>${nl2br(String(item.text))}</p>` : ""}</div></article>`;
   }).join("");
   return `<div class="site-cards site-cards-${columns}">${items}</div>`;
@@ -581,10 +596,10 @@ const Icon: BlockSpec = {
       alert: '<path d="M12 3l9 16H3L12 3z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="17" r="1.5" fill="currentColor"/><path d="M12 9v5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     };
     const names: Record<string, string> = { star: "Звезда", check: "Галочка", heart: "Сердце", shield: "Щит", alert: "Внимание" };
-    const name = Object.hasOwn(icons, p.name) ? p.name : "star";
-    const size = ({ sm: 16, md: 24, lg: 32, xl: 48 } as Record<string, number>)[p.size] || 24;
+    const name = typeof p.name === "string" && Object.hasOwn(icons, p.name) ? p.name : "star";
+    const size = ({ sm: 16, md: 24, lg: 32, xl: 48 } as Record<string, number>)[String(p.size)] || 24;
     const colors: Record<string, string> = { "text-[#2a3b8f]": "blue", "text-[#5865F2]": "purple", "text-[#ef4444]": "red", "text-[#34d399]": "green", "text-[#ffd166]": "gold" };
-    return `<svg class="site-icon-${colors[p.color] || "blue"}" width="${size}" height="${size}" viewBox="0 0 24 24" role="img" aria-label="${names[name]}">${icons[name]}</svg>`;
+    return `<svg class="site-icon-${colors[String(p.color)] || "blue"}" width="${size}" height="${size}" viewBox="0 0 24 24" role="img" aria-label="${names[name]}">${icons[name]}</svg>`;
   },
 };
 const Rating: BlockSpec = {
@@ -602,15 +617,15 @@ const Rating: BlockSpec = {
 };
 const PriceList: BlockSpec = {
   id: "pricelist", name: "Цены", defaults: {}, render: () => null,
-  serialize: p => `<div class="price-list">${(Array.isArray(p.items) ? p.items : []).map((item: any) => `<article class="price-item"><h3>${esc(String(item.title || ""))}</h3><strong>${esc(String(item.price || ""))}</strong>${item.period ? `<span> ${esc(String(item.period))}</span>` : ""}${item.desc ? `<p>${nl2br(String(item.desc))}</p>` : ""}${Array.isArray(item.features) && item.features.length ? `<ul>${item.features.filter(Boolean).map((f: any) => `<li>${esc(String(f))}</li>`).join("")}</ul>` : ""}${item.ctaLabel && item.ctaHref ? `<a class="btn" href="${esc(String(item.ctaHref))}">${esc(String(item.ctaLabel))}</a>` : ""}</article>`).join("")}</div>`,
+  serialize: p => `<div class="price-list">${recordList(p.items).map((item) => `<article class="price-item"><h3>${esc(String(item.title || ""))}</h3><strong>${esc(String(item.price || ""))}</strong>${item.period ? `<span> ${esc(String(item.period))}</span>` : ""}${item.desc ? `<p>${nl2br(String(item.desc))}</p>` : ""}${Array.isArray(item.features) && item.features.length ? `<ul>${item.features.filter(Boolean).map((f) => `<li>${esc(String(f))}</li>`).join("")}</ul>` : ""}${item.ctaLabel && item.ctaHref ? `<a class="btn" href="${esc(String(item.ctaHref))}">${esc(String(item.ctaLabel))}</a>` : ""}</article>`).join("")}</div>`,
 };
 const PriceTable: BlockSpec = {
   id: "pricetable", name: "Таблица тарифов", defaults: {}, render: () => null,
-  serialize: p => `<div class="price-table">${(Array.isArray(p.plans) ? p.plans : []).map((plan: any) => `<article class="price-item${plan.popular ? " price-popular" : ""}">${plan.popular ? '<span class="price-badge">Популярный</span>' : ""}<h3>${esc(String(plan.name || ""))}</h3><strong>${esc(String(plan.price || ""))}</strong>${plan.period ? `<span> ${esc(String(plan.period))}</span>` : ""}${Array.isArray(plan.features) && plan.features.length ? `<ul>${plan.features.map((feature: any) => `<li><span aria-label="${feature.included ? "Включено" : "Не включено"}">${feature.included ? "✓" : "−"}</span> ${esc(String(feature.label || ""))}</li>`).join("")}</ul>` : ""}${plan.ctaLabel && plan.ctaHref ? `<a class="btn" href="${esc(String(plan.ctaHref))}">${esc(String(plan.ctaLabel))}</a>` : ""}</article>`).join("")}</div>`,
+  serialize: p => `<div class="price-table">${recordList(p.plans).map((plan) => `<article class="price-item${plan.popular ? " price-popular" : ""}">${plan.popular ? '<span class="price-badge">Популярный</span>' : ""}<h3>${esc(String(plan.name || ""))}</h3><strong>${esc(String(plan.price || ""))}</strong>${plan.period ? `<span> ${esc(String(plan.period))}</span>` : ""}${Array.isArray(plan.features) && plan.features.length ? `<ul>${recordList(plan.features).map((feature) => `<li><span aria-label="${feature.included ? "Включено" : "Не включено"}">${feature.included ? "✓" : "−"}</span> ${esc(String(feature.label || ""))}</li>`).join("")}</ul>` : ""}${plan.ctaLabel && plan.ctaHref ? `<a class="btn" href="${esc(String(plan.ctaHref))}">${esc(String(plan.ctaLabel))}</a>` : ""}</article>`).join("")}</div>`,
 };
 const Testimonials: BlockSpec = {
   id: "testimonials", name: "Отзывы", defaults: {}, render: () => null,
-  serialize: p => `<div class="testimonials">${(Array.isArray(p.items) ? p.items : []).map((item: any) => `<figure>${item.avatar ? `<img class="testimonial-avatar" src="${esc(String(item.avatar))}" alt="" loading="lazy" referrerpolicy="no-referrer"/>` : ""}<blockquote>${nl2br(String(item.text || ""))}</blockquote><figcaption>${esc(String(item.author || ""))}${item.role ? ` — ${esc(String(item.role))}` : ""}</figcaption></figure>`).join("")}</div>`,
+  serialize: p => `<div class="testimonials">${recordList(p.items).map((item) => `<figure>${item.avatar ? `<img class="testimonial-avatar" src="${esc(String(item.avatar))}" alt="" loading="lazy" referrerpolicy="no-referrer"/>` : ""}<blockquote>${nl2br(String(item.text || ""))}</blockquote><figcaption>${esc(String(item.author || ""))}${item.role ? ` — ${esc(String(item.role))}` : ""}</figcaption></figure>`).join("")}</div>`,
 };
 const Search: BlockSpec = {
   id: "search", name: "Поиск", defaults: {}, render: () => null,
@@ -618,7 +633,7 @@ const Search: BlockSpec = {
 };
 const Social: BlockSpec = {
   id: "social", name: "Социальные страницы", defaults: {}, render: () => null,
-  serialize: p => `<div class="social-links">${(Array.isArray(p.items) ? p.items : []).map((item: any) => {
+  serialize: p => `<div class="social-links">${recordList(p.items).map((item) => {
     const label = String(item.label || "");
     const body = `<span class="social-initial" aria-hidden="true">${esc(label.slice(0, 2) || "?")}</span><span>${esc(label)}</span>`;
     return item.href ? `<a href="${esc(String(item.href))}">${body}</a>` : `<span class="social-item">${body}</span>`;
@@ -627,16 +642,16 @@ const Social: BlockSpec = {
 const ProgressTracker: BlockSpec = {
   id: "progresstracker", name: "Этапы", defaults: {}, render: () => null,
   serialize: p => {
-    const steps = Array.isArray(p.steps) ? p.steps : [];
+    const steps = recordList(p.steps);
     const current = Math.max(0, Math.min(steps.length - 1, Math.floor(Number(p.current) || 0)));
-    return `<ol class="step-tracker" aria-label="Ход выполнения">${steps.map((step: any, i: number) => `<li${i === current ? ' aria-current="step"' : ""}><span class="step-number${i <= current ? " step-done" : ""}">${i + 1}</span><span>${esc(String(step.label || ""))}</span></li>`).join("")}</ol>`;
+    return `<ol class="step-tracker" aria-label="Ход выполнения">${steps.map((step, i: number) => `<li${i === current ? ' aria-current="step"' : ""}><span class="step-number${i <= current ? " step-done" : ""}">${i + 1}</span><span>${esc(String(step.label || ""))}</span></li>`).join("")}</ol>`;
   },
 };
 const Pagination: BlockSpec = {
   id: "pagination", name: "Навигация по страницам", defaults: {}, render: () => null,
   serialize: p => {
     const { total, current, pages } = paginationState(p);
-    const size = ["sm", "md", "lg"].includes(p.size) ? p.size : "sm";
+    const size = oneOf(p.size, ["sm", "md", "lg"]) ? p.size : "sm";
     const previous = current > 1 ? `<a aria-label="Предыдущая страница" href="${esc(paginationHref(p.baseHref, current - 1))}">‹</a>` : '<span aria-hidden="true">‹</span>';
     const next = current < total ? `<a aria-label="Следующая страница" href="${esc(paginationHref(p.baseHref, current + 1))}">›</a>` : '<span aria-hidden="true">›</span>';
     const links = pages.map(page => page === "..." ? '<span aria-hidden="true">…</span>' : `<a href="${esc(paginationHref(p.baseHref, page))}"${page === current ? ' aria-current="page"' : ""}>${page}</a>`).join("");
@@ -648,39 +663,39 @@ const Sidebar: BlockSpec = {
   serialize: p => {
     const side = p.side === "right" ? "right" : "left";
     const widthClass = typeof p.__sidebarClass === "string" && /^sb-sidebar-\d+$/.test(p.__sidebarClass) ? p.__sidebarClass : "";
-    const items = (Array.isArray(p.items) ? p.items : []).map((item: any) => `<li>${item.href ? `<a href="${esc(String(item.href))}">${esc(String(item.label || ""))}</a>` : esc(String(item.label || ""))}</li>`).join("");
+    const items = recordList(p.items).map((item) => `<li>${item.href ? `<a href="${esc(String(item.href))}">${esc(String(item.label || ""))}</a>` : esc(String(item.label || ""))}</li>`).join("");
     return `<aside class="site-sidebar site-sidebar-${side} ${widthClass}" aria-label="Боковая панель">${p.title ? `<strong>${esc(String(p.title))}</strong>` : ""}<nav><ul>${items}</ul></nav></aside>`;
   },
 };
 const Tabs: BlockSpec = {
   id: "tabs", name: "Вкладки", defaults: {}, render: () => null,
   serialize: p => {
-    const tabs = Array.isArray(p.tabs) ? p.tabs : [];
+    const tabs = recordList(p.tabs);
     const name = typeof p.__tabsName === "string" && /^sb-tabs-\d+$/.test(p.__tabsName) ? p.__tabsName : "sb-tabs-0";
     const requested = Math.max(0, Math.min(tabs.length - 1, Math.floor(Number(p.active) || 0)));
-    const selected = tabs[requested] && !tabs[requested].disabled ? requested : tabs.findIndex((tab: any) => !tab.disabled);
+    const selected = tabs[requested] && !tabs[requested].disabled ? requested : tabs.findIndex((tab) => !tab.disabled);
     const orient = p.orientation === "vertical" ? "vertical" : "horizontal";
-    const variant = ["underline", "boxed", "pill"].includes(p.variant) ? p.variant : "underline";
-    const size = ["sm", "md", "lg"].includes(p.size) ? p.size : "md";
-    const align = ["start", "center", "end"].includes(p.align) ? p.align : "start";
-    const controls = tabs.map((tab: any, i: number) => `<input class="site-tab-input" type="radio" name="${name}" id="${name}-tab-${i}" aria-controls="${name}-panel-${i}"${i === selected ? " checked" : ""}${tab.disabled ? " disabled" : ""}/><label id="${name}-label-${i}" for="${name}-tab-${i}">${esc(String(tab.label || ""))}</label>`).join("");
-    const panels = tabs.map((tab: any, i: number) => `<section class="site-tab-panel" id="${name}-panel-${i}" aria-labelledby="${name}-label-${i}">${nl2br(String(tab.content || ""))}</section>`).join("");
+    const variant = oneOf(p.variant, ["underline", "boxed", "pill"]) ? p.variant : "underline";
+    const size = oneOf(p.size, ["sm", "md", "lg"]) ? p.size : "md";
+    const align = oneOf(p.align, ["start", "center", "end"]) ? p.align : "start";
+    const controls = tabs.map((tab, i: number) => `<input class="site-tab-input" type="radio" name="${name}" id="${name}-tab-${i}" aria-controls="${name}-panel-${i}"${i === selected ? " checked" : ""}${tab.disabled ? " disabled" : ""}/><label id="${name}-label-${i}" for="${name}-tab-${i}">${esc(String(tab.label || ""))}</label>`).join("");
+    const panels = tabs.map((tab, i: number) => `<section class="site-tab-panel" id="${name}-panel-${i}" aria-labelledby="${name}-label-${i}">${nl2br(String(tab.content || ""))}</section>`).join("");
     return `<div class="site-tabs ${name} site-tabs-${orient} site-tabs-${variant} site-tabs-${size} site-tabs-align-${align}"><div class="site-tab-controls" role="radiogroup" aria-label="Вкладки">${controls}</div><div class="site-tab-panels">${panels}</div></div>`;
   },
 };
 const Accordion: BlockSpec = {
   id: "accordion", name: "Аккордеон", defaults: {}, render: () => null,
   serialize: p => {
-    const items = Array.isArray(p.items) ? p.items : [];
+    const items = recordList(p.items);
     const name = typeof p.__accordionName === "string" && /^sb-accordion-\d+$/.test(p.__accordionName) ? p.__accordionName : "sb-accordion-0";
     const multiple = Boolean(p.allowMultiple);
     const toggle = p.allowToggle !== false;
-    let opened = items.map((item: any) => Boolean(item.open));
+    let opened = items.map((item) => Boolean(item.open));
     if (!multiple) { const first = opened.indexOf(true); opened = opened.map((_: boolean, i: number) => i === first); }
     if (!toggle && !opened.some(Boolean) && opened.length) opened[0] = true;
-    const variant = ["ghost", "filled", "outline"].includes(p.variant) ? p.variant : "ghost";
-    const size = ["sm", "md", "lg"].includes(p.size) ? p.size : "md";
-    const content = items.map((item: any, i: number) => `<div class="accordion-item"><button type="button" id="${name}-button-${i}" data-accordion-toggle aria-expanded="${opened[i]}" aria-controls="${name}-panel-${i}">${esc(String(item.title || ""))}</button><div class="accordion-panel" id="${name}-panel-${i}" role="region" aria-labelledby="${name}-button-${i}"${opened[i] ? "" : " hidden"}>${nl2br(String(item.content || ""))}</div></div>`).join("");
+    const variant = oneOf(p.variant, ["ghost", "filled", "outline"]) ? p.variant : "ghost";
+    const size = oneOf(p.size, ["sm", "md", "lg"]) ? p.size : "md";
+    const content = items.map((item, i: number) => `<div class="accordion-item"><button type="button" id="${name}-button-${i}" data-accordion-toggle aria-expanded="${opened[i]}" aria-controls="${name}-panel-${i}">${esc(String(item.title || ""))}</button><div class="accordion-panel" id="${name}-panel-${i}" role="region" aria-labelledby="${name}-button-${i}"${opened[i] ? "" : " hidden"}>${nl2br(String(item.content || ""))}</div></div>`).join("");
     return `<div class="site-accordion site-accordion-${variant} site-accordion-${size}" data-accordion data-multiple="${multiple}" data-toggle="${toggle}">${content}</div>`;
   },
 };
@@ -688,8 +703,8 @@ const Share: BlockSpec = {
   id: "share", name: "Поделиться", defaults: {}, render: () => null,
   serialize: p => {
     const labels: Record<string, string> = { copy: "Копировать ссылку", telegram: "Telegram", vk: "ВКонтакте", twitter: "X / Twitter", facebook: "Facebook" };
-    const networks = [...new Set((Array.isArray(p.networks) ? p.networks : []).filter((n: any) => typeof n === "string" && Object.hasOwn(labels, n)))];
-    const buttons = networks.map((network: any) => network === "copy"
+    const networks = [...new Set((Array.isArray(p.networks) ? p.networks : []).filter((n) => typeof n === "string" && Object.hasOwn(labels, n)))];
+    const buttons = networks.map((network) => network === "copy"
       ? `<button type="button" data-share-action="copy">${labels.copy}</button>`
       : `<a href="#" target="_blank" rel="noopener noreferrer nofollow" data-share-action="${network}">${labels[network]}</a>`).join("");
     return `<div class="site-share" data-share data-url="${esc(String(p.url || ""))}">${buttons}<span class="site-share-status" data-share-status role="status" aria-live="polite"></span></div>`;
@@ -700,9 +715,9 @@ const ContentNav: BlockSpec = {
   serialize: p => {
     const orientation = p.orientation === "vertical" ? "vertical" : "horizontal";
     const offset = Number.isFinite(Number(p.spyOffset)) ? Math.max(0, Math.min(2000, Math.floor(Number(p.spyOffset)))) : 120;
-    const items = Array.isArray(p.items) ? p.items : [];
+    const items = recordList(p.items);
     const active = String(p.activeHref || items[0]?.href || "");
-    const links = items.map((item: any) => `<li><a data-anchor href="${esc(String(item.href || "#"))}"${item.href === active ? ' aria-current="location"' : ""}>${esc(String(item.label || ""))}</a></li>`).join("");
+    const links = items.map((item) => `<li><a data-anchor href="${esc(String(item.href || "#"))}"${item.href === active ? ' aria-current="location"' : ""}>${esc(String(item.label || ""))}</a></li>`).join("");
     return `<nav class="content-nav content-nav-${orientation}" data-contentnav data-spy="${Boolean(p.spy)}" data-offset="${offset}" aria-label="${esc(String(p.ariaLabel || "Навигация по разделам"))}"><ul>${links}</ul></nav>`;
   },
 };
@@ -713,9 +728,9 @@ const SafeHtml: BlockSpec = {
 const Carousel: BlockSpec = {
   id: "carousel", name: "Карусель", defaults: {}, render: () => null,
   serialize: p => {
-    const slides = Array.isArray(p.slides) ? p.slides : [];
+    const slides = recordList(p.slides);
     const initial = Math.max(0, Math.min(slides.length - 1, Math.floor(Number(p.initial) || 0)));
-    const content = slides.map((slide: any, i: number) => `<figure data-carousel-slide${i === initial ? "" : " hidden"}>${slide.src ? `<img src="${esc(String(slide.src))}" alt="${esc(String(slide.alt || ""))}" loading="lazy" referrerpolicy="no-referrer"/>` : ""}${slide.caption ? `<figcaption>${esc(String(slide.caption))}</figcaption>` : ""}</figure>`).join("");
+    const content = slides.map((slide, i: number) => `<figure data-carousel-slide${i === initial ? "" : " hidden"}>${slide.src ? `<img src="${esc(String(slide.src))}" alt="${esc(String(slide.alt || ""))}" loading="lazy" referrerpolicy="no-referrer"/>` : ""}${slide.caption ? `<figcaption>${esc(String(slide.caption))}</figcaption>` : ""}</figure>`).join("");
     const controls = slides.length > 1 ? `<div class="carousel-controls"><button type="button" data-carousel-command="previous" aria-label="Предыдущий слайд">‹</button><span data-carousel-status role="status" aria-live="polite">Слайд ${initial + 1} из ${slides.length}</span><button type="button" data-carousel-command="next" aria-label="Следующий слайд">›</button></div>` : "";
     return `<section class="site-carousel" data-carousel aria-label="Карусель"><div data-carousel-track>${content}</div>${controls}</section>`;
   },
@@ -723,9 +738,9 @@ const Carousel: BlockSpec = {
 const MediaCarousel: BlockSpec = {
   id: "mediacarousel", name: "Медиакарусель", defaults: {}, render: () => null,
   serialize: p => {
-    const slides = Array.isArray(p.slides) ? p.slides : [];
+    const slides = recordList(p.slides);
     const initial = Math.max(0, Math.min(slides.length - 1, Math.floor(Number(p.initial) || 0)));
-    const content = slides.map((slide: any, i: number) => `<figure data-carousel-slide${i === initial ? "" : " hidden"}>${slide.src ? slide.kind === "video" ? `<video src="${esc(String(slide.src))}" controls preload="none"></video>` : `<img src="${esc(String(slide.src))}" alt="${esc(String(slide.alt || ""))}" loading="lazy" referrerpolicy="no-referrer"/>` : ""}${slide.caption ? `<figcaption>${esc(String(slide.caption))}</figcaption>` : ""}</figure>`).join("");
+    const content = slides.map((slide, i: number) => `<figure data-carousel-slide${i === initial ? "" : " hidden"}>${slide.src ? slide.kind === "video" ? `<video src="${esc(String(slide.src))}" controls preload="none"></video>` : `<img src="${esc(String(slide.src))}" alt="${esc(String(slide.alt || ""))}" loading="lazy" referrerpolicy="no-referrer"/>` : ""}${slide.caption ? `<figcaption>${esc(String(slide.caption))}</figcaption>` : ""}</figure>`).join("");
     const controls = slides.length > 1 ? `<div class="carousel-controls"><button type="button" data-carousel-command="previous" aria-label="Предыдущий слайд">‹</button><span data-carousel-status role="status" aria-live="polite">Слайд ${initial + 1} из ${slides.length}</span><button type="button" data-carousel-command="next" aria-label="Следующий слайд">›</button></div>` : "";
     return `<section class="site-carousel" data-carousel aria-label="Медиакарусель"><div data-carousel-track>${content}</div>${controls}</section>`;
   },
@@ -734,17 +749,17 @@ const Hotspot: BlockSpec = {
   id: "hotspot", name: "Изображение с маркерами", defaults: {}, render: () => null,
   serialize: p => {
     const name = typeof p.__hotspotClass === "string" && /^sb-hotspot-\d+$/.test(p.__hotspotClass) ? p.__hotspotClass : "sb-hotspot-0";
-    const markers = Array.isArray(p.markers) ? p.markers : [];
-    return `<div class="site-hotspot">${p.src ? `<img src="${esc(String(p.src))}" alt="${esc(String(p.alt || ""))}" referrerpolicy="no-referrer"/>` : '<div class="site-hotspot-empty">Изображение не указано</div>'}${markers.map((marker: any, index: number) => marker.href ? `<a class="site-hotspot-marker ${name}-${index}" href="${esc(String(marker.href))}" aria-label="${esc(String(marker.label || "Маркер"))}" title="${esc(String(marker.label || "Маркер"))}">●</a>` : `<span class="site-hotspot-marker ${name}-${index}" aria-label="${esc(String(marker.label || "Маркер"))}" title="${esc(String(marker.label || "Маркер"))}">●</span>`).join("")}</div>`;
+    const markers = recordList(p.markers);
+    return `<div class="site-hotspot">${p.src ? `<img src="${esc(String(p.src))}" alt="${esc(String(p.alt || ""))}" referrerpolicy="no-referrer"/>` : '<div class="site-hotspot-empty">Изображение не указано</div>'}${markers.map((marker, index: number) => marker.href ? `<a class="site-hotspot-marker ${name}-${index}" href="${esc(String(marker.href))}" aria-label="${esc(String(marker.label || "Маркер"))}" title="${esc(String(marker.label || "Маркер"))}">●</a>` : `<span class="site-hotspot-marker ${name}-${index}" aria-label="${esc(String(marker.label || "Маркер"))}" title="${esc(String(marker.label || "Маркер"))}">●</span>`).join("")}</div>`;
   },
 };
 const VideoPlaylist: BlockSpec = {
   id: "videoplaylist", name: "Видеоплейлист", defaults: {}, render: () => null,
   serialize: p => {
-    const items = Array.isArray(p.items) ? p.items : [];
+    const items = recordList(p.items);
     const initial = Math.max(0, Math.min(items.length - 1, Math.floor(Number(p.initial) || 0)));
-    const videos = items.map((item: any, index: number) => `<div data-playlist-item${index === initial ? "" : " hidden"}>${item.src ? `<video controls preload="none" src="${esc(String(item.src))}"${item.poster ? ` poster="${esc(String(item.poster))}"` : ""}></video>` : '<p>Видео не указано</p>'}</div>`).join("");
-    const buttons = items.map((item: any, index: number) => `<button type="button" data-playlist-select="${index}" aria-pressed="${index === initial ? "true" : "false"}">${esc(String(item.title || `Видео ${index + 1}`))}</button>`).join("");
+    const videos = items.map((item, index: number) => `<div data-playlist-item${index === initial ? "" : " hidden"}>${item.src ? `<video controls preload="none" src="${esc(String(item.src))}"${item.poster ? ` poster="${esc(String(item.poster))}"` : ""}></video>` : '<p>Видео не указано</p>'}</div>`).join("");
+    const buttons = items.map((item, index: number) => `<button type="button" data-playlist-select="${index}" aria-pressed="${index === initial ? "true" : "false"}">${esc(String(item.title || `Видео ${index + 1}`))}</button>`).join("");
     return `<section class="video-playlist" data-playlist aria-label="Видеоплейлист"><div data-playlist-videos>${videos}</div><div class="playlist-items">${buttons}</div></section>`;
   },
 };
@@ -763,9 +778,9 @@ const Countdown: BlockSpec = {
 const Slides: BlockSpec = {
   id: "slides", name: "Текстовые слайды", defaults: {}, render: () => null,
   serialize: p => {
-    const slides = Array.isArray(p.slides) ? p.slides : [];
+    const slides = recordList(p.slides);
     const initial = Math.max(0, Math.min(slides.length - 1, Math.floor(Number(p.initial) || 0)));
-    const content = slides.map((slide: any, i: number) => `<article class="text-slide" data-carousel-slide${i === initial ? "" : " hidden"}>${slide.title ? `<h3>${esc(String(slide.title))}</h3>` : ""}${slide.text ? `<p>${nl2br(String(slide.text))}</p>` : ""}${slide.ctaLabel && slide.ctaHref ? `<a class="btn" href="${esc(String(slide.ctaHref))}">${esc(String(slide.ctaLabel))}</a>` : ""}</article>`).join("");
+    const content = slides.map((slide, i: number) => `<article class="text-slide" data-carousel-slide${i === initial ? "" : " hidden"}>${slide.title ? `<h3>${esc(String(slide.title))}</h3>` : ""}${slide.text ? `<p>${nl2br(String(slide.text))}</p>` : ""}${slide.ctaLabel && slide.ctaHref ? `<a class="btn" href="${esc(String(slide.ctaHref))}">${esc(String(slide.ctaLabel))}</a>` : ""}</article>`).join("");
     const controls = slides.length > 1 ? `<div class="carousel-controls"><button type="button" data-carousel-command="previous" aria-label="Предыдущий слайд">‹</button><span data-carousel-status role="status" aria-live="polite">Слайд ${initial + 1} из ${slides.length}</span><button type="button" data-carousel-command="next" aria-label="Следующий слайд">›</button></div>` : "";
     return `<section class="site-carousel" data-carousel aria-label="Слайды"><div data-carousel-track>${content}</div>${controls}</section>`;
   },
@@ -777,6 +792,80 @@ const Offcanvas: BlockSpec = {
     const side = p.side === "right" ? "right" : "left";
     const title = String(p.title || "Панель");
     return `<button type="button" class="btn" data-drawer-open="${name}">Открыть ${esc(title)}</button><dialog id="${name}" class="site-drawer site-drawer-${side} ${name}" data-drawer aria-labelledby="${name}-title"><div class="site-drawer-header"><strong id="${name}-title">${esc(title)}</strong><button type="button" data-drawer-close aria-label="Закрыть панель">Закрыть</button></div><div class="site-drawer-body">${p.body ? `<p class="site-drawer-text">${esc(String(p.body))}</p>` : ""}${serializeLayout(p.layoutCells, p.layoutWeights, p.__layoutClass)}</div></dialog>`;
+  },
+};
+
+const SitePopup: BlockSpec={
+  id:"site-popup",name:"Всплывающее окно",defaults:{},render:()=>null,
+  serialize:p=>{
+    if(typeof p.id!=="string" || !/^popup-[a-z0-9_-]+$/i.test(p.id))return "";
+    const options=popupSettings(p.options),cell=Array.isArray(p.layoutCells)?p.layoutCells[0]:[];
+    const body=recordList(cell).map(block=>serializeBlock(String(block.type),asRecord(block.props))).join("");
+    return `<dialog class="sb-popup sb-popup-${options.position}" id="${p.id}" aria-label="${esc(p.title||"Всплывающее окно")}" data-popup-options="${esc(JSON.stringify(options))}"><div class="sb-popup-bar"><button type="button" data-popup-close aria-label="Закрыть окно">Закрыть</button></div>${body}</dialog>`;
+  },
+};
+const SoundCloud: BlockSpec = {
+  id:"soundcloud",name:"SoundCloud",defaults:{},render:({props})=>React.createElement("figure",null,String(props.label??"SoundCloud")),
+  serialize:p=>{
+    const s=soundSettings(p),link=s.track?`<a href="${esc(s.track)}" rel="noopener noreferrer" target="_blank">Открыть SoundCloud</a>`:"";
+    const player=s.embed && p.__allowSound===true?`<button type="button" data-soundcloud-player="${esc(s.embed)}">Загрузить плеер SoundCloud</button>`:"";
+    return `<figure class="sb-audio-card"><figcaption>${esc(s.label)}</figcaption>${player}${link}</figure>`;
+  },
+};
+const ReadMore: BlockSpec = {
+  id:"readmore", name:"Продолжение записи", defaults:{}, render:()=>null,
+  serialize:p=>typeof p.marker==="string" && /^more-[a-z0-9]+$/.test(p.marker)?`<span id="${p.marker}" class="sb-post-break"></span>`:"",
+};
+const TextPath: BlockSpec = {
+  id:"textpath",name:"Текст по контуру",defaults:{},render:({props})=>React.createElement("span",null,String(props.text??"")),
+  serialize:p=>{
+    const s=textPathOptions(p),id=typeof p.__pathId==="string" && /^sb-path-\d+$/.test(p.__pathId)?p.__pathId:"sb-path-0";
+    const path=id+"-curve",show=s.showPath?`<use href="#${path}" fill="none" stroke="${s.stroke}" stroke-width="${s.strokeWidth}"/>`:"";
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" class="sb-text-path ${id}" role="img" aria-label="${esc(s.text)}" width="${s.size}${s.unit}" viewBox="${s.viewBox}"><g transform="rotate(${s.rotate} ${s.cx} ${s.cy})"><defs><path id="${path}" d="${esc(s.d)}"/></defs>${show}<text fill="${s.color}" font-size="${s.fontSize}" word-spacing="${s.wordSpacing}" text-anchor="${s.align}"${s.direction==="auto"?"":' direction="'+s.direction+'"'}><textPath href="#${path}" startOffset="${s.start}%">${esc(s.text)}</textPath></text></g></svg>`;
+    return typeof p.href==="string" && p.href?`<a href="${esc(sanitizeHref(p.href))}">${svg}</a>`:svg;
+  },
+};
+const LoopGrid: BlockSpec = {
+  id:"loopgrid",name:"Цикл материалов",defaults:{},
+  render: ({props}) => React.createElement("section",null,String(props.emptyText??"Цикл материалов")),
+  serialize: p => {
+    const settings=loopSettings(p), entries=recordList(p.cards);
+    const cls=typeof p.__loopClass==="string" && /^sb-loop-\d+$/.test(p.__loopClass)?p.__loopClass:"";
+    const terms = [...new Set(entries.flatMap(c=>Array.isArray(c.terms)?c.terms.filter((t):t is string=>typeof t==="string"&&!!t):[]))];
+    const filter=settings.filter && terms.length ? `<label>Рубрика <select data-loop-filter><option value="">Все рубрики</option>${terms.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("")}</select></label>` : "";
+    const pages=Math.ceil(entries.length/settings.pageSize);
+    const cards=entries.map((card,index)=>{
+      const cell=Array.isArray(p.layoutCells)?p.layoutCells[index]:undefined;
+      const href=typeof card.href==="string" && /^\.\/[a-z0-9][a-z0-9-]{0,63}\.html$/.test(card.href)?card.href:"#";
+      const more=asRecord(card.more);
+      const continueLink=typeof more.fragment==="string" && /^more-[a-z0-9]+$/.test(more.fragment) && href!=="#" ?
+        `<a class="sb-read-more" href="${esc(href)}#${more.fragment}">${esc(more.label)}</a>`:"";
+      const body=card.custom && Array.isArray(cell) ? recordList(cell).map(b=>serializeBlock(String(b.type),asRecord(b.props))).join("") :
+        `<h3><a href="${esc(href)}">${esc(card.title)}</a></h3>${card.description?`<p>${esc(card.description)}</p>`:""}${continueLink}`;
+      return `<article data-loop-terms="${esc(JSON.stringify(card.terms??[]))}"${index>=settings.pageSize?" hidden":""}>${body}</article>`;
+    }).join("");
+    return `<section class="sb-loop ${cls}" data-loop-size="${settings.pageSize}">${filter}<div data-loop-list>${cards}</div><p data-loop-empty${entries.length?" hidden":""}>${esc(settings.emptyText)}</p><nav aria-label="Страницы цикла"${pages<2?" hidden":""}><button type="button" data-loop-previous disabled>Назад</button> <span role="status">1 / ${pages}</span> <button type="button" data-loop-next${pages<2?" disabled":""}>Вперёд</button></nav></section>`;
+  },
+};
+
+const MapWidget: BlockSpec = {
+  id: "map", name: "Карта", defaults: {},
+  render: ({props}) => React.createElement("figure", null, mapSettings(props).label || "Местоположение"),
+  serialize: p => {
+    const settings = mapSettings(p), urls = mapUrls(settings);
+    const id = typeof p.__mapClass === "string" && /^sb-map-\d+$/.test(p.__mapClass) ? p.__mapClass : "map";
+    const detail = settings.detailMap && p.__allowMap === true
+      ? `<button type="button" data-map-open="${esc(urls.embed)}">Загрузить подробную карту OpenStreetMap</button>` : "";
+    return `<figure class="sb-map sb-map-${settings.mapTheme} ${id}"><div class="sb-map-view">${overviewSvg(settings,id)}</div><figcaption><strong>${esc(settings.label || "Местоположение")}</strong> · ${settings.lat.toFixed(5)}, ${settings.lon.toFixed(5)}<small>Natural Earth</small></figcaption>${detail} <a href="${esc(urls.link)}" target="_blank" rel="noopener noreferrer nofollow">Открыть в OpenStreetMap</a></figure>`;
+  },
+};
+
+const Lottie: BlockSpec = {
+  id: "lottie", name: "Анимация Lottie", defaults: {},
+  render: ({props}) => React.createElement("figure", null, String(props.caption || "Анимация Lottie")),
+  serialize: p => {
+    const cls = typeof p.__animationClass === "string" && /^sb-animation-\d+$/.test(p.__animationClass) ? p.__animationClass : "";
+    return `<section class="section ${cls}">${animationMarkup(String(p.animationJson || ""), String(p.caption || ""), p, String(p.poster || ""))}</section>`;
   },
 };
 
@@ -830,6 +919,10 @@ const BLOCKS: Record<string, BlockSpec> = {
   [Countdown.id]: Countdown,
   [Slides.id]: Slides,
   [Offcanvas.id]: Offcanvas,
+  [Lottie.id]: Lottie,
+  [MapWidget.id]: MapWidget,
+  [SitePopup.id]: SitePopup, [SoundCloud.id]: SoundCloud, [ReadMore.id]: ReadMore, [TextPath.id]: TextPath,
+  [LoopGrid.id]: LoopGrid,
 };
 
 // API реестра
@@ -841,7 +934,7 @@ export function getBlock(id: string): BlockSpec | undefined {
   return BLOCKS[id];
 }
 
-export function serializeBlock(id: string, props: Record<string, any>): string {
+export function serializeBlock(id: string, props: Record<string, unknown>): string {
   const spec = getBlock(id);
   if (!spec) throw new Error(`Unknown block: ${id}`);
   const p = props || {};

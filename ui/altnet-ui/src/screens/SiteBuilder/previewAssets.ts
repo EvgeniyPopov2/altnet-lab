@@ -1,3 +1,4 @@
+import { isRecord } from "../../core/records";
 import type { Block } from "./types";
 
 const mediaKeys = new Set(["src", "cid", "img", "poster", "avatar"]);
@@ -5,20 +6,20 @@ const localMedia = /^data:(?:image\/(?:png|jpeg|webp|gif)|video\/(?:mp4|webm)|au
 
 /** В редакторе до подключения проверенного транспорта отображаем только локальные медиа. */
 export function previewSafeBlock(block: Block): Block {
-  function visit(value: any, key = ""): any {
+  function visit(value: unknown, key = ""): unknown {
     if (mediaKeys.has(key) && typeof value === "string") return !value || localMedia.test(value.trim()) ? value : "";
     if (Array.isArray(value)) return value.map(item => visit(item));
-    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, name === "layoutCells" ? item : visit(item, name)]));
+    if (isRecord(value)) return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, name === "layoutCells" ? item : visit(item, name)]));
     return value;
   }
   return visit(block) as Block;
 }
 
 export function hasBlockedPreviewAssets(blocks: Block[]): boolean {
-  const visit = (value: any, key = ""): boolean => {
+  const visit = (value: unknown, key = ""): boolean => {
     if (mediaKeys.has(key) && typeof value === "string") return Boolean(value.trim() && !localMedia.test(value.trim()));
     if (Array.isArray(value)) return value.some(item => visit(item));
-    if (value && typeof value === "object") {
+    if (isRecord(value)) {
       if (value.type === "shortcode" && typeof value.code === "string" && value.code.trim()) return true;
       return Object.entries(value).some(([name, item]) => visit(item, name));
     }

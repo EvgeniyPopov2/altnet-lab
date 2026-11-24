@@ -1,4 +1,6 @@
-﻿import React, { useCallback, useMemo, useRef, useState, useEffect, useReducer } from "react";
+﻿import InlineRuns from "./SiteBuilder/blocks/p/InlineRuns";
+import {editParagraph} from "./SiteBuilder/inlineText";
+import React, { useCallback, useMemo, useRef, useState, useEffect, useReducer } from "react";
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc, unsupportedBlockTypes } from "../builder/exporter";
 import { upsertPublishedSite } from "../core/sites/published";
 import type { PublishedPage } from "../core/sites/publishedDb";
@@ -7,10 +9,15 @@ import Canvas from "./SiteBuilder/canvas/Canvas";
 import Outline from "./SiteBuilder/outline/Outline";
 import Palette from "./SiteBuilder/palette/Palette";
 import { renderBlockView } from "./SiteBuilder/blocks";
-import { createDefaultBlock } from "./SiteBuilder/registry";
-import Inspector from "./SiteBuilder/inspector/Inspector";
+import { createInsertedBlock, editableLegacyLayout } from "./SiteBuilder/registry";
+import { spacingStyle } from "./SiteBuilder/boxDimensions";
+import { transformStyle } from "./SiteBuilder/transforms";
+import MediaLibraryButton from "./SiteBuilder/MediaLibraryButton";
+import { MediaLibraryContext } from "./SiteBuilder/mediaLibraryContext";
+const Inspector = React.lazy(() => import("./SiteBuilder/inspector/Inspector"));
 import Field from "./SiteBuilder/ui/Field";
 import Topbar from "./SiteBuilder/layout/Topbar";
+import type { BlockPatch } from "./SiteBuilder/inspector/patch";
 import InspectorTabs from "./SiteBuilder/inspector/InspectorTabs";
 import { exportDraft, importDraft, loadDraft, STORAGE_KEY, validateDraft } from "./SiteBuilder/storage";
 import { importLegacyDoc } from "./SiteBuilder/legacyImport";
@@ -18,11 +25,12 @@ import { getSharedDraftWriter, readIndexedDraft, type SaveStatus } from "./SiteB
 import { getSharedEditorLease, type LeaseResult } from "./SiteBuilder/editorLease";
 import { historyReducer } from "./SiteBuilder/history";
 import LayoutCanvas from "./SiteBuilder/layout/LayoutCanvas";
-import { cellsOf, copyTree, findBlock, findLocation, insertIntoCell, moveToCell, moveToRoot, removeFromTree, updateBlock, visibleBlocks } from "./SiteBuilder/layoutTree";
+import { cellsOf, copyTree, findBlock, findLocation, insertIntoCell, moveToCell, moveToRoot, removeFromTree, updateBlock } from "./SiteBuilder/layoutTree";
+import { textAppearance } from "./SiteBuilder/textAppearance";
 import { resolveResponsiveStyle } from "./SiteBuilder/responsiveStyle";
 import { gridColumnCount, gridCoveredCells } from "./SiteBuilder/gridLayout";
 import { hasBlockedPreviewAssets, previewSafeBlock } from "./SiteBuilder/previewAssets";
-import { prepareLocalPreviewHtml } from "../core/sites/localPreview";
+import { prepareLocalSite } from "../core/sites/localPreview";
 import SpacerView from "./SiteBuilder/blocks/spacer/view";
 import ImgView from "./SiteBuilder/blocks/img/view";
 import BtnView from "./SiteBuilder/blocks/btn/view";
@@ -30,11 +38,16 @@ import "./SiteBuilder/builderChrome.css";
 import RevisionPanel from "./SiteBuilder/RevisionPanel";
 import PagePanel from "./SiteBuilder/PagePanel";
 import ProjectPanel from "./SiteBuilder/ProjectPanel";
-import { allPageDocuments } from "./SiteBuilder/pages";
+import { pagesOf, switchPage } from "./SiteBuilder/pages";
+import { activePageForBuild, pagesForBuild } from "./SiteBuilder/siteTemplates";
+import { assignedTemplate } from "./SiteBuilder/templateRules";
+import { StyleClassesContext } from "./SiteBuilder/styleClassesContext";
+import { SiteDataContext } from "./SiteBuilder/siteDataContext";
+import LoopGridView from "./SiteBuilder/blocks/loopgrid/view";
+import TemplatePanel from "./SiteBuilder/TemplatePanel";
 import { exportPagesZip } from "./SiteBuilder/exportPages";
 import { exportProject, importProject, parseProject, projectsOf } from "./SiteBuilder/projects";
 import type {
-  BlockType,
   HeroBlock,
   H1Block,
   PBlock,
@@ -71,7 +84,7 @@ function validateDoc(doc: Doc): CheckItem[] {
     text: titleOk ? "Заголовок задан." : "Добавьте заголовок сайта (≥ 3 символов).",
   });
 
-  const desc = (doc as any).description || "";
+  const desc = doc.description || "";
   const descOk = !!desc && desc.trim().length >= 50 && desc.trim().length <= 160;
   checks.push({
     id: "desc",
@@ -138,7 +151,9 @@ function prettyFileName(title: string, ext: string) {
 // Типы для стилей по брейкпоинтам (Style Tab)
 // ─────────────────────────────────────────────────────────────────────────────
 type Breakpoint = "desktop" | "tablet" | "mobile";
+const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
 type BlockStyle = {
+  transformDuration?: number;
   w?: number;
   minh?: number;
   op?: number;
@@ -164,7 +179,9 @@ type BlockStyle = {
   br?: number;
   sh?: string;
 };
-type StyleByBp = { desktop?: BlockStyle; tablet?: BlockStyle; mobile?: BlockStyle };
+function resolveStyle(block: Block, device: Breakpoint): BlockStyle {
+  return resolveResponsiveStyle(block.style, block.styleByBp, device);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Основной экран
@@ -257,7 +274,6 @@ export default function SiteBuilder({
   // Responsive режим
   const [bp, setBp] = useState<Breakpoint>("desktop");
   const [iframeMode, setIframeMode] = useState<"fit" | Breakpoint>("fit");
-  const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
   const canvasTargetWidth =
     iframeMode === "fit" || iframeMode === "desktop"
       ? null
@@ -283,21 +299,10 @@ export default function SiteBuilder({
   const [outlineCursor, setOutlineCursor] = useState<string>("default");
   const EDGE_HIT_SIZE = 8;
 
-  // При каждом открытии плавающей панели «Структура» ставим её справа,
-  // на уровне верхней части палитры. После этого позиция живёт только
-  // через drag/resize — эффект больше не вмешивается.
-  useEffect(() => {
-    if (!isOutlineOpen) return;
-    if (typeof window === "undefined") return;
-
-    const margin = 24;
-    const newX = window.innerWidth - outlineSize.w - margin;
-    const x = newX < 16 ? 16 : newX;
-
-    const y = 80; // визуально как ты ставил руками
-
-    setOutlinePos({ x, y });
-  }, [isOutlineOpen]);
+  function toggleOutline() {
+    if (!isOutlineOpen) setOutlinePos({ x: Math.max(16, window.innerWidth - outlineSize.w - 24), y: 80 });
+    setIsOutlineOpen(!isOutlineOpen);
+  }
 
   // Временное состояние drag для панели «Структура»
   const outlineDragRef = useRef<{
@@ -555,7 +560,7 @@ export default function SiteBuilder({
   const livePreviewUrls = useRef<string[]>([]);
 
   // ── Хелперы правки документа ───────────────────────────────────────────────
-  const patchBlock = useCallback((id: string, patch: Partial<any> | ((block: any) => Partial<any>), group?: string) => {
+  const patchBlock = useCallback((id: string, patch: BlockPatch, group?: string) => {
     dispatchHistory({ type: "edit", group, value: (d) => ({ ...d, blocks: updateBlock(d.blocks, id, b => ({ ...b, ...(typeof patch === "function" ? patch(b) : patch) })) }) });
   }, []);
 
@@ -564,7 +569,7 @@ export default function SiteBuilder({
       setDoc((d) => ({ ...d, blocks: removeFromTree(d.blocks, id) }));
       if (selId === id) setSelId(null);
     },
-    [selId]
+    [selId, setDoc]
   );
 
   const duplicateBlock = useCallback((id: string) => {
@@ -605,46 +610,30 @@ export default function SiteBuilder({
       next.splice(j, 0, it);
       return { ...d, blocks: next };
     });
-  }, []);
+  }, [setDoc]);
 
   // ── Style helpers ──────────────────────────────────────────────────────────
-  const resolveStyle = (b: any, cur: Breakpoint): BlockStyle => {
-    const base: BlockStyle = (b && b.style) || {};
-    const perAll: StyleByBp = (b && b.styleByBp) || {};
-    return resolveResponsiveStyle(base, perAll, cur) as BlockStyle;
-  };
-
   const styleInline = useCallback(
-    (b: any): React.CSSProperties => {
+    (b: Block): React.CSSProperties => {
       const s = resolveStyle(b, bp);
-      const pt = s.pt ?? s.py;
-      const pb = s.pb ?? s.py;
-      const mt = s.mt;
-      const mb = s.mb;
       return {
         ...(typeof s.w === "number" && Number.isFinite(s.w) ? { width: `${Math.max(1, Math.min(200, s.w))}%` } : {}),
         ...(typeof s.minh === "number" && Number.isFinite(s.minh) ? { minHeight: Math.max(0, Math.min(1200, s.minh)) } : {}),
         ...(typeof s.op === "number" && Number.isFinite(s.op) ? { opacity: Math.max(0, Math.min(100, s.op)) / 100 } : {}),
-        ...(pt != null ? { paddingTop: Number(pt) } : {}),
-        ...(pb != null ? { paddingBottom: Number(pb) } : {}),
-        ...(s.pl != null ? { paddingLeft: Number(s.pl) } : {}),
-        ...(s.pr != null ? { paddingRight: Number(s.pr) } : {}),
-        ...(mt != null ? { marginTop: Number(mt) } : {}),
-        ...(mb != null ? { marginBottom: Number(mb) } : {}),
-        ...(s.ml != null ? { marginLeft: Number(s.ml) } : {}),
-        ...(s.mr != null ? { marginRight: Number(s.mr) } : {}),
+        ...spacingStyle(s),
+        ...transformStyle(s),
 
         ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
         ...(s.ff && ["system-ui", "sans-serif", "serif", "monospace", "Arial", "Georgia", "Verdana", "Tahoma"].includes(s.ff) ? { fontFamily: s.ff } : {}),
-        ...(s.fw != null ? { fontWeight: Number(s.fw) as any } : {}),
+        ...(s.fw != null ? { fontWeight: Number(s.fw) } : {}),
         ...(s.lh != null ? { lineHeight: Number(s.lh) } : {}),
-        ...(s.ta ? { textAlign: s.ta as any } : {}),
+        ...(s.ta ? { textAlign: s.ta } : {}),
 
         ...(s.tc ? { color: s.tc } : {}),
         ...(s.bg ? { backgroundColor: s.bg } : {}),
 
         ...(s.bw != null ? { borderWidth: Number(s.bw) } : {}),
-        ...(s.bs ? { borderStyle: s.bs as any } : {}),
+        ...(s.bs ? { borderStyle: s.bs } : {}),
         ...(s.bc ? { borderColor: s.bc } : {}),
         ...(s.br != null ? { borderRadius: Number(s.br) } : {}),
 
@@ -665,7 +654,7 @@ export default function SiteBuilder({
         </div>
       );
 
-      if ((b as any).hidden) {
+      if (b.hidden) {
         return wrapStyled(<div className="text-xs text-[#9aa3b2] italic">Блок скрыт</div>);
       }
 
@@ -709,7 +698,7 @@ export default function SiteBuilder({
 
         case "h1": {
           const h = b as H1Block;
-          const align = (h as any).align || "left";
+          const align = h.align || "left";
           return wrapStyled(
             <div
               className="text-2xl font-semibold text-[#0b1022]"
@@ -733,10 +722,10 @@ export default function SiteBuilder({
               style={{ textAlign: align }}
               contentEditable
               suppressContentEditableWarning
-              onBlur={(e) => patchBlock(b.id, { text: e.currentTarget.innerText })}
+              onBlur={(e) => patchBlock(b.id, editParagraph(p.text,p.richRuns,e.currentTarget.innerText))}
               onDoubleClick={() => setSelId(b.id)}
             >
-              {p.text || "Текстовый абзац. Дважды кликните, чтобы отредактировать."}
+              <InlineRuns text={p.text} runs={p.richRuns}/>
             </div>
           );
         }
@@ -751,7 +740,7 @@ export default function SiteBuilder({
           return wrapStyled(renderBlockView(b));
       }
     },
-    [patchBlock, setSelId, styleInline]
+    [patchBlock, setSelId]
   );
 
   // Ярлык блока
@@ -762,7 +751,7 @@ export default function SiteBuilder({
       case "h1":
         return "Заголовок (H1)";
       case "heading":
-        return `Заголовок (${(b as any).level?.toUpperCase() || "H2"})`;
+        return `Заголовок (${b.level?.toUpperCase() || "H2"})`;
       case "p":
         return "Текст";
       case "img":
@@ -780,15 +769,29 @@ export default function SiteBuilder({
       case "grid":
         return "Сетка";
       default:
-        return String((b as any).type);
+        return String(b.type);
     }
   }, []);
 
   // ── Документ без скрытых блоков — для экспорта/предпросмотра ───────────────
   const docForBuild = useMemo(
-    () => ({ ...doc, blocks: visibleBlocks(doc.blocks) }),
+    () => activePageForBuild(doc),
     [doc]
   );
+  const previewBlocks = useMemo(() => {
+    const prepared = new Map<string,Block>();
+    function index(blocks:Block[]) { for (const block of blocks) { prepared.set(block.id,block); for(const cell of cellsOf(block)??[]) index(cell); } }
+    index(docForBuild.blocks);
+    const result = new WeakMap<Block,Block>();
+    function pair(blocks:Block[]) { for (const block of blocks) { const bound=prepared.get(block.id); if(bound)result.set(block,bound); for(const cell of cellsOf(block)??[]) pair(cell); } }
+    pair(doc.blocks);
+    return result;
+  }, [docForBuild.blocks,doc.blocks]);
+  const siteData = useMemo(() => {
+    const ws=pagesOf(doc), fields=new Set<string>(Object.keys(doc.entry?.fields??{}));
+    for(const page of ws.pages) for(const key of Object.keys(page.document?.entry?.fields??{})) fields.add(key);
+    return {templates:ws.pages.filter(page=>page.template?.kind==="section").map(page=>({id:page.id,name:page.id===ws.activeId?doc.title:page.document?.title??""})),fields:[...fields].sort()};
+  }, [doc]);
   const docForBuildRef = useRef(docForBuild);
   docForBuildRef.current = docForBuild;
   const unsupportedTypes = useMemo(() => unsupportedBlockTypes(adaptFromSiteBuilderDoc(docForBuild)), [docForBuild]);
@@ -806,7 +809,7 @@ export default function SiteBuilder({
       try {
         const blob =
           format === "zip"
-            ? allPageDocuments(doc).length > 1
+            ? (doc.sitePages?.pages.length ?? 1) > 1
               ? await exportPagesZip(doc, (done, total) => setExportState({ format: "zip", phase: "pages", done, total }))
               : await exportSiteZip(model, {
                 bundleAssets: true,
@@ -857,22 +860,23 @@ export default function SiteBuilder({
     setPublishing(true);
     setPublishError("");
     try {
-      const sitePages = allPageDocuments(doc);
+      const sitePages = pagesForBuild(doc);
       const pages: PublishedPage[] | undefined = sitePages.length > 1 ? [] : undefined;
       if (pages) {
         for (const page of sitePages) {
-          const model = adaptFromSiteBuilderDoc({ ...page.document, blocks: visibleBlocks(page.document.blocks) });
+          const model = adaptFromSiteBuilderDoc(page.document);
           const unsupported = unsupportedBlockTypes(model);
           if (unsupported.length) throw new Error(`Страница «${page.document.title}»: неподдерживаемые виджеты ${unsupported.join(", ")}.`);
           const blob = await exportSingleHtml(model, { bundleAssets: true, restrictExternalMedia: true });
           pages.push({ path: page.path, title: page.document.title, html: await blob.text() });
         }
       }
+      const home = sitePages.find(page => page.path === "index.html")!.document;
       const homepage = pages?.find(page => page.path === "index.html");
-      const html = homepage?.html ?? await (await exportSingleHtml(adaptFromSiteBuilderDoc(docForBuild), { bundleAssets: true, restrictExternalMedia: true })).text();
+      const html = homepage?.html ?? await (await exportSingleHtml(adaptFromSiteBuilderDoc(home), { bundleAssets: true, restrictExternalMedia: true })).text();
 
       const meta = await upsertPublishedSite({
-        title: homepage?.title || doc.title || "site",
+        title: home.title || "site",
         html,
         pages,
       });
@@ -917,7 +921,7 @@ export default function SiteBuilder({
       publishingRef.current = false;
       setPublishing(false);
     }
-  }, [doc, docForBuild, isExporting, onPublished]);
+  }, [doc, isExporting, onPublished]);
 
 
   const exportPhaseLabel = exportState?.phase === "cdr"
@@ -995,7 +999,7 @@ export default function SiteBuilder({
         try {
           const model = adaptFromSiteBuilderDoc(job.snapshot);
           const blob = await exportSingleHtml(model, { bundleAssets: true, restrictExternalMedia: true });
-          const html = prepareLocalPreviewHtml(await blob.text());
+          const html = await prepareLocalSite(await blob.text());
           if (job.sequence !== livePreviewSequence.current || job.channel !== livePreviewChannelRef.current || (!job.force && !autoPreviewRef.current)) continue;
           job.channel.postMessage({ type: "html", html });
           livePreviewReady.current = true;
@@ -1015,7 +1019,7 @@ export default function SiteBuilder({
     if (livePreviewChannelRef.current) {
       try {
         livePreviewChannelRef.current.close();
-      } catch { }
+      } catch { /* Канал предыдущего окна уже закрыт. */ }
     }
     try {
       const channel = new BroadcastChannel(`altnet_live_preview:${id}`);
@@ -1095,8 +1099,8 @@ export default function SiteBuilder({
       if (currentDocRef.current !== expected) { setImportConflict(true); return; }
       setImportConflict(false);
       setDoc(current => current === expected ? importedDoc : current);
-    } catch (err: any) {
-      alert("Не удалось импортировать JSON: " + (err?.message || String(err)));
+    } catch (err) {
+      alert("Не удалось импортировать JSON: " + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -1132,7 +1136,7 @@ export default function SiteBuilder({
   const resetDoc = useCallback(() => {
     if (!draftBlocked) {
       if (!window.confirm("Сбросить текущую страницу? Остальные страницы сохранятся. Действие можно отменить в текущей сессии.")) return;
-      setDoc(current => ({ ...DEFAULT_DOC, ...(current.sitePages ? { sitePages: current.sitePages } : {}), ...(current.siteProjects ? { siteProjects: current.siteProjects } : {}) }));
+      setDoc(current => ({ ...DEFAULT_DOC, ...(current.mediaLibrary ? { mediaLibrary: current.mediaLibrary } : {}), ...(current.sitePages ? { sitePages: current.sitePages } : {}), ...(current.siteProjects ? { siteProjects: current.siteProjects } : {}) }));
       setSelId(null); setTargetCell(null);
       return;
     }
@@ -1178,9 +1182,9 @@ export default function SiteBuilder({
               <button type="button" title="Вверх" aria-label="Вверх" onClick={() => moveBlock(child.id, -1)}>↑</button>
               <button type="button" title="Вниз" aria-label="Вниз" onClick={() => moveBlock(child.id, 1)}>↓</button>
               <button type="button" title="В конец страницы" aria-label="В конец страницы" onClick={() => setDoc(d => ({ ...d, blocks: moveToRoot(d.blocks, child.id, d.blocks.length) }))}>⇱</button>
-              <button type="button" title={(child as any).hidden ? "Показать" : "Скрыть"} onClick={() => patchBlock(child.id, { hidden: !(child as any).hidden })}>{(child as any).hidden ? "◉" : "◌"}</button>
+              <button type="button" title={child.hidden ? "Показать" : "Скрыть"} onClick={() => patchBlock(child.id, { hidden: !child.hidden })}>{child.hidden ? "◉" : "◌"}</button>
               <button type="button" title="Дублировать" onClick={() => duplicateBlock(child.id)}>⧉</button>
-              <button type="button" title="Удалить" disabled={(child as any).locked} onClick={() => removeBlock(child.id)}>×</button>
+              <button type="button" title="Удалить" disabled={child.locked} onClick={() => removeBlock(child.id)}>×</button>
               </div>
             </div>
             {renderChildren(child)}
@@ -1223,20 +1227,20 @@ export default function SiteBuilder({
                 ↓
               </button>
               <button
-                title={(b as any).hidden ? "Показать" : "Скрыть"}
-                aria-label={(b as any).hidden ? "Показать" : "Скрыть"}
-                onClick={() => patchBlock(b.id, { hidden: !(b as any).hidden })}
+                title={b.hidden ? "Показать" : "Скрыть"}
+                aria-label={b.hidden ? "Показать" : "Скрыть"}
+                onClick={() => patchBlock(b.id, { hidden: !b.hidden })}
                 className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
               >
-                {(b as any).hidden ? "👁" : "👁‍🗨"}
+                {b.hidden ? "👁" : "👁‍🗨"}
               </button>
               <button
-                title={(b as any).locked ? "Разблокировать" : "Заблокировать"}
-                aria-label={(b as any).locked ? "Разблокировать" : "Заблокировать"}
-                onClick={() => patchBlock(b.id, { locked: !(b as any).locked })}
+                title={b.locked ? "Разблокировать" : "Заблокировать"}
+                aria-label={b.locked ? "Разблокировать" : "Заблокировать"}
+                onClick={() => patchBlock(b.id, { locked: !b.locked })}
                 className="px-1 py-0.5 rounded border border-[#2a2f45] text-xs"
               >
-                {(b as any).locked ? "🔓" : "🔒"}
+                {b.locked ? "🔓" : "🔒"}
               </button>
               <button
                 title="Дублировать"
@@ -1261,10 +1265,11 @@ export default function SiteBuilder({
         ))}
       </div>
     ); },
-    [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock]
+    [doc.blocks, selId, labelOf, moveBlock, patchBlock, duplicateBlock, removeBlock, setDoc]
   );
 
   function renderEditorContent(block: Block, selected: boolean): React.ReactNode {
+    if (block.type === "loopgrid") return <LoopGridView block={block} device={bp} render={child => renderEditorBlock(child,false)} />;
     if (block.type === "img") return <ImgView block={block} device={bp} />;
     if (block.type === "btn") return <BtnView block={block} device={bp} accent={doc.theme?.accent} />;
     if (block.type === "spacer") return <SpacerView block={block} device={bp} />;
@@ -1274,7 +1279,7 @@ export default function SiteBuilder({
         onSelect={id => { setTargetCell(null); setSelId(id); if (window.matchMedia?.("(max-width: 767px)").matches) setSidebarCollapsed(false); }}
         onChooseCell={(parentId, cellIndex) => { setSelId(null); setTargetCell({ parentId, cellIndex }); if (window.matchMedia?.("(max-width: 767px)").matches) setSidebarCollapsed(false); }}
         onInsert={(parentId, cellIndex, type, preset, at) => {
-          const child = createDefaultBlock(type as BlockType, preset);
+          const child = createInsertedBlock(type, preset);
           setDoc(d => ({ ...d, blocks: insertIntoCell(d.blocks, parentId, cellIndex, child, at) }));
           setTargetCell(null); setSelId(child.id);
         }}
@@ -1287,32 +1292,31 @@ export default function SiteBuilder({
         onClick={event => { event.stopPropagation(); patchBlock(block.id, { layoutPreset: [1], layoutCells: [[]] }); }}>
         Добавить вложенные виджеты в панель
       </button></>;
-    if (block.type === "container" && !cellsOf(block)) return <>{selected ? previewOf(block) : renderBlockView(block)}
-      <button type="button" className="m-2 rounded border border-[#6E59F2] px-3 py-1 text-xs text-[#5140ad]"
-        onClick={event => { event.stopPropagation(); patchBlock(block.id, { layoutPreset: [1], layoutCells: [[]] }); }}>
-        Сделать контейнер редактируемым
-      </button></>;
-    const oldPreset = block.type === "grid" || block.type === "section" ? block.layoutPreset : undefined;
-    if ((block.type === "grid" || block.type === "section") && Array.isArray(oldPreset) &&
-        oldPreset.length > 0 && oldPreset.length <= 12 &&
-        (block.type !== "grid" || !block.items?.length)) {
+    if (block.type === "grid" || block.type === "section" || block.type === "container") {
       return <>{selected ? previewOf(block) : renderBlockView(block)}
         <button type="button" className="m-2 rounded border border-[#6E59F2] px-3 py-1 text-xs text-[#5140ad]"
-          onClick={event => { event.stopPropagation(); patchBlock(block.id, { layoutCells: oldPreset.map(() => []) }); }}>
-          Сделать ячейки редактируемыми
+          onClick={event => { event.stopPropagation(); patchBlock(block.id, editableLegacyLayout(block)); }}>
+          {block.type === "container" ? "Сделать контейнер редактируемым" : "Сделать ячейки редактируемыми"}
         </button></>;
     }
     return selected ? previewOf(block) : renderBlockView(block);
   }
 
-  function renderEditorBlock(block: Block, selected: boolean): React.ReactNode {
+  function renderEditorBlock(source: Block, selected: boolean): React.ReactNode {
+    const block = previewBlocks.get(source) ?? source;
     const typographic = ["h1", "heading", "p", "btn"].includes(block.type);
-    const styles = typographic ? resolveStyle(block, bp) : {};
-    const classes = typographic ? ["ff", "fs", "fw", "lh", "tc", "ta"].filter(key => (styles as any)[key] != null).map(key => `editor-typo-${key}`).join(" ") : "";
-    const hiddenOnDevice = (block as any).hideOn?.[bp] === true;
-    return <div data-styled-block={block.id} className={`relative ${classes}`} style={{ ...styleInline(block), ...(hiddenOnDevice ? { opacity: 0.5 } : {}) }}
+    const styles = resolveStyle(block, bp);
+    const classes = typographic ? (["ff", "fs", "fw", "lh", "tc", "ta"] as const).filter(key => styles[key] != null).map(key => `editor-typo-${key}`).join(" ") : "";
+    const text = typographic ? textAppearance(styles) : textAppearance({});
+    const vars = Object.fromEntries(Object.entries(text.normal).map(([k,v]) => ["--sb-type-" + k, v]));
+    const hoverTransform = transformStyle(styles, true);
+    for (const [key, value] of Object.entries(hoverTransform)) vars["--sb-hover-" + key] = value;
+    if (text.hover.color) vars["--sb-type-hover-color"] = text.hover.color;
+    const appearanceClasses = Object.keys(text.normal).map(k => "sb-type-" + k).join(" ") + (text.hover.color ? " sb-type-hover-color" : "");
+    const hiddenOnDevice = block.hideOn?.[bp] === true;
+    return <div data-styled-block={block.id} className={`relative ${classes} ${appearanceClasses} ${hoverTransform.transform ? "sb-hover-transform" : ""} ${hoverTransform.transformOrigin ? "sb-hover-origin" : ""} ${styles.transformDuration !== undefined ? "sb-transform-duration" : ""}`} style={{ ...styleInline(block), ...vars, ...(hiddenOnDevice ? { opacity: 0.5 } : {}) }}
       onClickCapture={event => { if (event.target instanceof Element && event.target.closest("a")) event.preventDefault(); }}
-      onSubmitCapture={event => event.preventDefault()}>{hiddenOnDevice && <span className="absolute right-1 top-1 z-10 rounded bg-[#312767] px-2 py-1 text-xs text-white">Скрыт на этом экране</span>}{renderEditorContent(previewSafeBlock(block), selected)}</div>;
+      onSubmitCapture={event => event.preventDefault()}>{hiddenOnDevice && <span className="absolute right-1 top-1 z-10 rounded bg-[#312767] px-2 py-1 text-xs text-white">Скрыт на этом экране</span>}{renderEditorContent(previewSafeBlock(block), selected && !block.dynamic)}</div>;
   }
 
   if (leaseStatus === "checking") return <div role="status" className="p-4 text-sm text-[#e6e9f4]">Проверяем доступ к черновику…</div>;
@@ -1322,7 +1326,24 @@ export default function SiteBuilder({
   </div>;
   if (loadingDraft) return <div role="status" className="p-4 text-sm text-[#e6e9f4]">Восстанавливаем сохранённый черновик…</div>;
 
+  function templateOnCanvas(kind: "header" | "footer") {
+    const blocks = docForBuild.themeAreas?.[kind];
+    if (!blocks) return null;
+    const ws = pagesOf(doc);
+    const template = assignedTemplate(ws.pages,ws.activeId,kind);
+    if (!template) return null;
+    return <section className="sb-canvas-template" data-theme-area={kind}>
+      <button type="button" onClick={() => { setDoc(current => switchPage(current,template.id)); setSelId(null); setTargetCell(null); }}>
+        {kind === "header" ? "Шапка" : "Подвал"} · {template.document?.title} · Редактировать
+      </button>
+      <div inert>{blocks.map(block => <React.Fragment key={block.id}>{renderEditorBlock(block,false)}</React.Fragment>)}</div>
+    </section>;
+  }
+  const mediaProject = projectsOf(doc).activeId;
   return (
+    <StyleClassesContext.Provider value={{rules:doc.styleClasses ?? [],edit:setDoc}}>
+    <SiteDataContext.Provider value={siteData}>
+    <MediaLibraryContext.Provider value={{ assets: doc.mediaLibrary ?? [], update: change => setDoc(current => projectsOf(current).activeId === mediaProject ? change(current) : current) }}>
     <div data-editor-theme={editorTheme} data-sidebar-collapsed={sidebarCollapsed} className="altnet-builder relative w-full grid grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] gap-3">
       {leaseStatus === "unsupported" && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">Этот браузер не поддерживает блокировку черновика между вкладками. Не редактируйте одну страницу одновременно в нескольких вкладках.</div>}
       {publishError && <div role="alert" className="col-span-full rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{publishError}</div>}
@@ -1398,22 +1419,21 @@ export default function SiteBuilder({
                 <button type="button" onClick={() => setSelId(null)} className="rounded-md border border-[#2a2f45] px-2 py-1 text-xs text-[#e6e9f4] hover:border-[#6E59F2]">Все виджеты</button>
               </div>
               <InspectorTabs active={editorTab} onChange={(t) => setEditorTab(t)} />
-              <Inspector
+              <React.Suspense fallback={<div role="status" className="p-2 text-xs">Открываем настройки…</div>}>
+              <Inspector key={JSON.stringify([mediaProject, doc.sitePages?.activeId, selId])}
                 block={selBlock}
                 onPatch={(patch, group) => { if (selId) patchBlock(selId, patch, group); }}
                 tab={editorTab}
                 device={bp}
                 onDeviceChange={device => { setBp(device); setIframeMode(device); }}
               />
+              </React.Suspense>
             </>
           ) : (
             <Palette
               query={elQuery}
               onInsert={(type) => {
-                const make = createDefaultBlock as (t: any) => any;
-                const fresh = make(type as any);
-                if (!fresh) return;
-                const withId = { ...(fresh as any), id: uid() };
+                const withId = { ...createInsertedBlock(type), id: uid() };
 
                 setDoc((d) => {
                   if (targetCell) return { ...d, blocks: insertIntoCell(d.blocks, targetCell.parentId, targetCell.cellIndex, withId) };
@@ -1446,8 +1466,10 @@ export default function SiteBuilder({
             return true;
           }} />}
 
+        {!selBlock && <MediaLibraryButton key={mediaProject} />}
         {!selBlock && <ProjectPanel doc={doc} setDoc={setDoc} onChangeProject={() => { setSelId(null); setTargetCell(null); }}
           onExportProject={onExportProject} onImportProject={() => importProjectInputRef.current?.click()} />}
+        {!selBlock && <TemplatePanel doc={doc} setDoc={setDoc} onChangePage={() => { setSelId(null); setTargetCell(null); }} />}
         {!selBlock && <PagePanel doc={doc} setDoc={setDoc} onChangePage={() => { setSelId(null); setTargetCell(null); }} />}
 
         {/* Чек-лист качества */}
@@ -1559,7 +1581,7 @@ export default function SiteBuilder({
                   }
                   onClick={(e) => {
                     e.stopPropagation();
-                    setIsOutlineOpen((v) => !v);
+                    toggleOutline();
                   }}
                   title="Структура"
                 >
@@ -1659,7 +1681,7 @@ export default function SiteBuilder({
               onInsert={(type) => {
                 const pos = doc.blocks.findIndex((b) => b.id === selId);
                 const index = pos >= 0 ? pos + 1 : doc.blocks.length;
-                const nb = createDefaultBlock(type);
+                const nb = createInsertedBlock(type);
                 setDoc((d) => {
                   const blocks = [...d.blocks];
                   const clamped = Math.max(0, Math.min(index, blocks.length));
@@ -1690,6 +1712,7 @@ export default function SiteBuilder({
                   }
                   style={{ backgroundColor: "#ffffff" }}
                 >
+                  {templateOnCanvas("header")}
                   <Canvas
                     cols={canvasCols}
                     gapX={canvasGapX}
@@ -1738,7 +1761,7 @@ export default function SiteBuilder({
                                 title="Добавить секцию ниже"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const nextBlock = createDefaultBlock("section", [1]);
+                                  const nextBlock = createInsertedBlock("section", [1]);
                                   setDoc(d => {
                                     const index = d.blocks.findIndex(item => item.id === b.id);
                                     if (index < 0) return d;
@@ -1783,11 +1806,11 @@ export default function SiteBuilder({
                       );
                     }}
                     onReorder={(next) =>
-                      setDoc((d) => ({ ...d, blocks: next as any }))
+                      setDoc((d) => ({ ...d, blocks: next }))
                     }
                     onMoveToRoot={(index, id) => setDoc(d => ({ ...d, blocks: moveToRoot(d.blocks, id, index) }))}
                     onInsertAt={(index, type, preset) => {
-                      const nb = createDefaultBlock(type as BlockType, preset as any);
+                      const nb = createInsertedBlock(type, preset);
                       setDoc((d) => {
                         const blocks = [...d.blocks];
                         const clamped = Math.max(
@@ -1804,6 +1827,7 @@ export default function SiteBuilder({
 
 
 
+                  {templateOnCanvas("footer")}
                   {/* Структура под канвасом на мобильных/узких экранах (tablet/mobile) */}
                   {bp !== "desktop" && (
                     <div className="mt-4 rounded-2xl border border-[#1f2751] bg-[#050816]/90">
@@ -1876,6 +1900,9 @@ export default function SiteBuilder({
         )}
       </div>
     </div>
+    </MediaLibraryContext.Provider>
+    </SiteDataContext.Provider>
+    </StyleClassesContext.Provider>
   );
 }
 

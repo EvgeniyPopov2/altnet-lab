@@ -2,7 +2,8 @@ import type { Doc, ProjectDocument, SiteProject, SiteProjects } from "./types";
 import { validateDraft } from "./storage";
 
 function projectDocument(doc: Doc): ProjectDocument {
-  const { siteProjects: _siteProjects, ...project } = doc;
+  const project = { ...doc };
+  delete project.siteProjects;
   return project;
 }
 
@@ -37,7 +38,7 @@ export function switchProject(doc: Doc, id: string): Doc {
   if (!target?.document) return doc;
   const projects = workspace.projects.map(project => {
     if (project.id === workspace.activeId) return { ...project, document: projectDocument(doc) };
-    if (project.id === id) { const { document: _document, ...rest } = project; return rest; }
+    if (project.id === id) { const rest = { ...project }; delete rest.document; return rest; }
     return project;
   });
   return { ...target.document, siteProjects: { ...workspace, activeId: id, projects } };

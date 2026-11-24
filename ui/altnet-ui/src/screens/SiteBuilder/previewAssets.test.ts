@@ -18,6 +18,6 @@ describe("безопасный предпросмотр медиа", () => {
   });
   it("не считает произвольный SVG и относительные адреса подтверждёнными локальными медиа", () => {
     const blocks: Block[] = [{ id: "a", type: "img", cid: "data:image/svg+xml,<svg/>" }, { id: "b", type: "img", cid: "/image" }];
-    expect(blocks.map(block => (previewSafeBlock(block) as any).cid)).toEqual(["", ""]);
+    expect(blocks.map(previewSafeBlock)).toMatchObject([{ cid: "" }, { cid: "" }]);
   });
 });

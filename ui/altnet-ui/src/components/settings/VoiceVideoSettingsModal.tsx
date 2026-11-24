@@ -218,26 +218,27 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
     videoElRef: videoPreviewRef,
   });
   void camPreview;
+  const refreshDevices = media.refresh;
   // После выдачи разрешения на микрофон браузер начинает раскрывать реальные label устройств.
   // Освежаем список, чтобы селекты не оставались "Микрофон 1/2".
   useEffect(() => {
     if (!open) return;
     if (!testing) return;
     const t = window.setTimeout(() => {
-      void media.refresh();
+      void refreshDevices();
     }, 650);
     return () => window.clearTimeout(t);
-  }, [open, testing, media.refresh]);
+  }, [open, testing, refreshDevices]);
 
   // После разрешения на камеру — обновим список устройств (label становятся реальными).
   useEffect(() => {
     if (!open) return;
     if (!videoTesting) return;
     const t = window.setTimeout(() => {
-      void media.refresh();
+      void refreshDevices();
     }, 650);
     return () => window.clearTimeout(t);
-  }, [open, videoTesting, media.refresh]);
+  }, [open, videoTesting, refreshDevices]);
 
   // Если policy запретила видео (ANON без allowVideoInAnon) — принудительно выключаем тест.
   useEffect(() => {
@@ -536,7 +537,7 @@ export default function VoiceVideoSettingsModal({ open, profile, onClose }: Prop
                               <div className="text-xs text-white/60">Шумоподавление</div>
                               <select
                                 value={audio.preset}
-                                onChange={(e) => patchAudio({ preset: e.target.value as any })}
+                                onChange={(e) => patchAudio({ preset: e.target.value as typeof audio.preset })}
                                 className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white/90 outline-none focus:border-white/20"
                               >
                                 <option value="off">Выкл</option>

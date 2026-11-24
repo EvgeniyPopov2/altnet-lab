@@ -1,3 +1,4 @@
+import EntryPanel from "./EntryPanel";
 import React, { useState } from "react";
 import { addPage, pagesOf, removePage, renamePagePath, switchPage } from "./pages";
 import type { Doc } from "./types";
@@ -10,6 +11,7 @@ export default function PagePanel({ doc, setDoc, onChangePage }: Props) {
   const [path, setPath] = useState("");
   const [message, setMessage] = useState("");
   const workspace = pagesOf(doc);
+  const publicPages = workspace.pages.filter(page => !page.template);
   const active = workspace.pages.find(page => page.id === workspace.activeId)!;
   const field = "w-full min-w-0 rounded-md border border-[#2a2f45] bg-[#0c0f1a] px-2 py-1.5 text-sm text-[#e6e9f4]";
   const button = "rounded-md border border-[#2a2f45] px-2 py-1.5 text-xs text-[#e6e9f4] hover:border-[#6E59F2] disabled:opacity-50";
@@ -33,9 +35,9 @@ export default function PagePanel({ doc, setDoc, onChangePage }: Props) {
     setPath(""); setMessage("");
   }
   return <section aria-label="Страницы сайта" className="grid min-w-0 gap-2 rounded-lg border border-[#2a2f45] p-3">
-    <div className="text-xs font-medium text-[#cfd5e6]">Страницы сайта · {workspace.pages.length}</div>
+    <div className="text-xs font-medium text-[#cfd5e6]">Страницы сайта · {publicPages.length}</div>
     <ul className="grid gap-1">
-      {workspace.pages.map(page => <li key={page.id} className="min-w-0">
+      {publicPages.map(page => <li key={page.id} className="min-w-0">
         <button type="button" aria-current={page.id === workspace.activeId ? "page" : undefined}
           className={`w-full min-w-0 rounded-md border px-2 py-1.5 text-left text-xs ${page.id === workspace.activeId ? "border-[#6E59F2] text-white" : "border-[#2a2f45] text-[#cfd5e6]"}`}
           onClick={() => { setDoc(current => switchPage(current, page.id)); setPath(""); setMessage(""); onChangePage(); }}>
@@ -44,7 +46,7 @@ export default function PagePanel({ doc, setDoc, onChangePage }: Props) {
         </button>
       </li>)}
     </ul>
-    <label className="grid gap-1 text-xs text-[#cfd5e6]">Название текущей страницы
+    <label className="grid gap-1 text-xs text-[#cfd5e6]">{active.template ? "Название шаблона" : "Название текущей страницы"}
       <input className={field} value={doc.title} onChange={event => { const title = event.target.value; setDoc(current => ({ ...current, title })); }} />
     </label>
     <label className="grid gap-1 text-xs text-[#cfd5e6]">Название новой страницы
@@ -64,7 +66,8 @@ export default function PagePanel({ doc, setDoc, onChangePage }: Props) {
         setDoc(current => removePage(current, active.id)); setPath(""); setMessage(""); onChangePage();
       }}>Удалить</button>
     </div>
-    <details className="rounded-md border border-[#2a2f45] p-2 text-xs text-[#cfd5e6]">
+    {!active.template && <EntryPanel key={workspace.activeId} doc={doc} setDoc={setDoc} />}
+    {!active.template && <details className="rounded-md border border-[#2a2f45] p-2 text-xs text-[#cfd5e6]">
       <summary className="cursor-pointer">Поиск и соцсети</summary>
       <label className="mt-2 grid gap-1">Описание страницы
         <textarea className={field} rows={3} value={doc.description ?? ""} onChange={event => { const description = event.target.value; setDoc(current => ({ ...current, description })); }} />
@@ -81,7 +84,7 @@ export default function PagePanel({ doc, setDoc, onChangePage }: Props) {
       <label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={doc.seo?.index !== false} onChange={event => { const index = event.target.checked; setDoc(current => ({ ...current, seo: { ...current.seo, index } })); }} />Разрешить индексацию</label>
       <label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={doc.seo?.follow !== false} onChange={event => { const follow = event.target.checked; setDoc(current => ({ ...current, seo: { ...current.seo, follow } })); }} />Разрешить переход по ссылкам</label>
       <p className="mt-2 text-[#9aa3b2]">Это указания для поисковых систем; их выполнение зависит от поискового робота.</p>
-    </details>
+    </details>}
     {message && <p role="alert" className="text-xs text-[#ffb3a8]">{message}</p>}
     <p className="text-xs text-[#9aa3b2]">Главная — index.html. Для ссылок используйте ./адрес.html. При изменении адреса ссылки в виджетах обновляются; ссылки в пользовательском HTML измените вручную. ZIP и локальная публикация включают все страницы; HTML — только текущую.</p>
   </section>;

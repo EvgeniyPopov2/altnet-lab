@@ -31,7 +31,7 @@ export async function writeIndexedDraft(json: string): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
       let settled = false;
-      const finish = (error?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(); };
+      const finish = (error?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); if (error !== undefined) reject(error); else resolve(); };
       const timer = setTimeout(() => { try { tx.abort(); } catch { /* уже завершено */ } finish(new Error("Сохранение заняло слишком много времени.")); }, 30000);
       tx.oncomplete = () => finish();
       tx.onabort = () => finish(tx.error || new Error("Сохранение прервано."));
@@ -50,7 +50,7 @@ export async function readIndexedDraft(): Promise<string | undefined> {
       const request = tx.objectStore(STORE).get(CURRENT);
       let value: unknown;
       let settled = false;
-      const finish = (error?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); error ? reject(error) : resolve(typeof value === "string" ? value : undefined); };
+      const finish = (error?: unknown) => { if (settled) return; settled = true; clearTimeout(timer); if (error !== undefined) reject(error); else resolve(typeof value === "string" ? value : undefined); };
       const timer = setTimeout(() => { try { tx.abort(); } catch { /* уже завершено */ } finish(new Error("Чтение заняло слишком много времени.")); }, 30000);
       request.onsuccess = () => { value = request.result; };
       tx.oncomplete = () => finish();

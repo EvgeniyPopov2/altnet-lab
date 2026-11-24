@@ -3,11 +3,13 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import "./index.css";
 import { AnimatePresence, motion } from "framer-motion";
 
-import BrowserAlt from "./screens/BrowserAlt";
+const BrowserAlt = lazy(() => import("./screens/BrowserAlt"));
 const SiteBuilder = lazy(() => import("./screens/SiteBuilder"));
 import ExploreDiscover from "./screens/ExploreDiscover";
-import Messages, { type DmContact } from "./screens/Messages";
-import Servers, { type ServerItem } from "./screens/Servers";
+import type { DmContact } from "./screens/Messages";
+const Messages = lazy(() => import("./screens/Messages"));
+import type { ServerItem } from "./screens/Servers";
+const Servers = lazy(() => import("./screens/Servers"));
 import SecurityCenter from "./screens/SecurityCenter";
 import Mail from "./screens/Mail";
 import QuickSwitcher, { type QSItem } from "./components/QuickSwitcher";
@@ -615,7 +617,9 @@ export default function App() {
                     }}
                   /></Suspense>
                 ) : (
-                  <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} navRequest={browserNav} />
+                  <Suspense fallback={<div role="status" className="p-4 text-sm">Открываем браузер…</div>}>
+                    <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} navRequest={browserNav} />
+                  </Suspense>
                 ))}
 
               {section === "feed" && (
@@ -657,21 +661,25 @@ export default function App() {
               )}
 
               {section === "messages" && selectedDm && (
+                <Suspense fallback={<div role="status" className="p-4 text-sm">Открываем раздел…</div>}>
                 <Messages
                   profile={profile}
                   dm={selectedDm}
                   onStartCall={openCall}
                   onOpenVoiceVideoSettings={() => setVoiceVideoOpen(true)}
                 />
+                </Suspense>
               )}
 
               {section === "servers" && selectedServer && (
+                <Suspense fallback={<div role="status" className="p-4 text-sm">Открываем раздел…</div>}>
                 <Servers
                   profile={profile}
                   server={selectedServer}
                   onStartCall={openCall}
                   onOpenVoiceVideoSettings={() => setVoiceVideoOpen(true)}
                 />
+                </Suspense>
               )}
 
               {section === "explore" && <ExploreDiscover />}

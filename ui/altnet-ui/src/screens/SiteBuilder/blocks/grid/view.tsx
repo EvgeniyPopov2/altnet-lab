@@ -3,7 +3,7 @@ import type { GridBlock } from "../../types";
 
 export default function GridView({ block }: { block: GridBlock }) {
   // Если грид создан через мастер Grid, layoutPreset содержит массив колонок
-  const layoutPreset = (block as any).layoutPreset as number[] | undefined;
+  const layoutPreset = Array.isArray(block.layoutPreset) ? block.layoutPreset : undefined;
   const colsCount = layoutPreset && layoutPreset.length > 0 ? layoutPreset.length : block.cols;
 
   const cols =

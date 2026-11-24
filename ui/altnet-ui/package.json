@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "test:browsers": "node tests/builder-browsers.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -19,6 +20,7 @@
     "dompurify": "^3.3.0",
     "framer-motion": "^12.23.24",
     "jszip": "^3.10.1",
+    "lottie-web": "5.13.0",
     "lucide-react": "^0.562.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
@@ -35,6 +37,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "playwright": "1.65.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",

@@ -1,32 +1,34 @@
-import { useState } from "react";
-import { tryReencodeToPng } from "../../../../builder/cdr";
+import { useContext, useEffect, useRef, useState } from "react";
+import { addMediaAsset, imageFileTypes, prepareMediaAsset } from "../../mediaLibrary";
+import { MediaLibraryContext } from "../../mediaLibraryContext";
+import MediaLibraryButton from "../../MediaLibraryButton";
+import type { MediaAsset } from "../../types";
 
-const MAX_RESULT_BYTES = 2 * 1024 * 1024;
-export default function LocalImageInput({ onLoad }: { onLoad: (dataUrl: string) => void }) {
+export default function LocalImageInput({ onLoad }: { onLoad: (dataUrl: string, asset: MediaAsset) => void }) {
+  const library = useContext(MediaLibraryContext);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const mounted = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   return <div className="grid gap-1 text-xs text-[#c9d0e9]">
     <label className="grid gap-1">Выбрать изображение с устройства
-      <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy} onChange={async event => {
+      <input type="file" accept={imageFileTypes} disabled={busy} onChange={async event => {
         const file = event.currentTarget.files?.[0];
         event.currentTarget.value = "";
         if (!file) return;
         setError(""); setBusy(true);
         try {
-          const cleaned = await tryReencodeToPng(file);
-          if (cleaned.size > MAX_RESULT_BYTES) throw new Error("После обработки изображение больше 2 МиБ. Уменьшите его размер и выберите снова.");
-          const url = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("Не удалось прочитать изображение."));
-            reader.onerror = () => reject(new Error("Не удалось прочитать изображение."));
-            reader.readAsDataURL(cleaned);
-          });
-          onLoad(url);
-        } catch (cause) { setError(cause instanceof Error ? cause.message : "Не удалось обработать изображение."); }
-        finally { setBusy(false); }
+          const prepared = await prepareMediaAsset(file);
+          if (!mounted.current) return;
+          const asset = library?.assets.find(item => item.id === prepared.id) ?? prepared;
+          library?.update(doc => addMediaAsset(doc, asset));
+          onLoad(asset.dataUrl, asset);
+        } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : "Не удалось обработать изображение."); }
+        finally { if (mounted.current) setBusy(false); }
       }} />
     </label>
-    <span>{busy ? "Обрабатываем изображение…" : "PNG, JPEG, WebP или GIF до 10 МиБ; GIF сохраняется как статичное изображение. Результат хранится в черновике."}</span>
+    <MediaLibraryButton onSelect={asset => onLoad(asset.dataUrl, asset)} />
+    <span>{busy ? "Обрабатываем изображение…" : "PNG, JPEG, WebP или GIF до 10 МиБ. GIF сохраняется как статичное изображение."}</span>
     {error && <span role="alert" className="text-red-300">{error}</span>}
   </div>;
 }

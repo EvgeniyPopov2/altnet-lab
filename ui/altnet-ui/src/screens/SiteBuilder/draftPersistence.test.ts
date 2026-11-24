@@ -27,7 +27,7 @@ describe("надёжное сохранение черновика", () => {
     const abort = vi.fn(), close = vi.fn();
     const tx = { objectStore: () => ({ put: vi.fn() }), abort, oncomplete: null, onabort: null, onerror: null };
     const db = { transaction: () => tx, close, onversionchange: null };
-    const request: any = { result: db, onsuccess: null, onerror: null, onblocked: null, onupgradeneeded: null };
+    const request = { result: db, onsuccess: null as (() => void) | null, onerror: null, onblocked: null, onupgradeneeded: null };
     vi.stubGlobal("indexedDB", { open: () => { queueMicrotask(() => request.onsuccess?.()); return request; } });
     try {
       const result = writeIndexedDraft("{}");
@@ -40,7 +40,7 @@ describe("надёжное сохранение черновика", () => {
     } finally { vi.unstubAllGlobals(); vi.useRealTimers(); }
   });
   it("записывает крупный документ в IndexedDB до замены указателя", async () => {
-    const target = storage(), io = deferred(), write = vi.fn((_json: string) => io.promise);
+    const target = storage(), io = deferred(), write = vi.fn<(json: string) => Promise<void>>(() => io.promise);
     const writer = new DraftWriter(target, write);
     writer.save(doc("LARGE 1"));
     expect(writer.status).toBe("saving");
