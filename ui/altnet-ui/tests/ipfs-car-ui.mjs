@@ -74,6 +74,20 @@ try {
   await home.getByText('Привет из редактора').waitFor();
   await home.getByRole('link',{name:'Контакты'}).click();
   await page.frameLocator('iframe[title="Контакты"]').getByText('Вторая страница сайта').waitFor();
+  const address = page.getByRole('textbox',{name:'Адрес сайта'});
+  const aboutUrl = await address.inputValue();
+  assert.match(aboutUrl,/^alt:\/\/site\/[a-z0-9-]+\/about\.html$/);
+  await page.getByRole('button',{name:'Добавить страницу в закладки'}).click();
+  await page.getByRole('button',{name:'Назад',exact:true}).click();
+  await page.frameLocator('iframe[title="Проверка CAR"]').getByText('Привет из редактора').waitFor();
+  await page.getByRole('button',{name:'Вперёд',exact:true}).click();
+  await page.frameLocator('iframe[title="Контакты"]').getByText('Вторая страница сайта').waitFor();
+  await page.reload();
+  await page.getByRole('button',{name:'Браузер .alt',exact:true}).click();
+  await page.getByRole('button',{name:/^Закладки /}).click();
+  await page.getByRole('region',{name:'Закладки'}).getByRole('button',{name:/^Контакты/}).click();
+  await page.frameLocator('iframe[title="Контакты"]').getByText('Вторая страница сайта').waitFor();
+  assert.equal(await address.inputValue(),aboutUrl);
 
   const bundled = await build({entryPoints:['src/core/sites/ipfsSitePackage.ts'],bundle:true,platform:'node',format:'esm',write:false});
   const packer = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].contents).toString('base64'));

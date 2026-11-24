@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test:browsers": "node tests/builder-browsers.mjs",
+    "test:browser-local": "node tests/browser-local-ui.mjs",
     "test:ipfs-ui": "node tests/ipfs-car-ui.mjs",
     "test:onion-ui": "node tests/onion-car-ui.mjs",
     "test:onion-integration": "node tests/onion-car-integration.mjs",

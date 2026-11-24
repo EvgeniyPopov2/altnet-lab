@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Plus, RotateCw, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { ArrowLeft, ArrowRight, Bookmark, Plus, RotateCw, X } from "lucide-react";
 import LocalSiteFrame from "../components/LocalSiteFrame";
+import { BOOKMARKS_KEY, readBookmarks, toggleBookmark, type BrowserBookmark } from "../core/sites/browserBookmarks";
+import { browserTabTitle, createBrowserTab, parseBrowserAddress, type BrowserTab } from "../core/sites/browserNavigation";
 import {
   deletePublishedSite,
   getPublishedSite,
@@ -15,51 +17,12 @@ type NavRequest = {
   token: number;
 };
 
-type Tab = {
-  id: string;
-  title: string;
-  url: string;
-  history: string[];
-  cursor: number;
-  reloadToken: number;
-};
-
-function inferTitle(url: string): string {
-  try {
-    if (url.startsWith("alt://")) {
-      const path = url.slice("alt://".length) || "home";
-      const head = path.split(/[/?#]/)[0] || ".alt";
-      if (head === "home") return ".alt старт";
-      if (head === "site") return "site";
-      return head;
-    }
-    const u = new URL(url);
-    return u.host || url;
-  } catch {
-    return url || ".alt";
-  }
-}
-
-function normalizeToUrl(raw: string): string {
-  const value = String(raw || "").trim();
-  if (!value) return "alt://home";
-  if (value.includes("://")) return value;
-  return "alt://" + value.replace(/^\/+/, "");
-}
-
 function parseSiteSlug(url: string): string | null {
-  if (!url.startsWith("alt://site/")) return null;
-  const rest = url.slice("alt://site/".length);
-  const slug = rest.split(/[/?#]/)[0];
-  return /^[a-z0-9][a-z0-9-]{0,95}$/.test(slug) ? slug : null;
+  try { const address = parseBrowserAddress(url); return address.kind === "site" ? address.slug : null; } catch { return null; }
 }
 
 function parseSitePath(url: string): string | null {
-  if (!parseSiteSlug(url)) return null;
-  const parts = url.slice("alt://site/".length).split(/[?#]/)[0].split("/");
-  if (parts.length === 1) return "index.html";
-  if (parts.length !== 2 || !/^[a-z0-9][a-z0-9-]{0,63}\.html$/.test(parts[1])) return null;
-  return parts[1];
+  try { const address = parseBrowserAddress(url); return address.kind === "site" ? address.path : null; } catch { return null; }
 }
 
 function fmtTime(ts: number): string {
@@ -79,23 +42,26 @@ function fmtTime(ts: number): string {
 export default function BrowserAlt({
   onOpenBuilder,
   navRequest,
+  onNavConsumed,
+  tabs,
+  setTabs,
+  activeId,
+  setActiveId,
 }: {
   onOpenBuilder: () => void;
   navRequest?: NavRequest | null;
+  onNavConsumed: (token: number) => void;
+  tabs: BrowserTab[];
+  setTabs: Dispatch<SetStateAction<BrowserTab[]>>;
+  activeId: string;
+  setActiveId: Dispatch<SetStateAction<string>>;
 }) {
-  const makeTab = (url = "alt://home"): Tab => ({
-    id: crypto.randomUUID(),
-    title: inferTitle(url),
-    url,
-    history: [url],
-    cursor: 0,
-    reloadToken: 0,
-  });
-
-  const [tabs, setTabs] = useState<Tab[]>(() => [makeTab("alt://home")]);
-  const [activeId, setActiveId] = useState<string>(() => tabs[0].id);
   const addressRef = useRef<HTMLInputElement>(null);
   const [addressValue, setAddressValue] = useState<string>(() => tabs[0].url);
+  const [navigationError, setNavigationError] = useState("");
+  const [bookmarks, setBookmarks] = useState<BrowserBookmark[]>([]);
+  const [bookmarksError, setBookmarksError] = useState("");
+  const [bookmarksOpen, setBookmarksOpen] = useState(false);
 
   const [publishedToken, setPublishedToken] = useState<number>(0);
   const [publishedSites, setPublishedSites] = useState<PublishedSiteMeta[]>([]);
@@ -111,6 +77,17 @@ export default function BrowserAlt({
   const [siteState, setSiteState] = useState<{ slug: string; loading: boolean; site: PublishedSite | null; error: string } | null>(null);
   const siteFrameRef = useRef<HTMLIFrameElement>(null);
   const deletingSites = useRef(new Set<string>());
+
+  useEffect(() => {
+    const read = () => {
+      try { setBookmarks(readBookmarks(localStorage)); setBookmarksError(""); }
+      catch { setBookmarksError("Не удалось прочитать закладки. Сохранённые данные не изменены."); }
+    };
+    read();
+    const onStorage = (event: StorageEvent) => { if (event.key === BOOKMARKS_KEY || event.key === null) read(); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     let active = true; setPublishedLoading(true);
@@ -146,9 +123,24 @@ export default function BrowserAlt({
   const canGoBack = !!activeTab && activeTab.cursor > 0;
   const canGoForward =
     !!activeTab && activeTab.cursor < (activeTab.history?.length ?? 1) - 1;
+  const activeSlug = parseSiteSlug(activeTab?.url || "");
+  const activePath = parseSitePath(activeTab?.url || "");
+  const currentSite = activeSlug && siteState?.slug === activeSlug ? siteState.site : null;
+  const currentPage = currentSite && activePath === "index.html" ? { title: currentSite.title } : currentSite?.pages?.find(page => page.path === activePath);
+  const canBookmark = Boolean(currentSite && currentPage && activeTab);
+  const bookmarked = !!activeTab && bookmarks.some(item => item.url === activeTab.url);
+
+  const changeBookmark = (url: string, title: string) => {
+    try { setBookmarks(toggleBookmark(localStorage, url, title)); setBookmarksError(""); }
+    catch (error) { setBookmarksError(error instanceof Error ? error.message : "Не удалось сохранить закладку."); }
+  };
 
   const setActiveUrl = (nextUrlRaw: string) => {
-    const nextUrl = normalizeToUrl(nextUrlRaw);
+    let nextUrl: string;
+    try { nextUrl = parseBrowserAddress(nextUrlRaw).url; }
+    catch (error) { setNavigationError(error instanceof Error ? error.message : "Некорректный адрес."); return; }
+    setNavigationError("");
+    setAddressValue(nextUrl);
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id !== activeId) return t;
@@ -157,7 +149,7 @@ export default function BrowserAlt({
         const cursor = typeof t.cursor === "number" ? t.cursor : history.length - 1;
         const current = history[cursor] ?? t.url;
         if (current === nextUrl) {
-          return { ...t, url: nextUrl, title: inferTitle(nextUrl) };
+          return { ...t, url: nextUrl, title: browserTabTitle(nextUrl) };
         }
 
         const nextHistory = history.slice(0, cursor + 1);
@@ -165,7 +157,7 @@ export default function BrowserAlt({
         return {
           ...t,
           url: nextUrl,
-          title: inferTitle(nextUrl),
+          title: browserTabTitle(nextUrl),
           history: nextHistory,
           cursor: nextHistory.length - 1,
         };
@@ -208,25 +200,27 @@ export default function BrowserAlt({
   };
 
   const goBack = () => {
+    setNavigationError("");
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id !== activeId) return t;
         if (t.cursor <= 0) return t;
         const nextCursor = t.cursor - 1;
         const url = t.history[nextCursor] ?? t.url;
-        return { ...t, cursor: nextCursor, url, title: inferTitle(url) };
+        return { ...t, cursor: nextCursor, url, title: browserTabTitle(url) };
       })
     );
   };
 
   const goForward = () => {
+    setNavigationError("");
     setTabs((prev) =>
       prev.map((t) => {
         if (t.id !== activeId) return t;
         if (t.cursor >= t.history.length - 1) return t;
         const nextCursor = t.cursor + 1;
         const url = t.history[nextCursor] ?? t.url;
-        return { ...t, cursor: nextCursor, url, title: inferTitle(url) };
+        return { ...t, cursor: nextCursor, url, title: browserTabTitle(url) };
       })
     );
   };
@@ -238,25 +232,21 @@ export default function BrowserAlt({
   };
 
   const newTab = (url = "alt://home") => {
-    const u = normalizeToUrl(url);
-    const t = makeTab(u);
+    const u = parseBrowserAddress(url).url;
+    const t = createBrowserTab(u);
     setTabs((prev) => [...prev, t]);
     setActiveId(t.id);
+    setNavigationError("");
     setTimeout(() => addressRef.current?.focus(), 0);
   };
 
   const closeTab = (id: string) => {
-    setTabs((prev) => {
-      if (prev.length === 1) return prev; // не закрываем последнюю
-      const idx = prev.findIndex((t) => t.id === id);
-      const nextTabs = prev.filter((t) => t.id !== id);
-
-      if (id === activeId) {
-        const next = nextTabs[idx] ?? nextTabs[idx - 1] ?? nextTabs[0];
-        if (next) setActiveId(next.id);
-      }
-      return nextTabs;
-    });
+    if (tabs.length <= 1) return;
+    const index = tabs.findIndex(tab => tab.id === id);
+    if (index < 0) return;
+    const remaining = tabs.filter(tab => tab.id !== id);
+    if (id === activeId) setActiveId((remaining[index] ?? remaining[index - 1] ?? remaining[0]).id);
+    setTabs(current => current.length > 1 ? current.filter(tab => tab.id !== id) : current);
   };
 
   // Хоткеи: Ctrl+T (новая), Ctrl+W (закрыть), Ctrl+L (фокус адреса), Ctrl+R (обновить), Alt+←/→ (история)
@@ -302,6 +292,7 @@ export default function BrowserAlt({
     if (!navRequest?.url) return;
     setPublishedToken(Date.now());
     setActiveUrl(navRequest.url);
+    onNavConsumed(navRequest.token);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navRequest?.token]);
 
@@ -358,7 +349,7 @@ export default function BrowserAlt({
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
           <div className="text-white/90 text-xl font-semibold mb-2">Домашняя .alt</div>
           <div className="text-white/70 text-sm">
-            Введите адрес <code className="text-white/90">alt://имя</code> или откройте опубликованный сайт.
+            Откройте локальный сайт по адресу <code className="text-white/90">alt://site/имя</code> или выберите его ниже.
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -367,14 +358,6 @@ export default function BrowserAlt({
               className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white"
             >
               Создать / опубликовать сайт
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveUrl("alt://site/demo")}
-              className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20"
-              title="Открыть демо-страницу (если опубликована)"
-            >
-              Открыть demo
             </button>
           </div>
         </div>
@@ -401,7 +384,7 @@ export default function BrowserAlt({
 
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
           <div className="flex items-center justify-between gap-3">
-            <div className="text-white/90 font-semibold">Опубликованные сайты</div>
+            <div className="text-white/90 font-semibold">Локальные сайты</div>
             <div className="text-white/50 text-xs">{publishedSites.length} шт.</div>
           </div>
 
@@ -534,10 +517,10 @@ export default function BrowserAlt({
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
         <div className="text-white/90 text-xl font-semibold mb-2">Внешний адрес</div>
         <div className="text-white/70 text-sm">
-          Пока это эмуляция запроса: <span className="text-white/90">{url}</span>
+          Открытие обычных веб-сайтов пока не подключено: <span className="text-white/90">{url}</span>
         </div>
         <div className="text-white/50 text-xs mt-3">
-          В реальной реализации доступ к внешним адресам будет зависеть от профиля приватности (Анонимный / Приватный быстрый).
+          Сетевой запрос не выполнялся. Внешний доступ требует защищённого транспорта и изоляции сайтов.
         </div>
       </div>
     );
@@ -546,7 +529,7 @@ export default function BrowserAlt({
   // Контент вкладки
   const renderPage = () => {
     const url = activeTab?.url || "alt://home";
-    if (url.startsWith("alt://home")) return renderHome();
+    if (url === "alt://home") return renderHome();
     if (url.startsWith("alt://site/")) {
       const slug = parseSiteSlug(url);
       if (!slug) return <div role="alert" className="p-6 text-amber-100">Некорректный адрес сайта.</div>;
@@ -567,35 +550,31 @@ export default function BrowserAlt({
   return (
     <div className="space-y-3">
       {publishedError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{publishedError} <button type="button" className="underline" onClick={() => setPublishedToken(value => value + 1)}>Повторить</button></div>}
+      {bookmarksError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{bookmarksError}</div>}
       {copyStatus && <div role="status" className="rounded-lg border border-white/20 p-2 text-sm text-white/80">{copyStatus} <button type="button" className="underline" onClick={() => setCopyStatus("")}>Закрыть</button></div>}
       {/* Табы */}
       <div className="rounded-xl bg-white/5 border border-white/10 px-2 py-1 overflow-x-auto">
-        <div className="flex items-center gap-1">
+        <div role="tablist" aria-label="Вкладки браузера" className="flex items-center gap-1" onKeyDown={event => {
+          if (!(event.target instanceof HTMLElement) || event.target.getAttribute("role") !== "tab" || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+          const index = tabs.findIndex(tab => tab.id === activeId);
+          const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+          event.preventDefault();
+          setActiveId(tabs[next].id);
+          setNavigationError("");
+          const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+          buttons[next]?.focus();
+        }}>
           {tabs.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setActiveId(t.id)}
-              className={`group max-w-[240px] flex items-center gap-2 px-3 py-1.5 rounded-lg transition
-                ${t.id === activeId ? "bg-white/20 text-white" : "bg-transparent text-white/80 hover:bg-white/10 hover:text-white"}`}
-              title={t.url}
-            >
-              <span className="truncate">{t.title}</span>
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  closeTab(t.id);
-                }}
-                className="opacity-60 group-hover:opacity-100"
-                title="Закрыть вкладку"
-              >
-                <X size={14} />
-              </span>
-            </button>
+            <div key={t.id} className={`group max-w-[240px] flex items-center rounded-lg transition ${t.id === activeId ? "bg-white/20 text-white" : "bg-transparent text-white/80 hover:bg-white/10 hover:text-white"}`}>
+              <button type="button" role="tab" aria-selected={t.id === activeId} tabIndex={t.id === activeId ? 0 : -1} onClick={() => { setActiveId(t.id); setNavigationError(""); }} className="min-w-0 truncate px-3 py-1.5 text-left" title={t.url}>{t.title}</button>
+              <button type="button" disabled={tabs.length === 1} onClick={() => closeTab(t.id)} className="mr-1 rounded p-1 opacity-60 hover:opacity-100 disabled:opacity-30" aria-label={`Закрыть вкладку ${t.title}`} title="Закрыть вкладку"><X size={14} /></button>
+            </div>
           ))}
           <button
             onClick={() => newTab()}
             className="ml-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20"
             title="Новая вкладка (Ctrl+T)"
+            aria-label="Новая вкладка"
           >
             <Plus size={16} />
           </button>
@@ -603,7 +582,7 @@ export default function BrowserAlt({
       </div>
 
       {/* Панель навигации */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={goBack}
@@ -612,6 +591,7 @@ export default function BrowserAlt({
             canGoBack ? "bg-white/5 hover:bg-white/10 text-white" : "bg-white/5 text-white/30 cursor-not-allowed"
           }`}
           title="Назад (Alt+←)"
+          aria-label="Назад"
         >
           <ArrowLeft size={18} />
         </button>
@@ -623,6 +603,7 @@ export default function BrowserAlt({
             canGoForward ? "bg-white/5 hover:bg-white/10 text-white" : "bg-white/5 text-white/30 cursor-not-allowed"
           }`}
           title="Вперёд (Alt+→)"
+          aria-label="Вперёд"
         >
           <ArrowRight size={18} />
         </button>
@@ -631,19 +612,25 @@ export default function BrowserAlt({
           onClick={refresh}
           className="px-2 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-white"
           title="Обновить (Ctrl+R)"
+          aria-label="Обновить"
         >
           <RotateCw size={18} />
         </button>
 
         {/* Адресная строка */}
-        <form onSubmit={onSubmit} className="flex-1 flex gap-2">
+        <form onSubmit={onSubmit} className="order-first flex min-w-0 basis-full gap-2 sm:order-none sm:basis-auto sm:flex-1">
           <input
             ref={addressRef}
             value={addressValue}
             onChange={(e) => setAddressValue(e.currentTarget.value)}
             onFocus={(e) => e.currentTarget.select()}
             placeholder="alt://home или alt://site/имя"
-            className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 outline-none text-white/90 placeholder-white/40"
+            aria-label="Адрес сайта"
+            aria-invalid={Boolean(navigationError)}
+            aria-describedby={navigationError ? "browser-address-error" : undefined}
+            autoComplete="off"
+            spellCheck={false}
+            className="min-w-0 flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 outline-none text-white/90 placeholder-white/40"
           />
           <button
             type="submit"
@@ -654,6 +641,12 @@ export default function BrowserAlt({
           </button>
         </form>
 
+        <button type="button" disabled={!canBookmark || Boolean(bookmarksError)} aria-label={bookmarked ? "Убрать страницу из закладок" : "Добавить страницу в закладки"}
+          aria-pressed={bookmarked} title={bookmarked ? "Убрать страницу из закладок" : "Добавить страницу в закладки"}
+          onClick={() => activeTab && currentPage && changeBookmark(activeTab.url, currentPage.title)}
+          className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white hover:bg-white/10 disabled:opacity-30"><Bookmark size={18} fill={bookmarked ? "currentColor" : "none"} /></button>
+        <button type="button" aria-expanded={bookmarksOpen} aria-controls="browser-bookmarks" onClick={() => setBookmarksOpen(value => !value)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white hover:bg-white/10">Закладки <span className="text-white/60">{bookmarks.length}</span></button>
+
         <button
           type="button"
           onClick={onOpenBuilder}
@@ -663,6 +656,15 @@ export default function BrowserAlt({
           Создать сайт
         </button>
       </div>
+
+      {navigationError && <p id="browser-address-error" role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 px-3 py-2 text-sm text-amber-100">{navigationError}</p>}
+      {bookmarksOpen && <section id="browser-bookmarks" aria-label="Закладки" className="rounded-xl border border-white/10 bg-white/5 p-4">
+        <p className="text-sm text-white/70">Закладки сохраняются на этом устройстве. Адреса указывают на локальные копии сайтов.</p>
+        {bookmarks.length === 0 ? <p className="mt-3 text-sm text-white/60">Закладок пока нет.</p> : <ul className="mt-3 divide-y divide-white/10">{bookmarks.map(item => <li key={item.url} className="flex items-center gap-2 py-2">
+          <button type="button" onClick={() => { setActiveUrl(item.url); setBookmarksOpen(false); }} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm text-white">{item.title}</span><span className="block truncate text-xs text-white/60">{item.url}</span></button>
+          <button type="button" onClick={() => changeBookmark(item.url, item.title)} className="rounded border border-white/20 px-2 py-1 text-xs text-white/80" aria-label={`Удалить закладку ${item.title}`}>Удалить</button>
+        </li>)}</ul>}
+      </section>}
 
       {/* Контент вкладки */}
       {renderPage()}

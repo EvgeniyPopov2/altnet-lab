@@ -17,6 +17,7 @@ import NetStatus from "./components/NetStatus";
 import BridgeConnection from "./components/BridgeConnection";
 import MobileNavigation from "./components/MobileNavigation";
 import { usePrivacyProfile } from "./core/settings/profile";
+import { createBrowserTab } from "./core/sites/browserNavigation";
 import { SecurityCoach } from "./core/security/coach";
 import { pushSecurityEvent } from "./core/security/bus";
 import { dismiss, isDismissed } from "./core/security/storage";
@@ -93,6 +94,9 @@ export default function App() {
   const [rail, setRail] = useState<RailView>("global");
   const [builderOpen, setBuilderOpen] = useState(false);
   const [browserNav, setBrowserNav] = useState<{ url: string; token: number } | null>(null);
+  // Вкладки живут только в памяти приложения и не теряются при открытии конструктора.
+  const [browserTabs, setBrowserTabs] = useState(() => [createBrowserTab()]);
+  const [browserActiveId, setBrowserActiveId] = useState(() => browserTabs[0].id);
   const [qsOpen, setQsOpen] = useState(false);
   const [voiceVideoOpen, setVoiceVideoOpen] = useState(false);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
@@ -618,7 +622,7 @@ export default function App() {
                   /></Suspense>
                 ) : (
                   <Suspense fallback={<div role="status" className="p-4 text-sm">Открываем браузер…</div>}>
-                    <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} navRequest={browserNav} />
+                    <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} navRequest={browserNav} onNavConsumed={token => setBrowserNav(current => current?.token === token ? null : current)} tabs={browserTabs} setTabs={setBrowserTabs} activeId={browserActiveId} setActiveId={setBrowserActiveId} />
                   </Suspense>
                 ))}
 
