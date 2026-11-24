@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import http.client
 import re
+import secrets
 import socket
 import struct
 import threading
@@ -46,9 +47,16 @@ def connect_onion(proxy_port, host):
     sock = socket.create_connection(("127.0.0.1", proxy_port), 5)
     try:
         sock.settimeout(20)
-        sock.sendall(b"\x05\x01\x00")
-        if read_exact(sock, 2) != b"\x05\x00":
+        # Tor uses these values as circuit-isolation tokens, not as account credentials.
+        # Offer no unauthenticated fallback: otherwise unrelated downloads could share
+        # the same SOCKS isolation context without the user knowing.
+        sock.sendall(b"\x05\x01\x02")
+        if read_exact(sock, 2) != b"\x05\x02":
             raise OSError("SOCKS negotiation failed")
+        token = secrets.token_hex(32).encode("ascii")
+        sock.sendall(b"\x01" + bytes([len(token)]) + token + b"\x01x")
+        if read_exact(sock, 2) != b"\x01\x00":
+            raise OSError("SOCKS isolation failed")
         name = host.encode("ascii")
         sock.sendall(b"\x05\x01\x00\x03" + bytes([len(name)]) + name + struct.pack("!H", 80))
         version, result, reserved, family = read_exact(sock, 4)

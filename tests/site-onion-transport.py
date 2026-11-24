@@ -33,9 +33,19 @@ class FakeSocks(socketserver.BaseRequestHandler):
     def handle(self):
         s = self.request
         s.settimeout(2)
-        if read_exact(s, 3) != b"\x05\x01\x00":
+        if read_exact(s, 3) != b"\x05\x01\x02":
             return
-        s.sendall(b"\x05\x00")
+        s.sendall(self.server.method_reply)
+        if self.server.method_reply != b"\x05\x02":
+            return
+        version, name_len = read_exact(s, 2)
+        name = read_exact(s, name_len)
+        password_len = read_exact(s, 1)[0]
+        password = read_exact(s, password_len)
+        self.server.credentials.append((version, name, password))
+        s.sendall(self.server.auth_reply)
+        if self.server.auth_reply != b"\x01\x00":
+            return
         header = read_exact(s, 5)
         name = read_exact(s, header[4])
         port = read_exact(s, 2)
@@ -59,6 +69,9 @@ class Server(socketserver.ThreadingTCPServer):
 class TransportTest(unittest.TestCase):
     def setUp(self):
         self.server = Server(("127.0.0.1", 0), FakeSocks)
+        self.server.method_reply = b"\x05\x02"
+        self.server.auth_reply = b"\x01\x00"
+        self.server.credentials = []
         self.server.response = b"HTTP/1.1 200 OK\r\nContent-Type: application/vnd.ipld.car\r\nContent-Length: 4\r\n\r\ncar!"
         self.worker = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.worker.start()
@@ -76,6 +89,21 @@ class TransportTest(unittest.TestCase):
         self.assertEqual(self.server.destination, (b"\x05\x01\x00\x03", onion().encode(), b"\x00\x50"))
         self.assertIn(("GET /ipfs/" + CID + "?format=car HTTP/1.1\r\n").encode(), self.server.request_data)
         self.assertIn(("Host: " + onion() + "\r\n").encode(), self.server.request_data)
+
+    def test_each_fetch_uses_a_new_socks_isolation_token(self):
+        self.assertEqual(self.fetch(), b"car!")
+        self.assertEqual(self.fetch(), b"car!")
+        first, second = self.server.credentials
+        self.assertEqual((first[0], first[2]), (1, b"x"))
+        self.assertEqual(len(first[1]), 64)
+        self.assertNotEqual(first[1], second[1])
+
+    def test_reject_proxy_without_isolation_and_failed_auth(self):
+        for method, auth in ((b"\x05\x00", b"\x01\x00"), (b"\x05\x02", b"\x01\x01")):
+            with self.subTest(method=method, auth=auth):
+                self.server.method_reply, self.server.auth_reply = method, auth
+                with self.assertRaises(OSError):
+                    self.fetch()
 
     def test_reject_untrusted_address_before_connect(self):
         invalid = ["example.com", "127.0.0.1", "http://" + onion(), onion() + "/", "a" * 56 + ".onion", onion().upper(), onion() + ":80"]

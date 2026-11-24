@@ -77,7 +77,7 @@ class Instance:
 
         plugin = "./" + executable.name
         transport_name = self.lines[0].split()[0]
-        options = ["DataDirectory " + path("data"), "ClientOnly 1", "UseBridges 1", "SocksPort auto",
+        options = ["DataDirectory " + path("data"), "ClientOnly 1", "UseBridges 1", "SocksPort auto IsolateSOCKSAuth",
                    "ControlPort auto", "ControlPortWriteToFile " + path("control.addr"), "CookieAuthentication 1",
                    "CookieAuthFile " + path("control.cookie"), "SafeLogging 1", "AvoidDiskWrites 1",
                    f"__OwningControllerProcess {os.getpid()}", f"ClientTransportPlugin {transport_name} exec {plugin}"]

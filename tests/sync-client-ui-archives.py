@@ -87,6 +87,16 @@ class SyncArchivesTests(unittest.TestCase):
             self.assertEqual(archive.extractfile("AltNet/scripts/tor-bridge-catalog.py").read(), b"verified catalog")
         self.assertIn("AltNet/scripts/tor-bridge-catalog.py", json.loads((self.output / "SHA256.json").read_text(encoding="utf-8"))["replaced_scripts"])
 
+    def test_updates_managed_tor_launcher_in_both_formats(self):
+        launcher = self.root / "bridge_tor.py"
+        launcher.write_text("isolated Tor", encoding="utf-8")
+        result = self.run_sync("--bridge-tor", str(launcher))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.output / "AltNet-Client-windows-x86_64.zip") as archive:
+            self.assertEqual(archive.read("AltNet/scripts/bridge_tor.py"), b"isolated Tor")
+        with tarfile.open(self.output / "AltNet-Client-linux-x86_64.tar.gz") as archive:
+            self.assertEqual(archive.extractfile("AltNet/scripts/bridge_tor.py").read(), b"isolated Tor")
+
 
 if __name__ == "__main__":
     unittest.main()
