@@ -19,7 +19,7 @@ export function readBookmarks(storage: StorageReader): BrowserBookmark[] {
         typeof item.createdAt !== "number" || !Number.isFinite(item.createdAt)) throw new Error("Список закладок повреждён. Данные не изменены.");
     let address;
     try { address = parseBrowserAddress(item.url); } catch { throw new Error("Список закладок повреждён. Данные не изменены."); }
-    if (address.kind !== "site" || address.url !== item.url || seen.has(item.url)) throw new Error("Список закладок повреждён. Данные не изменены.");
+    if ((address.kind !== "site" && address.kind !== "ipfs") || address.url !== item.url || seen.has(item.url)) throw new Error("Список закладок повреждён. Данные не изменены.");
     seen.add(item.url);
     return { url: item.url, title: item.title, createdAt: item.createdAt };
   });
@@ -27,11 +27,11 @@ export function readBookmarks(storage: StorageReader): BrowserBookmark[] {
 
 export function toggleBookmark(storage: StorageWriter, url: string, title: string, now = Date.now()): BrowserBookmark[] {
   const address = parseBrowserAddress(url);
-  if (address.kind !== "site") throw new Error("В закладки можно добавить только локальную страницу сайта.");
+  if (address.kind !== "site" && address.kind !== "ipfs") throw new Error("В закладки можно добавить только локальную страницу сайта.");
   const current = readBookmarks(storage);
   const exists = current.some(item => item.url === address.url);
   if (!exists && current.length >= MAX_BOOKMARKS) throw new Error("Достигнут предел: 200 закладок.");
-  const safeTitle = String(title || "").trim().slice(0, 200) || address.slug;
+  const safeTitle = String(title || "").trim().slice(0, 200) || (address.kind === "site" ? address.slug : address.root);
   if (!Number.isFinite(now)) throw new Error("Некорректное время создания закладки.");
   const next = exists ? current.filter(item => item.url !== address.url) : [{ url: address.url, title: safeTitle, createdAt: now }, ...current];
   storage.setItem(BOOKMARKS_KEY, JSON.stringify(next));

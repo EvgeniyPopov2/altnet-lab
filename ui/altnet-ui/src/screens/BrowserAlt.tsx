@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, Bookmark, Plus, RotateCw, X } from "lucide-react
 import LocalSiteFrame from "../components/LocalSiteFrame";
 import { BOOKMARKS_KEY, readBookmarks, toggleBookmark, type BrowserBookmark } from "../core/sites/browserBookmarks";
 import { browserTabTitle, createBrowserTab, parseBrowserAddress, type BrowserTab } from "../core/sites/browserNavigation";
+import type { VerifiedSite } from "../core/sites/ipfsSitePackage";
 import {
   deletePublishedSite,
   getPublishedSite,
@@ -75,6 +76,7 @@ export default function BrowserAlt({
   const [carError, setCarError] = useState("");
   const carImportBusy = useRef(false);
   const [siteState, setSiteState] = useState<{ slug: string; loading: boolean; site: PublishedSite | null; error: string } | null>(null);
+  const [ipfsState, setIpfsState] = useState<{ root: string; loading: boolean; site: VerifiedSite | null; error: string } | null>(null);
   const siteFrameRef = useRef<HTMLIFrameElement>(null);
   const deletingSites = useRef(new Set<string>());
 
@@ -115,6 +117,21 @@ export default function BrowserAlt({
     return () => { active = false; };
   }, [activeTab?.url, activeTab?.reloadToken, publishedToken]);
 
+  useEffect(() => {
+    let address;
+    try { address = parseBrowserAddress(activeTab?.url || ""); } catch { setIpfsState(null); return; }
+    if (address.kind !== "ipfs") { setIpfsState(null); return; }
+    let active = true;
+    const root = address.root;
+    setIpfsState({ root, loading: true, site: null, error: "" });
+    import("../core/sites/ipfsSiteCache").then(({ readCachedSite }) => readCachedSite(root)).then(site => {
+      if (active) setIpfsState({ root, loading: false, site, error: "" });
+    }, error => {
+      if (active) setIpfsState({ root, loading: false, site: null, error: error instanceof Error ? error.message : "Не удалось проверить локальную копию IPFS." });
+    });
+    return () => { active = false; };
+  }, [activeTab?.url, activeTab?.reloadToken]);
+
   const activeUrl = activeTab?.url;
   useEffect(() => {
     if (activeUrl !== undefined) setAddressValue(activeUrl);
@@ -126,8 +143,10 @@ export default function BrowserAlt({
   const activeSlug = parseSiteSlug(activeTab?.url || "");
   const activePath = parseSitePath(activeTab?.url || "");
   const currentSite = activeSlug && siteState?.slug === activeSlug ? siteState.site : null;
-  const currentPage = currentSite && activePath === "index.html" ? { title: currentSite.title } : currentSite?.pages?.find(page => page.path === activePath);
-  const canBookmark = Boolean(currentSite && currentPage && activeTab);
+  const activeAddress = useMemo(() => { try { return parseBrowserAddress(activeTab?.url || ""); } catch { return null; } }, [activeTab?.url]);
+  const currentIpfs = activeAddress?.kind === "ipfs" && ipfsState?.root === activeAddress.root ? ipfsState.site : null;
+  const currentPage = activeAddress?.kind === "ipfs" ? currentIpfs?.pages.find(page => page.path === activeAddress.path) : currentSite && activePath === "index.html" ? { title: currentSite.title } : currentSite?.pages?.find(page => page.path === activePath);
+  const canBookmark = Boolean((currentSite || currentIpfs) && currentPage && activeTab);
   const bookmarked = !!activeTab && bookmarks.some(item => item.url === activeTab.url);
 
   const changeBookmark = (url: string, title: string) => {
@@ -168,20 +187,22 @@ export default function BrowserAlt({
   useEffect(() => {
     const slug = parseSiteSlug(activeTab?.url || "");
     const site = slug && siteState?.slug === slug ? siteState.site : null;
-    if (!slug || !site) return;
-    const pages = site.pages?.map(page => page.path) ?? ["index.html"];
+    const ipfs = activeAddress?.kind === "ipfs" && ipfsState?.root === activeAddress.root ? ipfsState.site : null;
+    if (!site && !ipfs) return;
+    const pages = ipfs ? ipfs.pages.map(page => page.path) : site?.pages?.map(page => page.path) ?? ["index.html"];
     const onMessage = (event: MessageEvent) => {
       if (event.source !== siteFrameRef.current?.contentWindow || !event.data || event.data.type !== "altnet.local-page" ||
           typeof event.data.path !== "string" || !pages.includes(event.data.path)) return;
       const fragment = event.data.fragment;
       if (fragment !== undefined && (typeof fragment !== "string" || (fragment !== "" && !/^[a-zA-Z0-9_-]{1,128}$/.test(fragment)))) return;
-      setActiveUrl(`alt://site/${slug}${event.data.path === "index.html" ? "" : `/${event.data.path}`}${fragment ? `#${fragment}` : ""}`);
+      const base = ipfs ? `ipfs://${ipfs.root}` : `alt://site/${slug}`;
+      setActiveUrl(`${base}${event.data.path === "index.html" ? "" : `/${event.data.path}`}${fragment ? `#${fragment}` : ""}`);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
     // Функция привязана к активной вкладке и публикации.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId, activeTab?.url, siteState]);
+  }, [activeId, activeTab?.url, siteState, ipfsState, activeAddress]);
 
   const deletePublication = async (slug: string, returnHome: boolean) => {
     if (deletingSites.current.has(slug)) return;
@@ -287,7 +308,7 @@ export default function BrowserAlt({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, tabs, activeTab]);
 
-  // Навигация извне (например: конструктор “Опубликовать” -> открыть alt://site/...) 
+  // Навигация извне (например: конструктор “Опубликовать” -> открыть alt://site/...)
   useEffect(() => {
     if (!navRequest?.url) return;
     setPublishedToken(Date.now());
@@ -317,7 +338,7 @@ export default function BrowserAlt({
     setCarLoading(true);
     setCarError("");
     try {
-      const {parseSiteRoot,verifySitePackage,SITE_MAX_CAR_BYTES} = await import("../core/sites/ipfsSitePackage");
+      const {parseSiteRoot,SITE_MAX_CAR_BYTES} = await import("../core/sites/ipfsSitePackage");
       const root = parseSiteRoot(carCid.trim()).toString();
       let data: Uint8Array;
       if (source === "file") {
@@ -327,7 +348,8 @@ export default function BrowserAlt({
         const { fetchOnionCar } = await import("../core/sites/onionCar");
         data = await fetchOnionCar(onionAddress.trim(), root);
       }
-      const site = await verifySitePackage(data, root);
+      const { cacheVerifiedSite } = await import("../core/sites/ipfsSiteCache");
+      const site = await cacheVerifiedSite(data, root);
       const home = site.pages.find(page => page.path === "index.html");
       if (!home) throw new Error("В пакете нет главной страницы.");
       const meta = await upsertPublishedSite({title:site.title || home.title || "Сайт",html:home.html,...(site.pages.length > 1 ? {pages:site.pages} : {})});
@@ -349,7 +371,7 @@ export default function BrowserAlt({
         <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
           <div className="text-white/90 text-xl font-semibold mb-2">Домашняя .alt</div>
           <div className="text-white/70 text-sm">
-            Откройте локальный сайт по адресу <code className="text-white/90">alt://site/имя</code> или выберите его ниже.
+            Откройте локальный сайт по адресу <code className="text-white/90">alt://site/имя</code> или ранее проверенную копию по <code className="text-white/90">ipfs://CID</code>.
           </div>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -526,10 +548,32 @@ export default function BrowserAlt({
     );
   };
 
+  const renderIpfs = (address: Extract<NonNullable<typeof activeAddress>, { kind: "ipfs" }>) => {
+    const state = ipfsState?.root === address.root ? ipfsState : null;
+    if (!state || state.loading) return <div role="status" className="p-6 text-sm text-white/70">Проверяем локальную копию IPFS…</div>;
+    if (state.error) return <div role="alert" className="rounded-2xl border border-amber-400/50 p-6 text-amber-100">{state.error}</div>;
+    if (!state.site) return <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
+      <div className="text-xl font-semibold">Локальная копия IPFS не найдена</div>
+      <p className="mt-2 text-sm">Автоматический поиск в сети пока не подключён. Импортируйте CAR с этим CID на главной странице.</p>
+      <button type="button" className="mt-3 rounded bg-white/10 px-3 py-2" onClick={() => { setCarCid(address.root); setActiveUrl("alt://home"); }}>На главную</button>
+    </div>;
+    const page = state.site.pages.find(item => item.path === address.path);
+    if (!page) return <div role="alert" className="p-6 text-amber-100">Страница отсутствует в проверенном пакете. <button type="button" className="underline" onClick={() => setActiveUrl(`ipfs://${address.root}`)}>На главную сайта</button></div>;
+    return <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <div className="min-w-0"><div className="truncate font-semibold text-white/90">{page.title}</div><div className="truncate text-xs text-white/50">{address.url}</div></div>
+        <button type="button" onClick={() => copyText(address.url)} className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80" title="Скопировать адрес">Копировать</button>
+      </div>
+      <p className="px-3 py-2 text-xs text-[#c9d0e9]">Локальная копия проверена по CID. Авторство не подтверждено; внешние ресурсы отключены.</p>
+      <LocalSiteFrame key={`${activeTab.id}:${address.url}:${activeTab.reloadToken}`} frameRef={siteFrameRef} title={page.title} html={page.html} paths={state.site.pages.map(item => item.path)} fragment={address.fragment} />
+    </div>;
+  };
+
   // Контент вкладки
   const renderPage = () => {
     const url = activeTab?.url || "alt://home";
     if (url === "alt://home") return renderHome();
+    if (activeAddress?.kind === "ipfs") return renderIpfs(activeAddress);
     if (url.startsWith("alt://site/")) {
       const slug = parseSiteSlug(url);
       if (!slug) return <div role="alert" className="p-6 text-amber-100">Некорректный адрес сайта.</div>;

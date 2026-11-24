@@ -6,6 +6,8 @@ import { sha256 } from "multiformats/hashes/sha2";
 import { equals as digestEquals } from "multiformats/hashes/digest";
 import { isRecord } from "../records";
 import type { PublishedPage } from "./publishedDb";
+import { parseSiteRoot } from "./siteCid";
+export { parseSiteRoot } from "./siteCid";
 
 // Ограничения применяются до разбора и до выделения памяти под страницы.
 export const SITE_CHUNK_BYTES = 256 * 1024;
@@ -34,16 +36,6 @@ function assertCid(cid: CID, codec: number) {
   if (cid.version !== 1 || cid.code !== codec || cid.multihash.code !== sha256.code || cid.multihash.size !== 32) {
     throw new Error("Неподдерживаемый формат CID сайта.");
   }
-}
-
-/** Только канонический CIDv1 DAG-CBOR с SHA-256, без путей и произвольных схем. */
-export function parseSiteRoot(value: string): CID {
-  if (typeof value !== "string" || value.length > 120) throw new Error("Некорректный адрес сайта.");
-  let cid: CID;
-  try { cid = CID.parse(value); } catch { throw new Error("Некорректный адрес сайта."); }
-  assertCid(cid, cbor.code);
-  if (cid.toString() !== value) throw new Error("Используйте канонический адрес CIDv1.");
-  return cid;
 }
 
 async function makeBlock(codec: number, bytes: Uint8Array): Promise<Block> {

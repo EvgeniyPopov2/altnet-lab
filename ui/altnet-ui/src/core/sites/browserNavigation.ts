@@ -1,7 +1,10 @@
+import { parseSiteRoot } from "./siteCid";
+
 /** Разбор адресов локального браузера. Эта функция никогда не выполняет сетевой запрос. */
 export type BrowserAddress =
   | { kind: "home"; url: "alt://home" }
   | { kind: "site"; url: string; slug: string; path: string; fragment: string }
+  | { kind: "ipfs"; url: string; root: string; path: string; fragment: string }
   | { kind: "external"; url: string };
 
 export type BrowserTab = { id: string; title: string; url: string; history: string[]; cursor: number; reloadToken: number };
@@ -11,6 +14,7 @@ export function browserTabTitle(url: string): string {
     const address = parseBrowserAddress(url);
     if (address.kind === "home") return ".alt старт";
     if (address.kind === "site") return address.slug + (address.path === "index.html" ? "" : " · " + address.path);
+    if (address.kind === "ipfs") return address.root.slice(0, 12) + "…" + (address.path === "index.html" ? "" : " · " + address.path);
     return new URL(address.url).host;
   } catch { return ".alt"; }
 }
@@ -33,6 +37,12 @@ export function parseBrowserAddress(raw: string): BrowserAddress {
     const path = page || "index.html";
     return { kind: "site", slug, path, fragment, url: `alt://site/${slug}${page && page !== "index.html" ? "/" + page : ""}${fragment ? "#" + fragment : ""}` };
   }
+  const ipfs = /^ipfs:\/\/([a-z2-7]{1,120})(?:\/([a-z0-9][a-z0-9-]{0,63}\.html))?(?:#([a-zA-Z0-9_-]{1,128}))?$/.exec(value);
+  if (ipfs) {
+    const root = parseSiteRoot(ipfs[1]).toString();
+    const path = ipfs[2] || "index.html", fragment = ipfs[3] || "";
+    return { kind: "ipfs", root, path, fragment, url: `ipfs://${root}${path !== "index.html" ? "/" + path : ""}${fragment ? "#" + fragment : ""}` };
+  }
   if (/^http:\/\//i.test(value)) {
     throw new Error("Незащищённый HTTP не поддерживается. Используйте адрес HTTPS.");
   }
@@ -42,5 +52,5 @@ export function parseBrowserAddress(raw: string): BrowserAddress {
     if (!url.hostname || url.username || url.password) throw new Error("Адрес с логином или паролем не поддерживается.");
     return { kind: "external", url: url.href };
   }
-  throw new Error("Адрес не поддерживается. Используйте alt://home или alt://site/имя.");
+  throw new Error("Адрес не поддерживается. Используйте alt://home, alt://site/имя или ipfs://CID.");
 }

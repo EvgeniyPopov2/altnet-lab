@@ -18,6 +18,13 @@ describe("адреса браузера Alt", () => {
     expect(() => parseBrowserAddress("https://user:password@example.invalid/")).toThrow();
   });
 
+  it("принимает только канонический CID сайта и допустимую страницу IPFS", () => {
+    const root = "bafyreigtyjaoj5k2suhsp5ntybwqu6m7ljsn2dawfsvnctymnj4p3muv3i";
+    expect(parseBrowserAddress(`ipfs://${root}/index.html#top`)).toMatchObject({ kind: "ipfs", root, path: "index.html", url: `ipfs://${root}#top` });
+    expect(parseBrowserAddress(`ipfs://${root}/about.html`)).toMatchObject({ kind: "ipfs", path: "about.html" });
+    for (const bad of [`ipfs://${root}/../about.html`, `ipfs://${root}?x=1`, `ipfs://${root.toUpperCase()}`, "ipfs://example.com/", `ipfs://${root}/other.js`]) expect(() => parseBrowserAddress(bad)).toThrow();
+  });
+
   it.each(["http://example.invalid/", "HTTP://example.invalid/", "http://127.0.0.1/"])("отклоняет незащищённый веб-адрес %s", input => {
     expect(() => parseBrowserAddress(input)).toThrow("Незащищённый HTTP не поддерживается");
   });

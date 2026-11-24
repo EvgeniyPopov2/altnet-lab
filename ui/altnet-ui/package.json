@@ -7,6 +7,7 @@
     "test:browsers": "node tests/builder-browsers.mjs",
     "test:browser-local": "node tests/browser-local-ui.mjs",
     "test:ipfs-ui": "node tests/ipfs-car-ui.mjs",
+    "test:tor-browser": "node tests/tor-browser-ipfs.mjs",
     "test:onion-ui": "node tests/onion-car-ui.mjs",
     "test:onion-integration": "node tests/onion-car-integration.mjs",
     "test:onion-share": "node tests/onion-share-e2e.mjs",

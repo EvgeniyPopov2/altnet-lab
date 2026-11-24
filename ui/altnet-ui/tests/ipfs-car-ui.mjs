@@ -89,6 +89,38 @@ try {
   await page.frameLocator('iframe[title="Контакты"]').getByText('Вторая страница сайта').waitFor();
   assert.equal(await address.inputValue(),aboutUrl);
 
+  // CID is a real content address: reopen from the verified local CAR,
+  // navigate inside it, persist a bookmark and re-check on every read.
+  await address.fill(`ipfs://${root}`);
+  await address.press('Enter');
+  await home.getByText('Привет из редактора').waitFor();
+  await home.getByRole('link',{name:'Контакты'}).click();
+  await page.frameLocator('iframe[title="Контакты"]').getByText('Вторая страница сайта').waitFor();
+  const ipfsUrl = `ipfs://${root}/about.html`;
+  assert.equal(await address.inputValue(),ipfsUrl);
+  await page.getByRole('button',{name:'Добавить страницу в закладки'}).click();
+  await page.reload();
+  await page.getByRole('button',{name:'Браузер .alt',exact:true}).click();
+  await page.getByRole('button',{name:/^Закладки /}).click();
+  await page.getByRole('region',{name:'Закладки'}).getByRole('button',{name:/^Контакты/}).first().click();
+  await page.frameLocator('iframe[title="Контакты"]').getByText('Вторая страница сайта').waitFor();
+  assert.equal(await address.inputValue(),ipfsUrl);
+  await page.evaluate(async ({root, damaged}) => {
+    const db = await new Promise((resolve,reject) => { const req = indexedDB.open('altnet-ipfs-site-cache',1); req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error); });
+    await new Promise((resolve,reject) => { const tx = db.transaction('cars','readwrite'); tx.objectStore('cars').put(new Uint8Array(damaged).buffer,root); tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error); });
+    db.close();
+  }, {root,damaged:[...damaged]});
+  await page.getByRole('button',{name:'Обновить',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'целостности'}).waitFor();
+  assert.equal(await page.locator('iframe[title="Контакты"]').count(),0);
+  const absent = 'bafyreigtyjaoj5k2suhsp5ntybwqu6m7ljsn2dawfsvnctymnj4p3muv3i';
+  await address.fill(`ipfs://${absent}`);
+  await address.press('Enter');
+  await page.getByText('Локальная копия IPFS не найдена').waitFor();
+  await page.getByRole('button',{name:'На главную',exact:true}).click();
+  await page.getByText('Открыть IPFS-пакет CAR с устройства',{exact:true}).click();
+  assert.equal(await page.getByLabel('CID сайта для импорта').inputValue(),absent);
+
   const bundled = await build({entryPoints:['src/core/sites/ipfsSitePackage.ts'],bundle:true,platform:'node',format:'esm',write:false});
   const packer = await import('data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].contents).toString('base64'));
   const malicious = await packer.createSitePackage('Непроверенный автор', [{path:'index.html',title:'Главная',html:'<!doctype html><p>Текст полученного сайта</p><script>document.body.dataset.attacked="yes"</script><iframe src="https://example.invalid/frame"></iframe><img src="https://example.invalid/tracker" onerror="document.body.dataset.attacked=1"><style>p{background-image:url(https://example.invalid/css)}</style>'}]);
