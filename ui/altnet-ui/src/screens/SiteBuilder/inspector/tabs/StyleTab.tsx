@@ -2,6 +2,8 @@ import { useClassStyle } from "../../styleClassesContext";
 import { blendModes } from "../../textAppearance";
 import SpacingControl from "./SpacingControl";
 import CornerControl from "./CornerControl";
+import BlockCorners from "./BlockCorners";
+import { blockCornerKeys } from "../../blockCorners";
 import { corners } from "../../corners";
 import type { Block, StyleLayer } from "../../types";
 import { useRef, useState } from "react";
@@ -58,6 +60,9 @@ export default function StyleTab({ block, onPatch, device }: Props) {
     onPatch((latest) => {
       const all = collection === "styleByBp" ? latest.styleByBp || {} : collection === "buttonStyleByBp" && latest.type === "btn" ? latest.buttonStyleByBp || {} : collection === "imageStyleByBp" && latest.type === "img" ? latest.imageStyleByBp || {} : {};
       const next: StyleLayer = { ...all[device] };
+      if (collection === "styleByBp" && key === "br" && parsed !== undefined) {
+        for (const corner of blockCornerKeys) delete next[corner];
+      }
       if ((key === "radius" || key === "hoverRadius" || key === "activeRadius") && parsed !== undefined) {
         for (const [corner] of corners) delete next[key + corner];
       }
@@ -253,6 +258,7 @@ export default function StyleTab({ block, onPatch, device }: Props) {
       </>}
     </div></details>
     {slider("styleByBp", "br", "Скругление, px", 0, 512)}
+    <BlockCorners key={block.id + device} block={block} device={device} onPatch={onPatch} />
     {slider("styleByBp", "w", "Ширина блока, %", 1, 200, 100)}
     {slider("styleByBp", "minh", "Минимальная высота блока, px", 0, 1200)}
     {slider("styleByBp", "op", "Непрозрачность блока, %", 0, 100, 100)}

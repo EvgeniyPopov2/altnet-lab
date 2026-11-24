@@ -12,6 +12,7 @@ import { renderBlockView } from "./SiteBuilder/blocks";
 import { createInsertedBlock, editableLegacyLayout } from "./SiteBuilder/registry";
 import { spacingStyle } from "./SiteBuilder/boxDimensions";
 import { backgroundStyle } from "./SiteBuilder/backgroundStyle";
+import { blockCornerStyle } from "./SiteBuilder/blockCorners";
 import { blockShadowStyle } from "./SiteBuilder/blockShadowStyle";
 import { advancedLayoutStyle } from "./SiteBuilder/advancedLayoutStyle";
 import { transformStyle } from "./SiteBuilder/transforms";
@@ -641,6 +642,7 @@ export default function SiteBuilder({
         ...(s.bs ? { borderStyle: s.bs } : {}),
         ...(s.bc ? { borderColor: s.bc } : {}),
         ...(s.br != null ? { borderRadius: Number(s.br) } : {}),
+        ...blockCornerStyle(s),
 
         ...(s.sh ? { boxShadow: s.sh } : {}),
         ...blockShadowStyle(s),

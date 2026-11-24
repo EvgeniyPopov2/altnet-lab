@@ -49,6 +49,16 @@ async function verifyDownloadedPage(browser, url) {
     await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
     await page.getByRole("button", { name: "Создать сайт", exact: true }).click();
     await page.locator('[data-styled-block="open"]').waitFor();
+    await page.locator('[data-canvas-block="body"] .cursor-pointer').click();
+    await page.locator('#inspector-tab-style').click();
+    await page.getByLabel('Углы блока — связать').click();
+    await page.getByLabel('Угол блока — верхний левый').fill('28');
+    await page.getByLabel('Угол блока — верхний правый').fill('8');
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-styled-block="body"]')).borderTopLeftRadius === '28px');
+    assert.equal(await page.locator('[data-styled-block="body"]').evaluate(e => getComputedStyle(e).borderTopRightRadius), '8px');
+    await page.getByRole('button', {name:'Mobile', exact:true}).click();
+    await page.locator('label').filter({hasText:'Скругление, px'}).locator('input[type=number]').fill('12');
+    await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-styled-block="body"]')).borderTopLeftRadius === '12px');
     const [file] = await Promise.all([
       page.waitForEvent("download"),
       page.getByRole("button", { name: "Экспорт HTML", exact: true }).click(),
@@ -63,6 +73,11 @@ async function verifyDownloadedPage(browser, url) {
     await published.route(href, (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: html }));
     await published.goto(href);
     assert.equal(await published.locator("main strong").first().textContent(), "Книга");
+    assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopLeftRadius), '28px');
+    assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopRightRadius), '8px');
+    await published.setViewportSize({width:375,height:800});
+    assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopLeftRadius), '12px');
+    await published.setViewportSize({width:1440,height:900});
     const textPath = published.locator("svg textPath");
     assert.ok(await textPath.evaluate((e) => e.getComputedTextLength() > 10));
     const opener = published.getByRole("link", { name: "Контакты", exact: true }),
@@ -79,6 +94,7 @@ async function verifyDownloadedPage(browser, url) {
       richText: true,
       textPath: true,
       popupKeyboard: true,
+      responsiveCorners: true,
     };
   } finally {
     await context.close();

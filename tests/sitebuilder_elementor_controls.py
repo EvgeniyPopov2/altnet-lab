@@ -71,6 +71,11 @@ def run(case, js, wait, call, directory, screenshot=None):
         js("[...document.querySelectorAll('.builder-inspector summary')].find(e=>e.textContent==='Тень блока').click()")
         js("editorQA.change(editorQA.field('Тип тени блока'),'outer')")
         js("editorQA.change(editorQA.field('Смещение тени блока по X, px'),5)")
+        js("document.querySelector('[aria-label=\"Углы блока — связать\"]').click()")
+        js("editorQA.change(document.querySelector('[aria-label=\"Угол блока — верхний левый\"]'),28)")
+        js("editorQA.change(document.querySelector('[aria-label=\"Угол блока — верхний правый\"]'),8)")
+        wait("editorQA.saved().blocks[0].styleByBp?.desktop?.blockCornerTopLeft===28 && editorQA.saved().blocks[0].styleByBp?.desktop?.blockCornerTopRight===8")
+        assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).borderTopLeftRadius")=="28px"
         wait("editorQA.saved().blocks[0].styleByBp?.desktop?.gradientAngle===90")
         assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).backgroundImage").startswith('linear-gradient(90deg, rgb(255, 0, 0)')
         assert js("getComputedStyle(document.querySelector('[data-styled-block=para]')).boxShadow").startswith('rgba(0, 0, 0, 0.25) 5px')
@@ -78,6 +83,8 @@ def run(case, js, wait, call, directory, screenshot=None):
             Path(screenshot).write_bytes(base64.b64decode(call("Page.captureScreenshot", {"format":"png"})["data"]))
         js("[...document.querySelectorAll('.builder-inspector button')].find(e=>e.textContent==='Mobile').click()")
         assert js("document.querySelector('[aria-label=\"Выбрать: Первый цвет градиента (HEX)\"]').value")=="#ff0000"
+        js("editorQA.change(editorQA.field('Скругление, px'),12)")
+        wait("getComputedStyle(document.querySelector('[data-styled-block=para]')).borderTopLeftRadius==='12px'")
         js("editorQA.change(editorQA.field('Тип градиента'),'radial')")
         js("editorQA.change(editorQA.field('Центр градиента по X, %'),25)")
         wait("editorQA.saved().blocks[0].styleByBp?.mobile?.gradientX===25")
@@ -86,8 +93,11 @@ def run(case, js, wait, call, directory, screenshot=None):
         wait("!!editorQA.doc()?.querySelector('.sb-style-0')")
         assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).backgroundImage").startswith('linear-gradient(90deg')
         assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).boxShadow").startswith('rgba(0, 0, 0, 0.25) 5px')
+        assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).borderTopLeftRadius")=="28px"
+        assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).borderTopRightRadius")=="8px"
         js("document.getElementById('export-check').style.width='375px'")
         wait("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).backgroundImage.startsWith('radial-gradient')")
+        assert js("getComputedStyle(editorQA.doc().querySelector('.sb-style-0')).borderTopLeftRadius")=="12px"
     elif case == "popup":
         js("editorQA.export(true)")
         wait("!!editorQA.doc()?.querySelector('dialog[data-popup-options]')")

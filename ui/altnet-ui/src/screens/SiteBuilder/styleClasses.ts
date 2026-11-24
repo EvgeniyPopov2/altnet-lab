@@ -1,6 +1,6 @@
 import { asRecord, isRecord } from "../../core/records";
 import { cellsOf, findBlock, lockedPath, updateBlock } from "./layoutTree";
-import { resolveResponsiveStyle } from "./responsiveStyle";
+import { applyStyleLayer, resolveResponsiveStyle } from "./responsiveStyle";
 import type { Block, Device, DeviceStyles, Doc, StyleClass, StyleLayer } from "./types";
 
 const devices: Device[] = ["desktop", "tablet", "mobile"];
@@ -54,8 +54,8 @@ export function withStyleClasses(block: Block, rules: StyleClass[]): Block {
   const styleByBp: DeviceStyles = {};
   for (const device of devices) {
     let effective: StyleLayer = {};
-    for (const rule of applied) effective = { ...effective, ...layer(resolveResponsiveStyle({}, rule.layers, device)) };
-    styleByBp[device] = { ...effective, ...layer(resolveResponsiveStyle(block.style, block.styleByBp, device)) };
+    for (const rule of applied) effective = layer(applyStyleLayer(effective, resolveResponsiveStyle({}, rule.layers, device)));
+    styleByBp[device] = layer(applyStyleLayer(effective, resolveResponsiveStyle(block.style, block.styleByBp, device)));
   }
   const classes = [
     ...new Set([

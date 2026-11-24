@@ -15,6 +15,7 @@ import { buttonLinkOptions, placeholderDataUrl, sanitizeHref, externalLinkRels }
 import { resolveResponsiveStyle } from "../screens/SiteBuilder/responsiveStyle";
 import { spacingStyle } from "../screens/SiteBuilder/boxDimensions";
 import { backgroundStyle } from "../screens/SiteBuilder/backgroundStyle";
+import { blockCornerStyle } from "../screens/SiteBuilder/blockCorners";
 import { blockShadowStyle } from "../screens/SiteBuilder/blockShadowStyle";
 import { advancedLayoutStyle } from "../screens/SiteBuilder/advancedLayoutStyle";
 import { transformStyle } from "../screens/SiteBuilder/transforms";
@@ -396,6 +397,8 @@ function prepareStyleRules(model: SiteModel): string {
       values.push(key.replace(/[A-Z]/g, char => "-" + char.toLowerCase()) + ":" + value);
     }
     add("border-radius", style.br); add("border-width", style.bw);
+    for (const [key, value] of Object.entries(blockCornerStyle(style)))
+      values.push(key.replace(/[A-Z]/g, char => "-" + char.toLowerCase()) + ":" + value);
     if (typeof style.w === "number" && Number.isFinite(style.w)) values.push(`width:${Math.max(1, Math.min(200, style.w))}%`);
     if (typeof style.minh === "number" && Number.isFinite(style.minh)) values.push(`min-height:${Math.max(0, Math.min(1200, style.minh))}px`);
     if (typeof style.op === "number" && Number.isFinite(style.op)) values.push(`opacity:${Math.max(0, Math.min(100, style.op)) / 100}`);
