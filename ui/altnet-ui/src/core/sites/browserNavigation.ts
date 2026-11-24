@@ -33,7 +33,10 @@ export function parseBrowserAddress(raw: string): BrowserAddress {
     const path = page || "index.html";
     return { kind: "site", slug, path, fragment, url: `alt://site/${slug}${page && page !== "index.html" ? "/" + page : ""}${fragment ? "#" + fragment : ""}` };
   }
-  if (/^https?:\/\//i.test(value)) {
+  if (/^http:\/\//i.test(value)) {
+    throw new Error("Незащищённый HTTP не поддерживается. Используйте адрес HTTPS.");
+  }
+  if (/^https:\/\//i.test(value)) {
     let url: URL;
     try { url = new URL(value); } catch { throw new Error("Некорректный веб-адрес."); }
     if (!url.hostname || url.username || url.password) throw new Error("Адрес с логином или паролем не поддерживается.");

@@ -93,6 +93,9 @@ try {
     await address.fill("https://example.invalid/path");
     await address.press("Enter");
     await page.getByText("Сетевой запрос не выполнялся.", { exact: false }).waitFor();
+    await address.fill("http://example.invalid/path");
+    await address.press("Enter");
+    await page.getByRole("alert").filter({ hasText: "Незащищённый HTTP не поддерживается" }).waitFor();
     await page.getByRole("button", { name: /^Закладки / }).click();
     await page.getByRole("region", { name: "Закладки" }).getByRole("button", { name: /^Сайт Альфа/ }).click();
     await alpha.getByText("Альфа содержимое").waitFor();

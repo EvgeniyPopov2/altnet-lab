@@ -17,4 +17,8 @@ describe("адреса браузера Alt", () => {
     expect(parseBrowserAddress("https://example.invalid/test")).toEqual({ kind: "external", url: "https://example.invalid/test" });
     expect(() => parseBrowserAddress("https://user:password@example.invalid/")).toThrow();
   });
+
+  it.each(["http://example.invalid/", "HTTP://example.invalid/", "http://127.0.0.1/"])("отклоняет незащищённый веб-адрес %s", input => {
+    expect(() => parseBrowserAddress(input)).toThrow("Незащищённый HTTP не поддерживается");
+  });
 });
