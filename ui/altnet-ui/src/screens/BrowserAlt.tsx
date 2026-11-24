@@ -77,6 +77,8 @@ export default function BrowserAlt({
   const carImportBusy = useRef(false);
   const [siteState, setSiteState] = useState<{ slug: string; loading: boolean; site: PublishedSite | null; error: string } | null>(null);
   const [ipfsState, setIpfsState] = useState<{ root: string; loading: boolean; site: VerifiedSite | null; error: string } | null>(null);
+  const [ipfsDeleteError, setIpfsDeleteError] = useState("");
+  const deletingIpfs = useRef(new Set<string>());
   const siteFrameRef = useRef<HTMLIFrameElement>(null);
   const deletingSites = useRef(new Set<string>());
 
@@ -332,6 +334,19 @@ export default function BrowserAlt({
     }
   };
 
+  const deleteIpfsCopy = async (root: string) => {
+    if (deletingIpfs.current.has(root) || !window.confirm("Удалить локальную копию IPFS? Закладки и другие публикации сохранятся.")) return;
+    deletingIpfs.current.add(root);
+    try {
+      const { deleteCachedSite } = await import("../core/sites/ipfsSiteCache");
+      await deleteCachedSite(root);
+      setIpfsDeleteError("");
+      setIpfsState(current => current?.root === root ? { root, loading: false, site: null, error: "" } : current);
+    } catch {
+      setIpfsDeleteError("Не удалось удалить локальную копию IPFS; повторите попытку.");
+    } finally { deletingIpfs.current.delete(root); }
+  };
+
   const importCar = async (source: "file" | "onion") => {
     if (carImportBusy.current || (source === "file" && !carFile)) return;
     carImportBusy.current = true;
@@ -551,7 +566,7 @@ export default function BrowserAlt({
   const renderIpfs = (address: Extract<NonNullable<typeof activeAddress>, { kind: "ipfs" }>) => {
     const state = ipfsState?.root === address.root ? ipfsState : null;
     if (!state || state.loading) return <div role="status" className="p-6 text-sm text-white/70">Проверяем локальную копию IPFS…</div>;
-    if (state.error) return <div role="alert" className="rounded-2xl border border-amber-400/50 p-6 text-amber-100">{state.error}</div>;
+    if (state.error) return <div role="alert" className="rounded-2xl border border-amber-400/50 p-6 text-amber-100">{state.error} <button type="button" className="underline" onClick={() => void deleteIpfsCopy(address.root)}>Удалить копию IPFS</button></div>;
     if (!state.site) return <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
       <div className="text-xl font-semibold">Локальная копия IPFS не найдена</div>
       <p className="mt-2 text-sm">Автоматический поиск в сети пока не подключён. Импортируйте CAR с этим CID на главной странице.</p>
@@ -562,7 +577,8 @@ export default function BrowserAlt({
     return <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
       <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <div className="min-w-0"><div className="truncate font-semibold text-white/90">{page.title}</div><div className="truncate text-xs text-white/50">{address.url}</div></div>
-        <button type="button" onClick={() => copyText(address.url)} className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80" title="Скопировать адрес">Копировать</button>
+        <div className="flex gap-2"><button type="button" onClick={() => copyText(address.url)} className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80" title="Скопировать адрес">Копировать</button>
+          <button type="button" onClick={() => void deleteIpfsCopy(address.root)} className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80">Удалить копию IPFS</button></div>
       </div>
       <p className="px-3 py-2 text-xs text-[#c9d0e9]">Локальная копия проверена по CID. Авторство не подтверждено; внешние ресурсы отключены.</p>
       <LocalSiteFrame key={`${activeTab.id}:${address.url}:${activeTab.reloadToken}`} frameRef={siteFrameRef} title={page.title} html={page.html} paths={state.site.pages.map(item => item.path)} fragment={address.fragment} />
@@ -595,6 +611,7 @@ export default function BrowserAlt({
     <div className="space-y-3">
       {publishedError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{publishedError} <button type="button" className="underline" onClick={() => setPublishedToken(value => value + 1)}>Повторить</button></div>}
       {bookmarksError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{bookmarksError}</div>}
+      {ipfsDeleteError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{ipfsDeleteError}</div>}
       {copyStatus && <div role="status" className="rounded-lg border border-white/20 p-2 text-sm text-white/80">{copyStatus} <button type="button" className="underline" onClick={() => setCopyStatus("")}>Закрыть</button></div>}
       {/* Табы */}
       <div className="rounded-xl bg-white/5 border border-white/10 px-2 py-1 overflow-x-auto">

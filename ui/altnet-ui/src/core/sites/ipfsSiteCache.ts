@@ -55,3 +55,8 @@ export async function readCachedSite(root: string): Promise<VerifiedSite | null>
   if (!(value instanceof ArrayBuffer) || !value.byteLength || value.byteLength > SITE_MAX_CAR_BYTES) throw new Error("Локальная копия IPFS повреждена; данные не изменены.");
   return verifySitePackage(new Uint8Array(value), canonical);
 }
+
+export async function deleteCachedSite(root: string): Promise<void> {
+  const canonical = parseSiteRoot(root).toString();
+  await transact<void>("readwrite", store => { store.delete(canonical); });
+}

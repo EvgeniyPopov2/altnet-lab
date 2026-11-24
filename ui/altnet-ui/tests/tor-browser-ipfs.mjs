@@ -48,6 +48,18 @@ const server = createServer((req, res) => {
 });
 await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
 const env = { ...process.env, APPDATA: appdata, LOCALAPPDATA: localdata, TOR_SKIP_LAUNCH: "1", TOR_SKIP_CONTROLPORTTEST: "1", MOZ_DISABLE_NONLOCAL_CONNECTIONS: "1", MOZ_HEADLESS: "1" };
+const warmup = spawn(values.browser, ["-no-remote", "-profile", profile, "-headless", "--screenshot", join(scratch, "warmup.png"), "about:blank"], { env, cwd: scratch, windowsHide: true, stdio: "ignore" });
+try {
+  const warmupCode = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { warmup.kill(); reject(new Error("Tor Browser не подготовил тестовый профиль")); }, 30000);
+    warmup.once("error", error => { clearTimeout(timer); reject(error); });
+    warmup.once("exit", code => { clearTimeout(timer); resolve(code); });
+  });
+  assert.equal(warmupCode, 0, "Не удалось подготовить изолированный профиль Tor Browser");
+} catch (error) {
+  server.close();
+  throw error;
+}
 const child = spawn(values.browser, ["-no-remote", "-profile", profile, "-headless", `http://127.0.0.1:${server.address().port}/`], { env, cwd: scratch, windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
 let stderr = "";
 child.stderr.on("data", data => { stderr = (stderr + data.toString()).slice(-4000); });

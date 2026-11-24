@@ -1,5 +1,5 @@
 import { createSitePackage } from "../src/core/sites/ipfsSitePackage";
-import { cacheVerifiedSite, readCachedSite } from "../src/core/sites/ipfsSiteCache";
+import { cacheVerifiedSite, deleteCachedSite, readCachedSite } from "../src/core/sites/ipfsSiteCache";
 import { prepareLocalPreviewHtml } from "../src/core/sites/localPreview";
 
 async function run(): Promise<void> {
@@ -33,6 +33,8 @@ async function run(): Promise<void> {
   rejected = false;
   try { await readCachedSite(pack.root); } catch { rejected = true; }
   if (!rejected) throw new Error("Повреждённый кэш не отклонён");
+  await deleteCachedSite(pack.root);
+  if (await readCachedSite(pack.root) !== null) throw new Error("Повреждённая копия не удалена");
   let attacked = false;
   const onMessage = (event: MessageEvent) => { if (event.data === "altnet-test-attack") attacked = true; };
   window.addEventListener("message", onMessage);

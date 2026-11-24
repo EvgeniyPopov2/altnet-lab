@@ -113,6 +113,9 @@ try {
   await page.getByRole('button',{name:'Обновить',exact:true}).click();
   await page.getByRole('alert').filter({hasText:'целостности'}).waitFor();
   assert.equal(await page.locator('iframe[title="Контакты"]').count(),0);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button',{name:'Удалить копию IPFS'}).click();
+  await page.getByText('Локальная копия IPFS не найдена').waitFor();
   const absent = 'bafyreigtyjaoj5k2suhsp5ntybwqu6m7ljsn2dawfsvnctymnj4p3muv3i';
   await address.fill(`ipfs://${absent}`);
   await address.press('Enter');
