@@ -1,0 +1,105 @@
+diff --git a/browser/components/about/AboutRedirector.cpp b/browser/components/about/AboutRedirector.cpp
+index 4c91fff5d1..a5f38eff02 100644
+--- a/browser/components/about/AboutRedirector.cpp
++++ b/browser/components/about/AboutRedirector.cpp
+@@ -67,6 +67,9 @@ static const uint32_t BASE_BROWSER_HOME_PAGE_FLAGS =
+     browser/components/about/components.conf
+ */
+ static const RedirEntry kRedirMap[] = {
++    {"altnet", "chrome://browser/content/abouttor/aboutAltNet.html",
++     nsIAboutModule::URI_SAFE_FOR_UNTRUSTED_CONTENT |
++         nsIAboutModule::URI_MUST_LOAD_IN_CHILD},
+     {"aichatcontent", "chrome://browser/content/aiwindow/aiChatContent.html",
+      nsIAboutModule::URI_SAFE_FOR_UNTRUSTED_CONTENT |
+          nsIAboutModule::URI_CAN_LOAD_IN_PRIVILEGEDABOUT_PROCESS |
+diff --git a/browser/components/about/components.conf b/browser/components/about/components.conf
+index d82f0e00cf..08a59ddea3 100644
+--- a/browser/components/about/components.conf
++++ b/browser/components/about/components.conf
+@@ -4,6 +4,7 @@
+ 
+ pages = [
+     'aichatcontent',
++    'altnet',
+     'asrouter',
+     'blocked',
+     'certerror',
+diff --git a/browser/components/about/test/unit/test_about_altnet.js b/browser/components/about/test/unit/test_about_altnet.js
+new file mode 100644
+index 0000000000..059fb664a1
+--- /dev/null
++++ b/browser/components/about/test/unit/test_about_altnet.js
+@@ -0,0 +1,9 @@
++const contract = "@mozilla.org/network/protocol/about;1?what=altnet";
++const aboutModule = Cc[contract].getService(Ci.nsIAboutModule);
++
++function run_test() {
++  const flags = aboutModule.getURIFlags(Services.io.newURI("about:altnet"));
++  ok(flags & Ci.nsIAboutModule.URI_SAFE_FOR_UNTRUSTED_CONTENT);
++  ok(flags & Ci.nsIAboutModule.URI_MUST_LOAD_IN_CHILD);
++  ok(!(flags & Ci.nsIAboutModule.ALLOW_SCRIPT));
++}
+diff --git a/browser/components/about/test/unit/xpcshell.toml b/browser/components/about/test/unit/xpcshell.toml
+index 8ffcd58f03..6a0b2d4674 100644
+--- a/browser/components/about/test/unit/xpcshell.toml
++++ b/browser/components/about/test/unit/xpcshell.toml
+@@ -7,3 +7,5 @@ head =  ''
+ firefox-appdir = "browser"
+ 
+ ["test_getURIFlags.js"]
++
++["test_about_altnet.js"]
+diff --git a/browser/components/abouttor/content/aboutAltNet.css b/browser/components/abouttor/content/aboutAltNet.css
+new file mode 100644
+index 0000000000..52988665ca
+--- /dev/null
++++ b/browser/components/abouttor/content/aboutAltNet.css
+@@ -0,0 +1,12 @@
++* { box-sizing: border-box; }
++:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
++body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f3f4fb; color: #1a2036; }
++main { width: min(100%, 560px); padding: clamp(28px, 6vw, 52px); border: 1px solid #e0e2ef; border-radius: 22px; background: #fff; box-shadow: 0 18px 60px #23204714; }
++.brand { color: #6b50eb; font-size: 14px; font-weight: 750; letter-spacing: .04em; }
++h1 { font-size: clamp(26px, 5vw, 38px); line-height: 1.15; margin: 22px 0 14px; }
++p { line-height: 1.6; color: #596078; }
++.primary { display: inline-block; margin-top: 18px; padding: 12px 18px; border-radius: 10px; background: #6b50eb; color: #fff; font-weight: 650; text-decoration: none; }
++.primary:hover { background: #5a40d6; }
++.primary:focus-visible { outline: 3px solid #aa9bff; outline-offset: 3px; }
++.hint { margin: 22px 0 0; font-size: 13px; }
++@media (prefers-color-scheme: dark) { body { background: #101629; color: #f4f4ff; } main { background: #192139; border-color: #303a56; box-shadow: 0 18px 60px #0004; } p { color: #b6bfd5; } .brand { color: #af9aff; } }
+diff --git a/browser/components/abouttor/content/aboutAltNet.html b/browser/components/abouttor/content/aboutAltNet.html
+new file mode 100644
+index 0000000000..bbb855ea95
+--- /dev/null
++++ b/browser/components/abouttor/content/aboutAltNet.html
+@@ -0,0 +1,19 @@
++<!doctype html>
++<html lang="ru">
++<head>
++  <meta charset="utf-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1">
++  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src chrome:; base-uri 'none'; form-action 'none'">
++  <link rel="stylesheet" href="chrome://browser/content/abouttor/aboutAltNet.css">
++  <title>AltNet</title>
++</head>
++<body>
++  <main>
++    <div class="brand">AltNet</div>
++    <h1>Ваше пространство AltNet</h1>
++    <p>Открывайте сайты Alt, создавайте страницы и переходите к другим возможностям платформы.</p>
++    <a class="primary" href="http://127.0.0.1:17860/">Открыть AltNet</a>
++    <p class="hint">Для работы этой страницы запустите клиент AltNet на своём устройстве.</p>
++  </main>
++</body>
++</html>
+diff --git a/browser/components/abouttor/jar.mn b/browser/components/abouttor/jar.mn
+index 5f773753be..d39a8c9351 100644
+--- a/browser/components/abouttor/jar.mn
++++ b/browser/components/abouttor/jar.mn
+@@ -1,4 +1,6 @@
+ browser.jar:
++  content/browser/abouttor/aboutAltNet.html      (content/aboutAltNet.html)
++  content/browser/abouttor/aboutAltNet.css       (content/aboutAltNet.css)
+   content/browser/abouttor/aboutTor.css           (content/aboutTor.css)
+   content/browser/abouttor/aboutTor.js            (content/aboutTor.js)
+   content/browser/abouttor/aboutTor.html          (content/aboutTor.html)
