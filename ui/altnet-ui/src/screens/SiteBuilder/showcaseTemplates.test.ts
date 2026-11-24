@@ -10,7 +10,7 @@ const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAw
 
 describe("галерея готовых сайтов", () => {
   it("содержит разные тематики и имена", () => {
-    expect(SHOWCASE_TEMPLATES.length).toBeGreaterThanOrEqual(12);
+    expect(SHOWCASE_TEMPLATES.length).toBeGreaterThanOrEqual(18);
     expect(new Set(SHOWCASE_TEMPLATES.map(item => item.id)).size).toBe(SHOWCASE_TEMPLATES.length);
     expect(new Set(SHOWCASE_TEMPLATES.map(item => item.category)).size).toBe(SHOWCASE_TEMPLATES.length);
   });

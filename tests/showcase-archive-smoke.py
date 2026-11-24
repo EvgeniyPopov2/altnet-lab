@@ -54,7 +54,7 @@ for archive in args.archives:
         worker.start()
         try:
             url = f"http://127.0.0.1:{server.server_port}/"
-            subprocess.run(["node", "tests/showcase-gallery-ui.mjs", "--url", url, "--engine", "chromium"], cwd=ui, check=True, timeout=120)
+            subprocess.run(["node", "tests/showcase-gallery-ui.mjs", "--url", url, "--engine", "chromium"], cwd=ui, check=True, timeout=300)
         finally:
             server.shutdown()
             worker.join()

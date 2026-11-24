@@ -11,9 +11,15 @@ import bakery from "./template-assets/bakery.jpg";
 import studio from "./template-assets/studio.jpg";
 import books from "./template-assets/books.jpg";
 import digital from "./template-assets/digital.jpg";
+import photography from "./template-assets/photography.jpg";
+import restaurant from "./template-assets/restaurant.jpg";
+import florist from "./template-assets/florist.jpg";
+import movement from "./template-assets/movement.jpg";
+import animals from "./template-assets/animals.jpg";
+import science from "./template-assets/science.jpg";
 import "./showcaseGallery.css";
 
-const images = { architecture, landscape, bakery, studio, books, digital };
+const images = { architecture, landscape, bakery, studio, books, digital, photography, restaurant, florist, movement, animals, science };
 const cache = new Map<string, string>();
 
 async function localImage(src: string): Promise<string> {
@@ -39,6 +45,7 @@ type Props = { doc: Doc; setDoc: Dispatch<SetStateAction<Doc>>; onChangeProject:
 
 export default function ShowcaseGallery({ doc, setDoc, onChangeProject, theme }: Props) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<ShowcaseTemplate>(SHOWCASE_TEMPLATES[0]);
   const [ready, setReady] = useState<{ id: string; doc: Doc; html: string } | null>(null);
   const [error, setError] = useState("");
@@ -92,9 +99,11 @@ export default function ShowcaseGallery({ doc, setDoc, onChangeProject, theme }:
   const viewport = device === "mobile" ? 320 : 1200;
   const scale = Math.min(1, Math.max(0.1, (previewSize.width - 16) / viewport));
   const previewHeight = Math.max(100, previewSize.height - 16);
+  const terms = query.trim().toLocaleLowerCase("ru-RU").split(/\s+/).filter(Boolean);
+  const matching = SHOWCASE_TEMPLATES.filter(item => terms.every(term => `${item.name} ${item.category} ${item.brand}`.toLocaleLowerCase("ru-RU").includes(term)));
 
   return <>
-    <button type="button" onClick={() => setOpen(true)} className="w-full rounded-lg border border-[#6e59f2] bg-[#221d3d] px-3 py-2 text-left text-sm text-white hover:bg-[#302751]">Готовые сайты · {SHOWCASE_TEMPLATES.length}</button>
+    <button type="button" onClick={() => { setQuery(""); setOpen(true); }} className="w-full rounded-lg border border-[#6e59f2] bg-[#221d3d] px-3 py-2 text-left text-sm text-white hover:bg-[#302751]">Готовые сайты · {SHOWCASE_TEMPLATES.length}</button>
     {typeof document !== "undefined" && createPortal(<dialog ref={dialog} onCancel={() => setOpen(false)} onClose={() => setOpen(false)} aria-labelledby="showcase-title" data-theme={theme}
       className="showcase-dialog m-auto max-h-[94vh] w-[min(1280px,96vw)] max-w-none overflow-hidden rounded-2xl border border-[#3d3854] bg-[#14131c] p-0 text-[#f7f5ff] shadow-2xl backdrop:bg-black/70">
       <div className="sg-header flex items-center justify-between gap-4 border-b border-white/10 px-5 py-4">
@@ -102,17 +111,24 @@ export default function ShowcaseGallery({ doc, setDoc, onChangeProject, theme }:
         <button type="button" onClick={() => setOpen(false)} className="sg-outline rounded-md border border-white/20 px-3 py-2 text-sm">Закрыть</button>
       </div>
       <div className="grid max-h-[calc(94vh-82px)] grid-cols-1 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(360px,1fr)]">
-        <div className="flex content-start gap-3 overflow-x-auto p-4 lg:grid lg:grid-cols-3 lg:overflow-x-visible" aria-label="Тематики сайтов">
-          {SHOWCASE_TEMPLATES.map((template, index) => <button type="button" key={template.id} aria-pressed={selected.id === template.id}
+        <div className="min-w-0 p-4">
+          <label className="sg-muted block text-xs" htmlFor="showcase-search">Найти тематику или название</label>
+          <input id="showcase-search" type="search" value={query} onChange={event => setQuery(event.target.value)} autoComplete="off" maxLength={120} placeholder="Например, фотография" className="sg-search mt-1 w-full rounded-lg border border-white/20 bg-[#211f2b] px-3 py-2 text-sm text-white" />
+          <p className="sg-muted mt-1 text-xs" role="status">Найдено: {matching.length}</p>
+          <div className="mt-3 flex content-start gap-3 overflow-x-auto pb-2 lg:grid lg:grid-cols-3 lg:overflow-x-visible" aria-label="Тематики сайтов">
+          {matching.map((template, index) => <button type="button" key={template.id} aria-pressed={selected.id === template.id}
             onClick={() => setSelected(template)} className={`w-[154px] shrink-0 overflow-hidden rounded-xl border text-left transition lg:w-auto ${selected.id === template.id ? "border-[#a99aff] ring-2 ring-[#6e59f2]" : "border-white/10 hover:border-white/40"}`}>
             <img src={open ? images[template.image] : undefined} alt="" loading={index < 3 ? "eager" : "lazy"} decoding="async" className="h-24 w-full object-cover sm:h-28" />
             <span className="sg-card-copy block bg-[#201e2a] p-2.5"><span className="sg-title block text-sm font-semibold text-white">{template.name}</span><span className="sg-muted mt-0.5 block text-xs text-[#b5afc4]">{template.category}</span></span>
           </button>)}
+          {!matching.length && <p className="sg-muted py-4 text-sm">Таких шаблонов пока нет. Попробуйте другое слово.</p>}
+          </div>
         </div>
-        <div className="sg-preview min-w-0 border-t border-white/10 bg-[#0c0b12] p-4 lg:border-l lg:border-t-0">
+        <div className="sg-preview min-w-0 border-t border-white/10 bg-[#0c0b12] p-4 lg:sticky lg:top-0 lg:self-start lg:border-l lg:border-t-0">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">{selected.name}</h3><p className="sg-muted text-xs text-[#b5afc4]">{selected.category} · демонстрационные материалы</p></div>
             <div className="flex gap-1" aria-label="Размер предпросмотра"><button type="button" aria-pressed={device === "desktop"} onClick={() => setDevice("desktop")} className="sg-outline rounded border border-white/20 px-2 py-1 text-xs">Десктоп</button><button type="button" aria-pressed={device === "mobile"} onClick={() => setDevice("mobile")} className="sg-outline rounded border border-white/20 px-2 py-1 text-xs">Телефон</button></div>
           </div>
+          {terms.length > 0 && !matching.some(item => item.id === selected.id) && <p className="sg-muted mt-2 text-xs">В предпросмотре ранее выбранный шаблон. Выберите результат поиска, чтобы посмотреть его.</p>}
           <div ref={preview} className="mt-3 flex h-[min(430px,43dvh)] justify-center overflow-hidden rounded-lg bg-[#25232e] p-2 lg:h-[430px]">
             {ready?.id === selected.id ? <div style={{ width: viewport * scale, height: previewHeight, overflow: "hidden" }}>
               <iframe title={`Предпросмотр: ${selected.name}`} sandbox="allow-scripts" srcDoc={ready.html} className="border-0 bg-white"
@@ -120,7 +136,7 @@ export default function ShowcaseGallery({ doc, setDoc, onChangeProject, theme }:
             </div> : <p role="status" className="m-auto text-sm text-[#b5afc4]">Готовим безопасный предпросмотр…</p>}
           </div>
           {error && <p role="alert" className="mt-2 text-sm text-amber-300">{error}</p>}
-          <div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" disabled={!ready || ready.id !== selected.id} onClick={useTemplate} className="rounded-lg bg-[#7662e8] px-4 py-2 text-sm font-medium text-white hover:bg-[#8876f1] disabled:opacity-40">Создать проект из шаблона</button>
+          <div className="mt-3 flex flex-wrap items-center gap-3"><button type="button" disabled={!ready || ready.id !== selected.id || !matching.some(item => item.id === selected.id)} onClick={useTemplate} className="rounded-lg bg-[#7662e8] px-4 py-2 text-sm font-medium text-white hover:bg-[#8876f1] disabled:opacity-40">Создать проект из шаблона</button>
             <span className="sg-muted text-xs text-[#b5afc4]">Текст, цвета и изображения можно заменить.</span></div>
         </div>
       </div>

@@ -3,11 +3,12 @@ import { mkdir } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { chromium, firefox, webkit } from "playwright";
 
-const { values } = parseArgs({ options: { url: { type: "string", default: "http://127.0.0.1:5179/" }, engine: { type: "string", default: "chromium" }, screenshots: { type: "string" }, "full-export": { type: "boolean" } } });
+const { values } = parseArgs({ options: { url: { type: "string", default: "http://127.0.0.1:5179/" }, engine: { type: "string", default: "chromium" }, screenshots: { type: "string" }, focus: { type: "string" }, "full-export": { type: "boolean" } } });
 const engines = { chromium, firefox, webkit };
 if (!Object.hasOwn(engines, values.engine)) throw new Error("Unsupported browser engine");
-const names = ["Тихая форма", "Тихий север", "Мякиш", "Авторская практика", "Между строк", "Новая перспектива", "Время для себя", "Земля рядом", "Открытый класс", "Точка встречи", "Чашка и время", "Сделано руками"];
-const namesToCheck = values["full-export"] ? names.slice(0, 1) : names;
+const names = ["Тихая форма", "Тихий север", "Мякиш", "Авторская практика", "Между строк", "Новая перспектива", "Время для себя", "Земля рядом", "Открытый класс", "Точка встречи", "Чашка и время", "Сделано руками", "Свет и расстояние", "Соль и огонь", "Сад в городе", "Точка движения", "Дом для друга", "Горизонт знаний"];
+const namesToCheck = values.focus ? names.filter(name => name === values.focus) : values["full-export"] ? names.slice(0, 1) : names;
+if (!namesToCheck.length) throw new Error("Unknown template");
 const trace = message => { if (process.env.SHOWCASE_DEBUG === "1") console.log(message); };
 async function waitForImage(locator) {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -36,12 +37,27 @@ try {
   await tablet.setViewportSize({ width: 768, height: 1024 });
   const pageErrors = [];
   page.on("pageerror", error => pageErrors.push(error.message));
+  page.on("console", message => { if (message.type() === "error") trace(`Console: ${message.text()}`); });
   await page.goto(values.url);
   await page.evaluate(() => localStorage.setItem("altnet.sitebuilder.v1", JSON.stringify({ title: "Исходный проект", blocks: [{ id: "original", type: "p", text: "Мой сохранённый текст" }] })));
   await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
   await page.getByRole("button", { name: "Создать сайт", exact: true }).click();
-  await page.getByRole("button", { name: "Готовые сайты · 12" }).click();
+  await page.getByRole("button", { name: "Готовые сайты · 18" }).click();
   const dialog = page.getByRole("dialog", { name: "Галерея готовых сайтов" });
+  const search = dialog.getByRole("searchbox", { name: "Найти тематику или название" });
+  await search.fill("ФОТОГРАФИЯ");
+  await dialog.getByRole("button", { name: /^Свет и расстояние/ }).waitFor();
+  assert.equal(await dialog.getByRole("button", { name: /^Тихая форма/ }).count(), 0);
+  await search.fill("неизвестная тематика");
+  await dialog.getByText("Таких шаблонов пока нет. Попробуйте другое слово.").waitFor();
+  assert.equal(await dialog.getByRole("button", { name: "Создать проект из шаблона" }).isEnabled(), false);
+  await search.clear();
+  const previewPanel = dialog.locator(".sg-preview");
+  const beforeScroll = await previewPanel.boundingBox();
+  await previewPanel.locator("..").evaluate(element => { element.scrollTop = 500; });
+  const afterScroll = await previewPanel.boundingBox();
+  assert.ok(beforeScroll && afterScroll && Math.abs(beforeScroll.y - afterScroll.y) < 2, "Предпросмотр остаётся на месте при прокрутке списка");
+  await previewPanel.locator("..").evaluate(element => { element.scrollTop = 0; });
   if (values.screenshots) {
     await mkdir(values.screenshots, { recursive: true });
     await dialog.locator('iframe[title="Предпросмотр: Тихая форма"]').waitFor();
@@ -66,6 +82,20 @@ try {
       const navigation = await frame.locator(`#${target}`).evaluate(element => ({ top: element.getBoundingClientRect().top, height: window.innerHeight }));
       assert.ok(navigation.top >= -1 && navigation.top < navigation.height, `${name} #${target}: ${JSON.stringify(navigation)}`);
     }
+    if (name === "Дом для друга" || name === "Горизонт знаний") {
+      const question = name === "Дом для друга" ? "Как узнать о животных?" : "Что можно найти в журнале?";
+      const accordion = frame.getByRole("button", { name: question });
+      assert.equal(await accordion.getAttribute("aria-expanded"), "false");
+      await accordion.click();
+      assert.equal(await accordion.getAttribute("aria-expanded"), "true");
+      const answer = name === "Дом для друга" ? "Добавьте сюда актуальный способ связи с вашей командой и порядок знакомства." : "Опишите направления, авторов и форматы материалов вашего проекта.";
+      const panel = frame.getByText(answer, { exact: true });
+      assert.equal(await panel.isVisible(), true);
+      assert.equal(await panel.evaluate(element => getComputedStyle(element).color), name === "Дом для друга" ? "rgb(59, 48, 40)" : "rgb(237, 247, 250)");
+      await accordion.click();
+      assert.equal(await accordion.getAttribute("aria-expanded"), "false");
+      assert.equal(await panel.isVisible(), false);
+    }
     const dimensions = await frame.locator("html").evaluate(element => ({ inner: element.clientWidth, scroll: element.scrollWidth }));
     assert.ok(dimensions.inner <= 320 && dimensions.scroll <= dimensions.inner + 1, `${name}: ${JSON.stringify(dimensions)}`);
     const html = await locator.getAttribute("srcdoc");
@@ -76,14 +106,14 @@ try {
     await tablet.locator("h1").waitFor();
     const tabletSize = await tablet.locator("html").evaluate(element => ({ inner: element.clientWidth, scroll: element.scrollWidth }));
     assert.ok(tabletSize.inner === 768 && tabletSize.scroll <= tabletSize.inner + 1, `${name} tablet: ${JSON.stringify(tabletSize)}`);
-    if (values.screenshots && [0, 1, 5].includes(index)) {
+    if (values.screenshots && [0, 1, 5, 12, 13, 16, 17].includes(names.indexOf(name))) {
       await mkdir(values.screenshots, { recursive: true });
       const shot = await context.newPage();
       for (const [label, width] of [["mobile", 390], ["desktop", 1440]]) {
         await shot.setViewportSize({ width, height: 900 });
         await shot.setContent(html);
         await shot.locator("img").first().waitFor({ state: "visible" });
-        await shot.screenshot({ path: `${values.screenshots}/${String(index).padStart(2, "0")}-${label}.png`, fullPage: true });
+        await shot.screenshot({ path: `${values.screenshots}/${String(names.indexOf(name)).padStart(2, "0")}-${label}.png`, fullPage: true });
       }
       await shot.close();
     }
@@ -93,7 +123,7 @@ try {
   trace("Проверка проектов");
   await dialog.getByRole("button", { name: "Закрыть", exact: true }).click();
   await page.getByRole("button", { name: "Включить светлую тему конструктора" }).click();
-  await page.getByRole("button", { name: "Готовые сайты · 12" }).click();
+  await page.getByRole("button", { name: "Готовые сайты · 18" }).click();
   assert.equal(await dialog.getAttribute("data-theme"), "light");
   await dialog.getByRole("button", { name: /^Тихая форма/ }).click();
   await dialog.locator('iframe[title="Предпросмотр: Тихая форма"]').waitFor();
@@ -112,6 +142,7 @@ try {
     await status.waitFor();
     const cid = (await status.innerText()).match(/bafy[a-z2-7]+/)?.[0];
     assert.ok(cid);
+    trace(`Загрузка ${download.suggestedFilename()}: ${await download.failure() || "готова"}`);
     const chunks = [];
     for await (const chunk of await download.createReadStream()) chunks.push(chunk);
     const visitor = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -145,7 +176,7 @@ try {
   await phone.getByRole("button", { name: "Браузер .alt", exact: true }).click();
   await phone.getByRole("button", { name: "Создать сайт", exact: true }).click();
   await phone.getByRole("button", { name: "Открыть панель виджетов" }).click();
-  await phone.getByRole("button", { name: "Готовые сайты · 12" }).click();
+  await phone.getByRole("button", { name: "Готовые сайты · 18" }).click();
   const phoneDialog = phone.getByRole("dialog", { name: "Галерея готовых сайтов" });
   await phoneDialog.getByRole("button", { name: /^Тихий север/ }).click();
   await phoneDialog.locator('iframe[title="Предпросмотр: Тихий север"]').waitFor();
