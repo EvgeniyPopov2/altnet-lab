@@ -945,7 +945,7 @@ export function serializeBlock(id: string, props: Record<string, unknown>): stri
   const anchor = typeof p.__safeAnchor === "string" && /^[a-zA-Z][a-zA-Z0-9_-]*$/.test(p.__safeAnchor) ? p.__safeAnchor : "";
   if (!styleClass && !visibilityClass && !custom && !anchor) return body;
   const classes = [styleClass, visibilityClass, custom].filter(Boolean).join(" ");
-  return `<div${classes ? ` class="${classes}"` : ""}${anchor ? ` id="${anchor}"` : ""}>${body}</div>`;
+  return `<div${classes ? ` class="${classes}"` : ""}${anchor ? ` id="${anchor}"` : ""}${p.__entrance === true ? " data-entrance" : ""}>${body}</div>`;
 }
 
 // Совместимость: дефолтный экспорт как реестр

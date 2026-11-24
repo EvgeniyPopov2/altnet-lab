@@ -96,7 +96,7 @@ export default function LayoutCanvas({ block, device, selectedId, onSelect, onCh
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(null);
             }}
             onDrop={event => onDrop(event, index)}
-            className={`layout-editor-cell min-h-28 min-w-0 overflow-hidden rounded-lg border border-dashed p-1.5 ${over === index ? "border-[#6E59F2] bg-[#eeeafe] ring-2 ring-[#6E59F2]/40" : "border-[#aaa1c9] bg-[#faf9ff]"}`}>
+            className={`layout-editor-cell min-h-28 min-w-0 rounded-lg border border-dashed p-1.5 ${over === index ? "border-[#6E59F2] bg-[#eeeafe] ring-2 ring-[#6E59F2]/40" : "border-[#aaa1c9] bg-[#faf9ff]"}`}>
             {block.type === "grid" && <div className="mb-1 text-[10px] text-[#655c87]">
               Строка {Math.floor(index / columnCount) + 1} · колонка {index % columnCount + 1}
               {merges.some(item => item.start === index) && ` · объединена ${merges.find(item => item.start === index)!.columns}×${merges.find(item => item.start === index)!.rows}`}
@@ -105,7 +105,7 @@ export default function LayoutCanvas({ block, device, selectedId, onSelect, onCh
               <div key={child.id}>
               {insertionSlot(index, position)}
               <div data-layout-block={child.id}
-                className={`relative mb-2 min-w-0 overflow-hidden rounded border bg-white p-1 ${selectedId === child.id ? "border-[#6E59F2]" : "border-slate-200"}`}
+                className={`relative mb-2 min-w-0 rounded border bg-white p-1 ${selectedId === child.id ? "border-[#6E59F2]" : "border-slate-200"}`}
                 style={{ overflowWrap: "anywhere" }}
                 onClick={event => { event.stopPropagation(); onSelect(child.id); }}>
                 <div className="mb-1 flex justify-end gap-1">

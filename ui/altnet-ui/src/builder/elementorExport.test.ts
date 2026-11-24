@@ -30,6 +30,16 @@ async function exported(blocks: unknown[], format: string, restrict = false) {
   return { html: await zip.file("index.html")!.async("string"), css: await zip.file("styles.css")!.async("string") };
 }
 describe("HTML и ZIP", () => {
+  it.each(["html", "zip"])("сохраняет адаптивное появление и настройки доступности в %s", async (format) => {
+    const { html, css } = await exported([{type:"p", text:"Привет", styleByBp:{desktop:{entranceType:"up", entranceDuration:350, entranceDistance:45, entranceRepeat:"repeat", op:60}, mobile:{entranceType:"none"}}}], format);
+    expect(html).toContain("data-entrance");
+    expect(html).toContain(SITE_RUNTIME_HASH);
+    expect(css).toContain("--sb-entry-name:sb-entry-up");
+    expect(css).toContain("--sb-entry-distance:45px");
+    expect(css).toContain("--sb-entry-opacity:0.6");
+    expect(css).toContain("--sb-entry-name:none");
+    expect(css).toContain("prefers-reduced-motion:reduce");
+  });
   it.each(["html", "zip"])(
     "публикует Flex, индивидуальные углы и трансформации вложенного виджета в %s",
     async (format) => {

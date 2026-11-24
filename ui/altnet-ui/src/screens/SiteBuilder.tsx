@@ -14,6 +14,7 @@ import { spacingStyle } from "./SiteBuilder/boxDimensions";
 import { backgroundStyle } from "./SiteBuilder/backgroundStyle";
 import { blockCornerStyle } from "./SiteBuilder/blockCorners";
 import { blockBorderStyle } from "./SiteBuilder/blockBorders";
+import { blockFilterStyle, filterTransition } from "./SiteBuilder/blockFilters";
 import { blockShadowStyle } from "./SiteBuilder/blockShadowStyle";
 import { advancedLayoutStyle } from "./SiteBuilder/advancedLayoutStyle";
 import { transformStyle } from "./SiteBuilder/transforms";
@@ -159,6 +160,7 @@ type Breakpoint = "desktop" | "tablet" | "mobile";
 const widthByBp: Record<Breakpoint, number> = { desktop: 1280, tablet: 834, mobile: 390 };
 type BlockStyle = {
   transformDuration?: number;
+  blockFilterDuration?: number;
   w?: number;
   minh?: number;
   op?: number;
@@ -629,6 +631,8 @@ export default function SiteBuilder({
         ...backgroundStyle(s),
         ...advancedLayoutStyle(s),
         ...transformStyle(s),
+        ...blockFilterStyle(s),
+        ...filterTransition(s),
 
         ...(s.fs != null ? { fontSize: Number(s.fs) } : {}),
         ...(s.ff && ["system-ui", "sans-serif", "serif", "monospace", "Arial", "Georgia", "Verdana", "Tahoma"].includes(s.ff) ? { fontFamily: s.ff } : {}),
@@ -1320,11 +1324,13 @@ export default function SiteBuilder({
     const text = typographic ? textAppearance(styles) : textAppearance({});
     const vars = Object.fromEntries(Object.entries(text.normal).map(([k,v]) => ["--sb-type-" + k, v]));
     const hoverTransform = transformStyle(styles, true);
+    const hoverFilter = blockFilterStyle(styles, true);
     for (const [key, value] of Object.entries(hoverTransform)) vars["--sb-hover-" + key] = value;
+    if (hoverFilter.filter) vars["--sb-hover-filter"] = hoverFilter.filter;
     if (text.hover.color) vars["--sb-type-hover-color"] = text.hover.color;
     const appearanceClasses = Object.keys(text.normal).map(k => "sb-type-" + k).join(" ") + (text.hover.color ? " sb-type-hover-color" : "");
     const hiddenOnDevice = block.hideOn?.[bp] === true;
-    return <div data-styled-block={block.id} className={`relative ${classes} ${appearanceClasses} ${hoverTransform.transform ? "sb-hover-transform" : ""} ${hoverTransform.transformOrigin ? "sb-hover-origin" : ""} ${styles.transformDuration !== undefined ? "sb-transform-duration" : ""}`} style={{ ...styleInline(block), ...vars, ...(hiddenOnDevice ? { opacity: 0.5 } : {}) }}
+    return <div data-styled-block={block.id} className={`relative ${classes} ${appearanceClasses} ${hoverTransform.transform ? "sb-hover-transform" : ""} ${hoverTransform.transformOrigin ? "sb-hover-origin" : ""} ${hoverFilter.filter ? "sb-filter-hover" : ""} ${styles.transformDuration !== undefined || styles.blockFilterDuration !== undefined ? "sb-transform-duration" : ""}`} style={{ ...styleInline(block), ...vars, ...(hiddenOnDevice ? { opacity: 0.5 } : {}) }}
       onClickCapture={event => { if (event.target instanceof Element && event.target.closest("a")) event.preventDefault(); }}
       onSubmitCapture={event => event.preventDefault()}>{hiddenOnDevice && <span className="absolute right-1 top-1 z-10 rounded bg-[#312767] px-2 py-1 text-xs text-white">Скрыт на этом экране</span>}{renderEditorContent(previewSafeBlock(block), selected && !block.dynamic)}</div>;
   }

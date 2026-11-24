@@ -64,6 +64,26 @@ async function verifyDownloadedPage(browser, url) {
     await page.locator('label').filter({hasText:'Скругление, px'}).locator('input[type=number]').fill('12');
     await page.locator('label').filter({hasText:'Ширина рамки, px'}).locator('input[type=number]').fill('3');
     await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-styled-block="body"]')).borderTopLeftRadius === '12px');
+    await page.getByRole('button', {name:'Desktop', exact:true}).click();
+    await page.locator('#inspector-tab-advanced').click();
+    await page.locator('summary').filter({hasText:'Расположение и переполнение'}).click();
+    await page.getByLabel('Позиция блока').selectOption('relative');
+    await page.getByLabel('Смещение блока слева').fill('18');
+    await page.locator('summary').filter({hasText:'Цветовые эффекты блока'}).click();
+    await page.getByLabel('Фильтры блока').selectOption('on');
+    await page.getByLabel('Яркость (%)',{exact:true}).fill('55');
+    await page.getByRole('group',{name:'Состояние эффектов'}).getByRole('button',{name:'При наведении'}).click();
+    await page.getByLabel('Контраст (%) при наведении',{exact:true}).fill('140');
+    await page.locator('summary').filter({hasText:'Появление при прокрутке'}).click();
+    await page.getByLabel('Анимация появления').selectOption('up');
+    await page.getByLabel('Длительность появления, мс').fill('100');
+    await page.getByRole('button', {name:'Mobile', exact:true}).click();
+    await page.getByLabel('Анимация появления').selectOption('none');
+    await page.getByLabel('Позиция блока').selectOption('normal');
+    await page.getByRole('group',{name:'Состояние эффектов'}).getByRole('button',{name:'Обычное'}).click();
+    await page.getByLabel('Фильтры блока').selectOption('none');
+    await page.getByRole('group',{name:'Состояние эффектов'}).getByRole('button',{name:'При наведении'}).click();
+    await page.getByLabel('Фильтры блока').selectOption('none');
     const [file] = await Promise.all([
       page.waitForEvent("download"),
       page.getByRole("button", { name: "Экспорт HTML", exact: true }).click(),
@@ -77,14 +97,23 @@ async function verifyDownloadedPage(browser, url) {
       href = new URL("builder-export-check.html", url).href;
     await published.route(href, (route) => route.fulfill({ contentType: "text/html; charset=utf-8", body: html }));
     await published.goto(href);
+    await published.locator('[data-entrance][data-entrance-state="shown"]').waitFor();
+    assert.equal(await published.locator('[data-entrance]').evaluate(e => getComputedStyle(e).animationName), 'sb-entry-up');
     assert.equal(await published.locator("main strong").first().textContent(), "Книга");
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopLeftRadius), '28px');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopRightRadius), '8px');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopWidth), '6px');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderRightWidth), '2px');
+    assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).left), '18px');
+    assert.ok((await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).filter)).includes('brightness(0.55)'));
+    await published.locator('.sb-style-0').hover();
+    assert.ok((await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).filter)).includes('contrast(1.4)'));
     await published.setViewportSize({width:375,height:800});
+    assert.equal(await published.locator('[data-entrance]').evaluate(e => getComputedStyle(e).animationName), 'none');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopLeftRadius), '12px');
     assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).borderTopWidth), '3px');
+    assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).position), 'static');
+    assert.equal(await published.locator('.sb-style-0').evaluate(e => getComputedStyle(e).filter), 'none');
     await published.setViewportSize({width:1440,height:900});
     const textPath = published.locator("svg textPath");
     assert.ok(await textPath.evaluate((e) => e.getComputedTextLength() > 10));
@@ -104,6 +133,7 @@ async function verifyDownloadedPage(browser, url) {
       popupKeyboard: true,
       responsiveCorners: true,
       responsiveBorders: true,
+      positionAndFilters: true,
     };
   } finally {
     await context.close();

@@ -13,10 +13,12 @@ import { buildSitemap } from "./sitemap";
 import { serializeBlock } from "./registry";
 import { buttonLinkOptions, placeholderDataUrl, sanitizeHref, externalLinkRels } from "./cdr";
 import { resolveResponsiveStyle } from "../screens/SiteBuilder/responsiveStyle";
+import { entranceSettings } from "../screens/SiteBuilder/entrance";
 import { spacingStyle } from "../screens/SiteBuilder/boxDimensions";
 import { backgroundStyle } from "../screens/SiteBuilder/backgroundStyle";
 import { blockCornerStyle } from "../screens/SiteBuilder/blockCorners";
 import { blockBorderStyle } from "../screens/SiteBuilder/blockBorders";
+import { blockFilterStyle, filterTransition } from "../screens/SiteBuilder/blockFilters";
 import { blockShadowStyle } from "../screens/SiteBuilder/blockShadowStyle";
 import { advancedLayoutStyle } from "../screens/SiteBuilder/advancedLayoutStyle";
 import { transformStyle } from "../screens/SiteBuilder/transforms";
@@ -155,6 +157,17 @@ function buildStylesCss(theme?: { accent?: string; container?: number }, extraCs
 html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,"Helvetica Neue",Arial,"Apple Color Emoji","Segoe UI Emoji";-webkit-font-smoothing:antialiased}
 a{color:inherit;text-decoration:none}
 img{display:block;max-width:100%;height:auto}
+[data-entrance][data-entrance-state=waiting]:not(:focus-within){opacity:var(--sb-entry-wait-opacity,1)}
+[data-entrance][data-entrance-state=shown]{animation-name:var(--sb-entry-name,none);animation-duration:var(--sb-entry-duration,600ms);animation-timing-function:ease-out;animation-delay:var(--sb-entry-delay,0ms);animation-fill-mode:both}
+[data-entrance]:focus-within{animation:none!important;opacity:var(--sb-entry-opacity,1)!important}
+@keyframes sb-entry-fade{from{opacity:0}to{opacity:var(--sb-entry-opacity,1)}}
+@keyframes sb-entry-up{from{opacity:0;translate:0 var(--sb-entry-distance)}to{opacity:var(--sb-entry-opacity,1);translate:0 0}}
+@keyframes sb-entry-down{from{opacity:0;translate:0 calc(-1 * var(--sb-entry-distance))}to{opacity:var(--sb-entry-opacity,1);translate:0 0}}
+@keyframes sb-entry-left{from{opacity:0;translate:calc(-1 * var(--sb-entry-distance)) 0}to{opacity:var(--sb-entry-opacity,1);translate:0 0}}
+@keyframes sb-entry-right{from{opacity:0;translate:var(--sb-entry-distance) 0}to{opacity:var(--sb-entry-opacity,1);translate:0 0}}
+@keyframes sb-entry-zoom-in{from{opacity:0;scale:.8}to{opacity:var(--sb-entry-opacity,1);scale:1}}
+@keyframes sb-entry-zoom-out{from{opacity:0;scale:1.2}to{opacity:var(--sb-entry-opacity,1);scale:1}}
+@media(prefers-reduced-motion:reduce){[data-entrance]{animation:none!important;opacity:var(--sb-entry-opacity,1)!important}}
 
 .container{width:100%;max-width:${container}px;margin:0 auto;padding:24px}
 header.container{padding-top:14px;padding-bottom:0}
@@ -394,7 +407,7 @@ function prepareStyleRules(model: SiteModel): string {
       if (typeof raw !== "number" || !Number.isFinite(raw)) return;
       values.push(`${property}:${Math.max(negative ? -512 : 0, Math.min(512, raw))}px`);
     };
-    for (const [key, value] of Object.entries({ ...spacingStyle(style), ...transformStyle(style), ...advancedLayoutStyle(style), ...backgroundStyle(style), ...blockShadowStyle(style) })) {
+    for (const [key, value] of Object.entries({ ...spacingStyle(style), ...transformStyle(style), ...advancedLayoutStyle(style), ...backgroundStyle(style), ...blockShadowStyle(style), ...blockFilterStyle(style), ...filterTransition(style) })) {
       values.push(key.replace(/[A-Z]/g, char => "-" + char.toLowerCase()) + ":" + value);
     }
     add("border-radius", style.br); add("border-width", style.bw);
@@ -592,6 +605,15 @@ function prepareStyleRules(model: SiteModel): string {
     const mobile = resolveResponsiveStyle(base, by, "mobile");
     const typography = ["h1", "heading", "text", "button"].includes(block.type);
     const layers = [desktop, tablet, mobile];
+    if (layers.some(layer => entranceSettings(layer).type !== "none")) {
+      p.__entrance = true;
+      p.__styleClass = `sb-style-${index}`;
+      for (const [i, width] of [0, 1024, 767].entries()) {
+        const entry = entranceSettings(layers[i]);
+        const css = `.sb-style-${index}{--sb-entry-name:${entry.type === "none" ? "none" : "sb-entry-" + entry.type};--sb-entry-duration:${entry.duration}ms;--sb-entry-delay:${entry.delay}ms;--sb-entry-distance:${entry.distance}px;--sb-entry-repeat:${entry.repeat ? 1 : 0};--sb-entry-opacity:${entry.opacity};--sb-entry-wait-opacity:${entry.type === "none" ? entry.opacity : 0}}`;
+        rules.push(width ? `@media(max-width:${width}px){${css}}` : css);
+      }
+    }
     const values = layers.map(layer => declarations(layer, typography));
     if (values.some(Boolean)) {
       const cls = `sb-style-${index}`;
@@ -620,14 +642,14 @@ function prepareStyleRules(model: SiteModel): string {
       }
     }
     for (const [i, width] of [0, 1024, 767].entries()) {
-      const hover = transformStyle(layers[i], true);
+      const hover = { ...transformStyle(layers[i], true), ...blockFilterStyle(layers[i], true) };
       if (!Object.keys(hover).length) continue;
       p.__styleClass = `sb-style-${index}`;
       const declarations = Object.entries(hover).map(([k,v]) => k.replace(/[A-Z]/g, c => "-" + c.toLowerCase()) + ":" + v).join(";");
       const css = `.${p.__styleClass}:is(:hover,:focus-within){${declarations}}`;
       rules.push(width ? `@media(max-width:${width}px){${css}}` : css);
     }
-    if (layers.some(layer => layer.transformDuration !== undefined)) rules.push(`@media(prefers-reduced-motion:reduce){.sb-style-${index}{transition-duration:0ms!important}}`);
+    if (layers.some(layer => layer.transformDuration !== undefined || layer.blockFilterDuration !== undefined)) rules.push(`@media(prefers-reduced-motion:reduce){.sb-style-${index}{transition-duration:0ms!important}}`);
     if (typeof builder.className === "string") p.__safeClass = builder.className;
     const anchor = builder.anchorId || builder.anchor;
     if (typeof anchor === "string") p.__safeAnchor = anchor;
@@ -740,7 +762,7 @@ async function buildIndexHtml(model: SiteModel, ogImage?: string, restrictExtern
   const popups=ensureRelOnLinks(renderBlocksToHtml(model.blocks.filter(block=>block.type==="site-popup")));
   const bodyRaw = renderBlocksToHtml(model.blocks.filter(block => block.type !== "theme-header" && block.type !== "theme-footer" && block.type!=="site-popup"));
   const body = ensureRelOnLinks(bodyRaw);
-  const runtimeNeeded = remoteSound || remoteMap || blocks.some(block => block.type === "site-popup" || block.type === "loopgrid" || ((block.type === "image" || block.type === "grid") && block.props?.lightbox === true) || block.type === "accordion" || block.type === "share" || block.type === "carousel" || block.type === "mediacarousel" || block.type === "videoplaylist" || block.type === "slides" || block.type === "countdown" || block.type === "offcanvas" || (block.type === "counter" && block.props?.animate === true) || (block.type === "contentnav" && block.props?.spy));
+  const runtimeNeeded = remoteSound || remoteMap || blocks.some(block => block.props?.__entrance === true || block.type === "site-popup" || block.type === "loopgrid" || ((block.type === "image" || block.type === "grid") && block.props?.lightbox === true) || block.type === "accordion" || block.type === "share" || block.type === "carousel" || block.type === "mediacarousel" || block.type === "videoplaylist" || block.type === "slides" || block.type === "countdown" || block.type === "offcanvas" || (block.type === "counter" && block.props?.animate === true) || (block.type === "contentnav" && block.props?.spy));
 
   const hasAnimation = blocks.some(block => block.type === "lottie");
   const animationRuntime = hasAnimation ? await loadLottieRenderer() : "";

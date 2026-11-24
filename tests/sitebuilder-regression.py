@@ -9,6 +9,7 @@ import time
 from urllib.parse import urlparse
 
 CASES = [
+    ("позиция и эффекты в редакторе и публикации", "--elementor-position-effects-smoke"),
     ("адаптивный градиент на холсте и в HTML", "--elementor-gradient-smoke"),
     ("всплывающее окно, триггеры и возврат фокуса", "--elementor-popup-smoke"),
     ("текст вдоль SVG и плеер по выбору посетителя", "--elementor-publishing-smoke"),

@@ -6,6 +6,9 @@ import type { Block, Device, DeviceStyles, StyleClass } from "../../types";
 import type { BlockPatch } from "../patch";
 import StyleTab from "./StyleTab";
 import TransformControls from "./TransformControls";
+import LayoutEffects from "./LayoutEffects";
+import BlockFilterControls from "./BlockFilterControls";
+import EntranceControls from "./EntranceControls";
 
 function representative(rule: StyleClass): Block {
   return { type: "heading", id: rule.id, level: "h2", text: "", styleByBp: rule.layers };
@@ -133,6 +136,9 @@ export default function StyleClassPanel({
           </div>
           <StyleTab key={rule.id} block={representative(rule)} device={device} onPatch={patchRule} />
           <TransformControls block={representative(rule)} device={device} onPatch={patchRule} />
+          <LayoutEffects block={representative(rule)} device={device} onPatch={patchRule} />
+          <BlockFilterControls block={representative(rule)} device={device} onPatch={patchRule} />
+          <EntranceControls block={representative(rule)} device={device} onPatch={patchRule} previewBlockId={block.id} />
           <button
             type="button"
             onClick={() => {

@@ -31,7 +31,7 @@ parser.add_argument("--button-style-smoke", action="store_true", help="Пров�
 parser.add_argument("--button-icon-padding-smoke", action="store_true", help="Проверить иконку и отступы кнопки по сторонам")
 parser.add_argument("--button-effects-smoke", action="store_true", help="Проверить градиент и тень кнопки")
 parser.add_argument("--heading-semantics-smoke", action="store_true", help="Проверить семантику и ссылку заголовка")
-for case in ("layout","library","animation","templates","loop","matrix","custom-grid","classes","publishing","popup","gradient"):
+for case in ("layout","library","animation","templates","loop","matrix","custom-grid","classes","publishing","popup","gradient","position-effects"):
  parser.add_argument("--elementor-"+case+"-smoke", action="store_const", dest="elementor_case", const=case)
 args=parser.parse_args()
 with tempfile.TemporaryDirectory(prefix="altnet-drag-") as d:

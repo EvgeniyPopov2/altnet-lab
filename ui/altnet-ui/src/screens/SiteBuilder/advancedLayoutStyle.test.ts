@@ -20,4 +20,15 @@ describe("адаптивное расположение", () => {
     expect(html).toContain("z-index:0");
     expect(html).toContain("@media(max-width:767px)");
   });
+  it("применяет относительное положение и разрешённые единицы", async () => {
+    const desktop = { positionMode: "relative", positionT: 12, positionL: -25, positionUnit: "%", layerOrder: 2 };
+    expect(advancedLayoutStyle(desktop)).toMatchObject({ position: "relative", top: "12%", left: "-25%", zIndex: 2 });
+    expect(advancedLayoutStyle({ positionMode: "relative", positionUnit: "px; color:red", positionT: Infinity, positionR: 6000 }))
+      .toEqual({ position: "relative", right: "5000px" });
+    const styles = { desktop, mobile: { positionMode: "normal" } };
+    expect(advancedLayoutStyle(resolveResponsiveStyle({}, styles, "mobile"))).toMatchObject({ position: "static", zIndex: 2 });
+    const html = await (await exportSingleHtml(adaptFromSiteBuilderDoc({ blocks: [{ id: "p", type: "p", text: "Текст", styleByBp: styles }] }), { bundleAssets: false })).text();
+    expect(html).toContain("position:relative;top:12%;left:-25%");
+    expect(html).toContain("position:static;z-index:2");
+  });
 });
