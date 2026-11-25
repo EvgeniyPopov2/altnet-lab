@@ -153,6 +153,11 @@ def run(browser, artifact_root, theme):
                 assert "AltNet" in result["brand"] and "Tor" not in result["brand"], result
                 assert not any(result[key] for key in ("externalDefault", "externalAlt", "externalIpfs")), "Alt/IPFS must not be passed to external apps by default"
                 notification = client.call("WebDriver:ExecuteScript", {"script": "let d = Services.wm.getMostRecentWindow('navigator:browser').document; return d.l10n.formatValue('language-notification-label-system', {language: 'Русский'});", "args": []})["value"]
+                settings_labels = client.call("WebDriver:ExecuteScript", {"script": "let Localization = Services.wm.getMostRecentWindow('navigator:browser').Localization; let l = new Localization(['browser/preferences/preferences.ftl', 'toolkit/global/base-browser.ftl'], true); return l.formatMessages([{id:'pane-about-firefox-title'},{id:'help-button-label2'},{id:'update-application-updates-managed-by-os'},{id:'pane-profiles-no-account-sync'}]);", "args": []})["value"]
+                assert settings_labels[0]["value"] == "О браузере AltNet", settings_labels
+                assert settings_labels[1]["value"] == "Поддержка AltNet", settings_labels
+                assert any("обновления AltNet пока не подключены" in a["value"] for a in settings_labels[2]["attributes"]), settings_labels
+                assert settings_labels[3]["value"] == "Профили", settings_labels
                 assert "AltNet" in notification and "Tor" not in notification, notification
                 routes = client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('navigator:browser'); return {menu: w.getHelpLinkURL('firefox-help'), support: Services.prefs.getStringPref('browser.base-browser-support-url'), feedback: Services.prefs.getStringPref('app.feedback.baseURL'), feedbackHidden: w.document.getElementById('feedbackPage').hidden, aboutMenu: w.document.getElementById('aboutName').getAttribute('label'), releaseNotes: Services.prefs.getStringPref('app.releaseNotesURL.aboutDialog')};", "args": []})["value"]
                 assert all(routes[key] == "about:altnet" for key in ("menu", "support", "feedback")), routes
