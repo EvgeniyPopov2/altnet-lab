@@ -3,8 +3,9 @@
 import base64
 import hashlib
 import http.client
-import io
 import json
+import os
+import queue
 import socket
 import socketserver
 import sys
@@ -95,9 +96,18 @@ class TransportTest(unittest.TestCase):
         server = SimpleNamespace(socks_port=self.server.server_address[1], site_fetch=threading.BoundedSemaphore(1), shutdown=lambda: None)
         commands = [{"id": 1, "method": "site_open", "onion": onion(), "cid": CID, "profile": "anon"},
                     {"id": 2, "method": "site_read", "offset": 0}, {"id": 3, "method": "site_close"}]
-        output = io.StringIO()
-        serve_native_parent(io.BytesIO(b"".join(json.dumps(c).encode() + b"\n" for c in commands)), output, server, manager)
-        result = [json.loads(line) for line in output.getvalue().splitlines()]
+        read_fd, write_fd = os.pipe()
+        responses = queue.Queue()
+        output = type("Output", (), {"write": lambda self, value: responses.put(json.loads(value)), "flush": lambda self: None})()
+        with os.fdopen(read_fd, "rb", buffering=0) as reader, os.fdopen(write_fd, "wb", buffering=0) as writer:
+            thread = threading.Thread(target=serve_native_parent, args=(reader, output, server, manager), daemon=True)
+            thread.start()
+            result = []
+            for command in commands:
+                writer.write(json.dumps(command).encode() + b"\n")
+                result.append(responses.get(timeout=5))
+            writer.close(); thread.join(timeout=5)
+            self.assertFalse(thread.is_alive())
         self.assertEqual(result[0]["total"], 4)
         self.assertEqual(base64.b64decode(result[1]["data"]), b"car!")
         self.assertTrue(result[2]["ok"])

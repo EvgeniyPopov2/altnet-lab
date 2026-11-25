@@ -225,6 +225,44 @@ class SOCKS(socketserver.ThreadingTCPServer):
 def serve_native_parent(stream, output, server, manager):
     # Состояние, ресурсы и явно разрешённые команды мостов, без HTTP-токена.
     site = None
+    fetching = False
+    site_lock, output_lock = threading.Lock(), threading.Lock()
+    parent_open = threading.Event()
+    parent_open.set()
+
+    def respond(result):
+        with output_lock:
+            if not parent_open.is_set():
+                return
+            try:
+                output.write(json.dumps(result, separators=(",", ":")) + "\n")
+                output.flush()
+            except OSError:
+                parent_open.clear()
+
+    def fetch_site(command):
+        nonlocal site, fetching
+        try:
+            def ready():
+                with manager.lock:
+                    return bool(parent_open.is_set() and manager.active_port and not manager.paused and not manager.stop.is_set())
+            data = fetch_car(server.socks_port, command["onion"], command["cid"], ready)
+            if not isinstance(data, bytes) or not 0 < len(data) <= MAX_CAR:
+                raise ValueError("Некорректный пакет сайта")
+            if not parent_open.is_set():
+                return
+            fingerprint = hashlib.sha256(data).hexdigest()
+            with site_lock:
+                if parent_open.is_set():
+                    site = data
+                fetching = False
+            respond({"id": command["id"], "ok": True, "total": len(data), "sha256": fingerprint})
+        except Exception:
+            with site_lock:
+                fetching = False
+            respond({"id": command["id"], "ok": False, "error": "site_unavailable"})
+        finally:
+            server.site_fetch.release()
     try:
         while True:
             try:
@@ -241,27 +279,30 @@ def serve_native_parent(stream, output, server, manager):
                     result = {"id": command["id"], "ok": True, "offset": command["offset"],
                               "total": total, "data": data, "sha256": fingerprint}
                 elif command["method"] == "site_open":
-                    if site is not None or not server.site_fetch.acquire(blocking=False):
-                        raise ValueError("Загрузка занята")
+                    with site_lock:
+                        if site is not None or fetching or not server.site_fetch.acquire(blocking=False):
+                            raise ValueError("Загрузка занята")
+                        fetching = True
                     try:
-                        def ready():
-                            with manager.lock:
-                                return bool(manager.active_port and not manager.paused and not manager.stop.is_set())
-                        site = fetch_car(server.socks_port, command["onion"], command["cid"], ready)
-                        if not isinstance(site, bytes) or not 0 < len(site) <= MAX_CAR:
-                            site = None
-                            raise ValueError("Некорректный пакет сайта")
-                    finally:
+                        threading.Thread(target=fetch_site, args=(command,), daemon=True).start()
+                    except BaseException:
+                        with site_lock:
+                            fetching = False
                         server.site_fetch.release()
-                    result = {"id": command["id"], "ok": True, "total": len(site), "sha256": hashlib.sha256(site).hexdigest()}
+                        raise
+                    continue
                 elif command["method"] == "site_read":
                     offset = command["offset"]
-                    if site is None or offset >= len(site):
-                        raise ValueError("Пакет недоступен")
-                    chunk = site[offset:offset + bridge_native.SITE_CHUNK]
+                    with site_lock:
+                        if site is None or offset >= len(site):
+                            raise ValueError("Пакет недоступен")
+                        chunk = site[offset:offset + bridge_native.SITE_CHUNK]
                     result = {"id": command["id"], "ok": True, "offset": offset, "data": base64.b64encode(chunk).decode("ascii")}
                 elif command["method"] == "site_close":
-                    site = None
+                    with site_lock:
+                        if fetching:
+                            raise ValueError("Загрузка ещё выполняется")
+                        site = None
                     result = {"id": command["id"], "ok": True}
                 else:
                     manager.request(command["method"], command.get("lines"))
@@ -269,11 +310,12 @@ def serve_native_parent(stream, output, server, manager):
             except Exception:
                 error = {"status": "status_unavailable", "asset": "asset_unavailable", "site_open": "site_unavailable", "site_read": "site_unavailable", "site_close": "site_unavailable"}.get(command["method"], "action_rejected")
                 result = {"id": command["id"], "ok": False, "error": error}
-            output.write(json.dumps(result, separators=(",", ":")) + "\n")
-            output.flush()
+            respond(result)
     except (OSError, ValueError):
         pass
     finally:
+        with output_lock:
+            parent_open.clear()
         server.shutdown()
 
 

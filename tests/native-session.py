@@ -209,14 +209,21 @@ class NativeSessionTests(unittest.TestCase):
                     {"id": 3, "method": "site_read", "offset": bridge_native.SITE_CHUNK},
                     {"id": 4, "method": "site_open", "onion": host, "cid": cid, "profile": "anon"},
                     {"id": 5, "method": "site_close"}, {"id": 6, "method": "site_read", "offset": 0}]
-        raw = b"".join(json.dumps(item).encode() + b"\n" for item in commands)
-        output = io.StringIO()
+        read_fd, write_fd = os.pipe()
+        results = queue.Queue()
+        output = type("Output", (), {"write": lambda self, value: results.put(json.loads(value)), "flush": lambda self: None})()
         with patch("bridge_client.fetch_car", return_value=car) as fetch:
-            serve_native_parent(io.BytesIO(raw), output, server, manager)
+            with os.fdopen(read_fd, "rb", buffering=0) as reader, os.fdopen(write_fd, "wb", buffering=0) as writer:
+                thread = threading.Thread(target=serve_native_parent, args=(reader, output, server, manager), daemon=True)
+                thread.start()
+                responses = []
+                for command in commands:
+                    writer.write(json.dumps(command).encode() + b"\n")
+                    responses.append(results.get(timeout=5))
+                writer.close(); thread.join(timeout=5)
+                self.assertFalse(thread.is_alive())
             self.assertEqual(fetch.call_count, 1)
             self.assertEqual(fetch.call_args.args[:3], (1234, host, cid))
-            self.assertTrue(fetch.call_args.args[3]())
-        responses = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual(responses[0], {"id": 1, "ok": True, "total": len(car), "sha256": hashlib.sha256(car).hexdigest()})
         self.assertEqual(base64.b64decode(responses[1]["data"]) + base64.b64decode(responses[2]["data"]), car)
         self.assertEqual(responses[3], {"id": 4, "ok": False, "error": "site_unavailable"})
@@ -225,6 +232,31 @@ class NativeSessionTests(unittest.TestCase):
         for command in ({**commands[0], "profile": "fast"}, {**commands[0], "onion": "example.com"},
                         {"id": 1, "method": "site_read", "offset": True}, {"id": 1, "method": "site_close", "extra": 1}):
             with self.assertRaises(ValueError): bridge_native.read_command(io.BytesIO(json.dumps(command).encode() + b"\n"))
+
+    def test_parent_eof_stops_session_during_pending_site_fetch(self):
+        manager = type("Manager", (), {"lock": threading.RLock(), "active_port": 1, "paused": False, "stop": threading.Event()})()
+        stopped, started, cancelled = threading.Event(), threading.Event(), threading.Event()
+        server = type("Server", (), {"shutdown": lambda self: stopped.set(), "site_fetch": threading.BoundedSemaphore(1), "socks_port": 1234})()
+        def blocked_fetch(_port, _host, _cid, ready):
+            started.set()
+            if not stopped.wait(5): raise RuntimeError("parent EOF was not handled")
+            if not ready(): cancelled.set()
+            raise OSError("cancelled")
+        read_fd, write_fd = os.pipe()
+        with patch("bridge_client.fetch_car", side_effect=blocked_fetch):
+            with os.fdopen(read_fd, "rb", buffering=0) as reader, os.fdopen(write_fd, "wb", buffering=0) as writer:
+                output = io.StringIO()
+                thread = threading.Thread(target=serve_native_parent, args=(reader, output, server, manager), daemon=True)
+                thread.start()
+                command = {"id": 1, "method": "site_open", "onion": "a" * 56 + ".onion", "cid": "b" + "a" * 58, "profile": "anon"}
+                writer.write(json.dumps(command).encode() + b"\n")
+                self.assertTrue(started.wait(3))
+                writer.close()
+                self.assertTrue(stopped.wait(3), "EOF must stop the owned session without waiting for the network")
+                self.assertTrue(cancelled.wait(3), "The network worker must observe that the parent is gone")
+                thread.join(timeout=3)
+                self.assertFalse(thread.is_alive())
+                self.assertEqual(output.getvalue(), "")
 
     def test_entrypoint_rejects_invalid_bootstrap_before_writing_or_binding(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get("TEMP")) as tmp:
@@ -286,8 +318,14 @@ for (const [a,c,r] of [[p.authority+'0',p.challenge,p.response],[p.authority,cre
 
     def test_real_entrypoint_reports_only_via_child_pipe(self):
         # Mock the transport manager: no Tor, multicast or external network is used.
-        shim = r'''import contextlib,sys,threading
+        shim = r'''import contextlib,os,sys,threading,time
+from pathlib import Path
 sys.path.insert(0,sys.argv[1]); import bridge_client
+def blocked_fetch(*args):
+ Path(os.environ['ALTNET_TEST_FETCH_MARKER']).write_text('started')
+ time.sleep(60)
+ raise OSError('test-only')
+bridge_client.fetch_car=blocked_fetch
 class Source:
  def __init__(self,*a,**kw): pass
  def bootstrap(self,*a): pass
@@ -309,7 +347,9 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
             command = [sys.executable, "-u", "-c", shim, str(ROOT / "scripts"), "--state", str(root / "state"),
                        "--dist", str(dist), "--tor", str(root / "tor"), "--transport", str(root / "transport"),
                        "--keyring", str(root / "keyring"), "--port", "0", "--socks-port", "0", "--native-stdio", "--native-http-proof"]
+            marker = root / "synthetic-fetch-started"
             proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    env={**os.environ, "ALTNET_TEST_FETCH_MARKER": str(marker)},
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             try:
                 proc.stdin.write(json.dumps({"protocol": bridge_native.PROTOCOL, "secret": token(self.secret)}).encode() + b"\n"); proc.stdin.flush()
@@ -340,6 +380,12 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
                                             text=True, capture_output=True, timeout=90)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     self.assertIn("PASS: Gecko verifies the live child response and rejects replay", result.stdout)
+                site = {"id": 2, "method": "site_open", "onion": "a" * 56 + ".onion", "cid": "b" + "a" * 58, "profile": "anon"}
+                proc.stdin.write(json.dumps(site).encode() + b"\n"); proc.stdin.flush()
+                import time
+                deadline = time.monotonic() + 5
+                while not marker.exists() and time.monotonic() < deadline: time.sleep(.05)
+                self.assertTrue(marker.exists(), "Synthetic fetch did not start")
                 proc.stdin.close()
                 self.assertEqual(proc.wait(timeout=15), 0, "Child must stop after its parent closes the private pipe")
             finally:

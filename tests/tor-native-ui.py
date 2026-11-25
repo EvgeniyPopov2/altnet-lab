@@ -101,7 +101,7 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                 except OSError:
                     return None
             with wait_for(connect, "isolated Marionette", timeout=90) as sock:
-                sock.settimeout(90)
+                sock.settimeout(160 if native_tor and native_tor.get("site") else 90)
                 assert receive(sock)["applicationType"] == "gecko"
                 client = Client(sock)
                 client.call("WebDriver:NewSession", {"capabilities": {}})
@@ -278,6 +278,8 @@ let p=arguments[0]; return (async()=>{
                     print("PASS: Gecko controls the test client's Tor manager and keeps rejected commands private")
                     print("PASS: Gecko reads and verifies multi-chunk client assets over the child pipe")
                 if native_tor:
+                    if native_tor.get("site"):
+                        client.call("WebDriver:SetTimeouts", {"script": 150000})
                     create_script = """let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs');
 let p=arguments[0],w=Services.wm.getMostRecentWindow('navigator:browser');return (async()=>{
 w.__altnetNativeTestSession=await m.openNativeSession({command:p.command,args:p.args,verifyExecutable:async(command,args)=>command===p.command && JSON.stringify(args)===JSON.stringify(p.args),timeoutMs:15000});
@@ -299,6 +301,18 @@ return w.__altnetNativeTestSession.getStatus();})();"""
                             status = client.call("WebDriver:ExecuteScript", {"script": "return Services.wm.getMostRecentWindow('navigator:browser').__altnetNativeTestSession.getStatus();", "args": []})["value"]
                         else:
                             raise TimeoutError("Временный дочерний клиент не подтвердил соединение Tor вовремя")
+                        if native_tor.get("site"):
+                            site = native_tor["site"]
+                            while time.monotonic() < deadline:
+                                transfer = client.call("WebDriver:ExecuteScript", {"script": """let w=Services.wm.getMostRecentWindow('navigator:browser'),p=arguments[0];
+return w.__altnetNativeTestSession.getOnionCar(p.onion,p.cid,'anon').then(async car=>({ok:true,length:car.length,hash:Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',car)),v=>v.toString(16).padStart(2,'0')).join('')}),()=>({ok:false}));""", "args": [site]})["value"]
+                                if transfer.get("ok"):
+                                    assert transfer["length"] == site["length"] and transfer["hash"] == site["sha256"], transfer
+                                    print("PASS: Gecko received the verified test CAR from a separate client over real Tor", flush=True)
+                                    break
+                                time.sleep(3)
+                            else:
+                                raise TimeoutError("Браузер не получил тестовый сайт через Tor вовремя")
                     finally:
                         client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser');let s=w.__altnetNativeTestSession;delete w.__altnetNativeTestSession;return s.close();", "args": []})
                 if native_workspace:

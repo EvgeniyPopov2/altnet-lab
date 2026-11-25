@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Transfer a synthetic CAR between two isolated clients over the real Tor network."""
 import argparse
+import hashlib
 import http.client
 import json
 import os
@@ -82,6 +83,7 @@ def main():
     parser.add_argument("--unixfs", action="store_true", help="Exchange a standard UnixFS CAR instead of an AltNet CAR")
     parser.add_argument("--ui-browser-test", action="store_true", help="Also open the share link in an isolated browser through the real test client")
     parser.add_argument("--ui-browser", type=Path, help="Optional Chromium executable; otherwise use Playwright's installed browser")
+    parser.add_argument("--native-browser", type=Path, help="Также получить CAR через дочерний клиент экспериментального Gecko")
     args = parser.parse_args()
     parent = args.temp.resolve(strict=True)
     directory = Path(tempfile.mkdtemp(prefix="altnet-real-onion-", dir=parent)).resolve()
@@ -142,6 +144,36 @@ def main():
             raise RuntimeError("Тестовый CAR не получен или отличается от исходного")
         (directory / "received.car").write_bytes(received)
         subprocess.run(["node", str(fixture), "verify", str(directory)], check=True, capture_output=True)
+        if args.native_browser:
+            native_state = directory / "native-reader"
+            native_state.mkdir()
+            copy_public_catalog(args.public_cache.resolve(strict=True), native_state)
+            if args.last_good:
+                (native_state / "connection.json").write_text(json.dumps({"lastGood": fingerprints}), encoding="utf-8")
+            native_args = [str(ROOT / "scripts/bridge_client.py"), "--state", str(native_state),
+                           "--dist", str(args.dist.resolve(strict=True)), "--tor", str(args.tor.resolve(strict=True)),
+                           "--transport", str(args.transport.resolve(strict=True)), "--snowflake", str(args.transport.resolve(strict=True)),
+                           "--keyring", str(args.keyring.resolve(strict=True)), "--gpgv", str(args.gpgv.resolve(strict=True)),
+                           "--parallel-probes", "1", "--no-official", "--no-lan"]
+            config = {"command": sys.executable, "args": native_args, "timeout": 420,
+                      "site": {"onion": onion, "cid": cid, "length": len(car), "sha256": hashlib.sha256(car).hexdigest()}}
+            command = [sys.executable, "-B", str(ROOT / "tests/tor-native-ui.py"), "--browser", str(args.native_browser.resolve(strict=True)),
+                       "--theme", "dark", "--expect-no-updater", "--native-tor-live-from-stdin"]
+            proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            try:
+                stdout, stderr = proc.communicate(input=json.dumps(config), timeout=540)
+            except subprocess.TimeoutExpired:
+                if os.name == "nt" and proc.poll() is None:
+                    subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, check=False, timeout=20)
+                elif proc.poll() is None:
+                    proc.terminate()
+                proc.communicate(timeout=20)
+                raise TimeoutError("Экспериментальный браузер не завершил тест вовремя") from None
+            if proc.returncode or "PASS: Gecko received the verified test CAR from a separate client over real Tor" not in stdout:
+                raise RuntimeError("Проверка нативной передачи через Tor не прошла: " + stdout + stderr)
+            print("PASS: нативный браузер получил тот же проверенный CAR через собственный Tor-клиент.", flush=True)
         if args.ui_browser_test:
             browser_args = [str(args.ui_browser.resolve(strict=True)) if args.ui_browser else "", "unixfs" if args.unixfs else "altnet"]
             subprocess.run(["node", "tests/onion-real-browser.mjs", str(clients[1][1]), onion, cid, *browser_args],
