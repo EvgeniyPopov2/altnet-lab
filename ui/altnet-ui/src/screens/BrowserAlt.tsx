@@ -5,6 +5,7 @@ import LocalSiteFrame from "../components/LocalSiteFrame";
 import { BOOKMARKS_KEY, readBookmarks, toggleBookmark, type BrowserBookmark } from "../core/sites/browserBookmarks";
 import { browserTabTitle, createBrowserTab, parseBrowserAddress, type BrowserTab } from "../core/sites/browserNavigation";
 import type { VerifiedSite } from "../core/sites/ipfsSitePackage";
+import { encodeSitePath } from "../core/sites/sitePath";
 import {
   deletePublishedSite,
   getPublishedSite,
@@ -199,7 +200,7 @@ export default function BrowserAlt({
       const fragment = event.data.fragment;
       if (fragment !== undefined && (typeof fragment !== "string" || (fragment !== "" && !/^[a-zA-Z0-9_-]{1,128}$/.test(fragment)))) return;
       const base = ipfs ? `ipfs://${ipfs.root}` : `alt://site/${slug}`;
-      setActiveUrl(`${base}${event.data.path === "index.html" ? "" : `/${event.data.path}`}${fragment ? `#${fragment}` : ""}`);
+      setActiveUrl(`${base}${event.data.path === "index.html" ? "" : `/${ipfs ? encodeSitePath(event.data.path) : event.data.path}`}${fragment ? `#${fragment}` : ""}`);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);

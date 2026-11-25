@@ -1,5 +1,5 @@
 import { parseBrowserRoot } from "./siteCid";
-import { validSitePath } from "./sitePath";
+import { decodeSitePath, encodeSitePath } from "./sitePath";
 
 /** Разбор адресов локального браузера. Эта функция никогда не выполняет сетевой запрос. */
 export type BrowserAddress =
@@ -44,10 +44,12 @@ export function parseBrowserAddress(raw: string): BrowserAddress {
   if (ipfs) {
     const root = parseBrowserRoot(ipfs[1]).toString();
     const requested = ipfs[2] || "";
-    const path = !requested ? "index.html" : requested.endsWith("/") ? `${requested}index.html` : requested.split("/").at(-1)?.includes(".") ? requested : `${requested}/index.html`;
+    const decoded = requested ? decodeSitePath(requested.endsWith("/") ? requested.slice(0, -1) : requested) : "";
+    if (requested && !decoded) throw new Error("Недопустимый путь страницы IPFS.");
+    const path = !decoded ? "index.html" : requested.endsWith("/") ? `${decoded}/index.html` : decoded.split("/").at(-1)?.includes(".") ? decoded : `${decoded}/index.html`;
     const fragment = ipfs[3] || "";
-    if (!validSitePath(path) || !/\.html?$/i.test(path)) throw new Error("Недопустимый путь страницы IPFS.");
-    return { kind: "ipfs", root, path, fragment, url: `ipfs://${root}${path !== "index.html" ? "/" + path : ""}${fragment ? "#" + fragment : ""}` };
+    if (!path || !/\.html?$/i.test(path)) throw new Error("Недопустимый путь страницы IPFS.");
+    return { kind: "ipfs", root, path, fragment, url: `ipfs://${root}${path !== "index.html" ? "/" + encodeSitePath(path) : ""}${fragment ? "#" + fragment : ""}` };
   }
   const share = /^alt:\/\/onion\/([a-z2-7]{56}\.onion)\/([a-zA-Z0-9]{1,120})$/.exec(value);
   if (share) {

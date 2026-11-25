@@ -25,8 +25,9 @@ describe("адреса браузера Alt", () => {
     expect(parseBrowserAddress(`ipfs://${root}/pages/about.html`)).toMatchObject({ kind: "ipfs", path: "pages/about.html" });
     expect(parseBrowserAddress(`ipfs://${root}/pages/`)).toMatchObject({ kind: "ipfs", path: "pages/index.html" });
     expect(parseBrowserAddress(`ipfs://${root}/pages`)).toMatchObject({ kind: "ipfs", path: "pages/index.html" });
+    expect(parseBrowserAddress(`ipfs://${root}/Каталог/о%20нас.html`)).toMatchObject({ kind: "ipfs", path: "Каталог/о нас.html", url: `ipfs://${root}/%D0%9A%D0%B0%D1%82%D0%B0%D0%BB%D0%BE%D0%B3/%D0%BE%20%D0%BD%D0%B0%D1%81.html` });
     expect(parseBrowserAddress(`ipfs://${root}/`)).toMatchObject({ kind: "ipfs", path: "index.html" });
-    for (const bad of [`ipfs://${root}/../about.html`, `ipfs://${root}?x=1`, `ipfs://${root.toUpperCase()}`, "ipfs://example.com/", `ipfs://${root}/other.js`]) expect(() => parseBrowserAddress(bad)).toThrow();
+    for (const bad of [`ipfs://${root}/../about.html`, `ipfs://${root}/%2e%2e/about.html`, `ipfs://${root}/a%2fb.html`, `ipfs://${root}?x=1`, `ipfs://${root.toUpperCase()}`, "ipfs://example.com/", `ipfs://${root}/other.js`]) expect(() => parseBrowserAddress(bad)).toThrow();
   });
 
   it("разбирает ссылку onion-раздачи без сетевого запроса", () => {

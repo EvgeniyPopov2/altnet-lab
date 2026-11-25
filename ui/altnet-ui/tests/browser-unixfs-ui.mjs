@@ -16,10 +16,10 @@ const store = { async put(cid, source) {
   return cid;
 } };
 const files = [
-  { path: "index.html", content: new TextEncoder().encode('<link rel="stylesheet" href="_assets/style.css"><h1>Проверенный UnixFS</h1><a href="pages/">О сайте</a><img id="local" src="images/pixel.png"><img src="https://example.invalid/tracker"><script>document.body.dataset.attack="yes"</script>') },
-  { path: "pages/index.html", content: new TextEncoder().encode('<link rel="stylesheet" href="../_assets/style.css"><h1>Вторая страница</h1><a href="../index.html">Домой</a>') },
-  { path: "_assets/style.css", content: new TextEncoder().encode('h1 { color: rgb(12, 34, 56); background-image: url("../images/pixel.png") }') },
-  { path: "images/pixel.png", content: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64") },
+  { path: "index.html", content: new TextEncoder().encode('<link rel="stylesheet" href="_assets/стиль.css"><h1>Проверенный UnixFS</h1><a href="Каталог%20сайта/">О сайте</a><img id="local" src="images/картинка%201.png"><img src="https://example.invalid/tracker"><script>document.body.dataset.attack="yes"</script>') },
+  { path: "Каталог сайта/index.html", content: new TextEncoder().encode('<link rel="stylesheet" href="../_assets/стиль.css"><h1>Вторая страница</h1><a href="../index.html">Домой</a>') },
+  { path: "_assets/стиль.css", content: new TextEncoder().encode('h1 { color: rgb(12, 34, 56); background-image: url("../images/картинка%201.png") }') },
+  { path: "images/картинка 1.png", content: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64") },
 ];
 let root;
 for await (const entry of importer(files, store, { wrapWithDirectory: true, cidVersion: 0, rawLeaves: false })) root = entry.cid;
@@ -57,7 +57,7 @@ try {
   assert.match(await frame.locator("h1").evaluate(e => getComputedStyle(e).backgroundImage), /data:image\/png;base64/);
   assert.match(await frame.locator("#local").getAttribute("src"), /^data:image\/png;base64,/);
   await frame.getByText("О сайте").click();
-  const nested = page.frameLocator('iframe[title="pages/index.html"]');
+  const nested = page.frameLocator('iframe[title="Каталог сайта/index.html"]');
   await nested.getByText("Вторая страница").waitFor();
   assert.equal(await nested.locator("h1").evaluate(e => getComputedStyle(e).color), "rgb(12, 34, 56)");
   await nested.getByText("Домой").click();
