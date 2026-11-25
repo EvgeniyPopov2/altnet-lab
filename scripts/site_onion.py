@@ -18,6 +18,12 @@ from bridge_route import read_exact
 
 MAX_CAR = 72 * 1024 * 1024
 MAX_SECONDS = 120
+CONNECT_ATTEMPTS = 3
+RETRY_DELAY = 0.4
+
+
+class OnionUnavailable(OSError):
+    """Tor не смог построить соединение с onion-сервисом; можно повторить."""
 
 
 def onion_address(value):
@@ -60,8 +66,12 @@ def connect_onion(proxy_port, host):
         name = host.encode("ascii")
         sock.sendall(b"\x05\x01\x00\x03" + bytes([len(name)]) + name + struct.pack("!H", 80))
         version, result, reserved, family = read_exact(sock, 4)
-        if (version, result, reserved) != (5, 0, 0):
-            raise OSError("SOCKS destination unavailable")
+        if (version, reserved) != (5, 0):
+            raise OSError("Invalid SOCKS reply")
+        if result in (1, 3, 4, 5, 6):
+            raise OnionUnavailable("SOCKS destination unavailable")
+        if result:
+            raise OSError("SOCKS destination rejected")
         if family == 3:
             length = read_exact(sock, 1)[0]
         elif family in (1, 4):
@@ -80,8 +90,27 @@ def fetch_car(proxy_port, host, cid, route_ready):
     if not route_ready():
         raise OSError("Подключение Tor пока не готово")
     deadline = time.monotonic() + MAX_SECONDS
-    with connect_onion(proxy_port, host) as sock:
-        timer = threading.Timer(MAX_SECONDS, lambda: _interrupt(sock))
+    sock = None
+    for attempt in range(CONNECT_ATTEMPTS):
+        if not route_ready() or time.monotonic() >= deadline:
+            raise OSError("Подключение Tor прервано или истекло время ожидания")
+        try:
+            sock = connect_onion(proxy_port, host)
+            break
+        except (OnionUnavailable, TimeoutError, ConnectionError):
+            if attempt + 1 == CONNECT_ATTEMPTS or not route_ready():
+                raise
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise OSError("Истекло время ожидания Tor") from None
+            time.sleep(min(RETRY_DELAY * (attempt + 1), remaining))
+    if sock is None:
+        raise OSError("Не удалось подключиться через Tor")
+    with sock:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0 or not route_ready():
+            raise OSError("Подключение Tor прервано или истекло время ожидания")
+        timer = threading.Timer(remaining, lambda: _interrupt(sock))
         timer.daemon = True
         timer.start()
         try:

@@ -50,7 +50,10 @@ class FakeSocks(socketserver.BaseRequestHandler):
         name = read_exact(s, header[4])
         port = read_exact(s, 2)
         self.server.destination = (header[:4], name, port)
-        s.sendall(b"\x05\x00\x00\x01\x7f\x00\x00\x01\x00\x50")
+        result = self.server.connect_results.pop(0) if self.server.connect_results else self.server.connect_result
+        s.sendall(bytes((5, result, 0, 1)) + b"\x7f\x00\x00\x01\x00\x50")
+        if result:
+            return
         request = bytearray()
         try:
             while not request.endswith(b"\r\n\r\n"):
@@ -71,6 +74,8 @@ class TransportTest(unittest.TestCase):
         self.server = Server(("127.0.0.1", 0), FakeSocks)
         self.server.method_reply = b"\x05\x02"
         self.server.auth_reply = b"\x01\x00"
+        self.server.connect_result = 0
+        self.server.connect_results = []
         self.server.credentials = []
         self.server.response = b"HTTP/1.1 200 OK\r\nContent-Type: application/vnd.ipld.car\r\nContent-Length: 4\r\n\r\ncar!"
         self.worker = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -130,6 +135,50 @@ class TransportTest(unittest.TestCase):
                 self.fetch()
             connect.assert_called_once_with(("127.0.0.1", self.server.server_address[1]), 5)
 
+    def test_transient_onion_failure_retries_only_through_the_same_tor_socks(self):
+        real = site_onion.connect_onion
+        attempts = []
+        def flaky(port, host):
+            attempts.append((port, host))
+            if len(attempts) < 3: raise site_onion.OnionUnavailable("temporary")
+            return real(port, host)
+        with patch("site_onion.connect_onion", side_effect=flaky), patch("site_onion.time.sleep"):
+            self.assertEqual(self.fetch(), b"car!")
+        self.assertEqual(attempts, [(self.server.server_address[1], onion())] * 3)
+        self.assertEqual(len(self.server.credentials), 1)
+
+    def test_retries_use_fresh_tor_isolation_credentials(self):
+        self.server.connect_results = [4, 6, 0]
+        with patch("site_onion.time.sleep"):
+            self.assertEqual(self.fetch(), b"car!")
+        names = [item[1] for item in self.server.credentials]
+        self.assertEqual(len(names), site_onion.CONNECT_ATTEMPTS)
+        self.assertEqual(len(set(names)), site_onion.CONNECT_ATTEMPTS)
+
+    def test_retries_are_bounded_and_stop_when_route_is_lost(self):
+        with patch("site_onion.connect_onion", side_effect=site_onion.OnionUnavailable("unavailable")) as connect, patch("site_onion.time.sleep"):
+            with self.assertRaises(site_onion.OnionUnavailable): self.fetch()
+            self.assertEqual(connect.call_count, site_onion.CONNECT_ATTEMPTS)
+        active = True
+        def disconnected(*_):
+            nonlocal active
+            active = False
+            raise site_onion.OnionUnavailable("route lost")
+        with patch("site_onion.connect_onion", side_effect=disconnected) as connect, patch("site_onion.time.sleep"):
+            with self.assertRaises(site_onion.OnionUnavailable): self.fetch(ready=lambda: active)
+            connect.assert_called_once()
+
+    def test_protocol_errors_do_not_retry(self):
+        with patch("site_onion.connect_onion", side_effect=OSError("invalid protocol")) as connect, patch("site_onion.time.sleep") as sleep:
+            with self.assertRaises(OSError): self.fetch()
+            connect.assert_called_once()
+            sleep.assert_not_called()
+        self.server.connect_result = 2  # Правила SOCKS отклонили соединение.
+        with patch("site_onion.time.sleep") as sleep:
+            with self.assertRaisesRegex(OSError, "rejected"): self.fetch()
+            self.assertEqual(len(self.server.credentials), 1)
+            sleep.assert_not_called()
+
     def test_reject_redirect_oversize_wrong_type_and_truncation(self):
         for response in (
             b"HTTP/1.1 302 Found\r\nLocation: http://example.com\r\nContent-Length: 0\r\n\r\n",
@@ -141,6 +190,13 @@ class TransportTest(unittest.TestCase):
             self.server.response = response
             with self.subTest(response=response), self.assertRaises((OSError, site_onion.http.client.HTTPException)):
                 self.fetch()
+
+    def test_invalid_gateway_response_is_not_retried(self):
+        self.server.response = b"HTTP/1.1 302 Found\r\nLocation: http://example.invalid\r\nContent-Length: 0\r\n\r\n"
+        with patch("site_onion.connect_onion", wraps=site_onion.connect_onion) as connect, patch("site_onion.time.sleep") as sleep:
+            with self.assertRaises(OSError): self.fetch()
+            connect.assert_called_once()
+            sleep.assert_not_called()
 
     def test_route_lost_after_connect(self):
         counter = iter((True, False))
