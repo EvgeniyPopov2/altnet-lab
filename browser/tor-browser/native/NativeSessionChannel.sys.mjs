@@ -7,19 +7,25 @@ import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 const PROTOCOL = "altnet-native-v1";
 const PHASES = new Set(["starting", "paused", "waiting", "ready", "recovering", "checking"]);
 const INTERNET = new Set(["unchecked", "checking", "verified", "https", "unreachable"]);
+const ASSET_PATH = /^(?:index\.html|altnet-logo\.png|vite\.svg|assets\/[A-Za-z0-9_.-]{1,200}\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?|ico)|icons\/aura\/[A-Za-z0-9_-]{1,200}\.svg|fonts\/manrope\/(?:Manrope-Regular\.ttf|OFL\.txt))$/;
+const ASSET_CHUNK = 8192;
+const ASSET_LIMIT = 10 * 1024 * 1024;
 
 async function readLine(stream, limit = 1024) {
   let line = "";
   while (line.length <= limit) {
-    const char = await stream.readString(1);
-    if (char === "\n") return line;
-    // Python's text stdout on Windows normally ends lines with CRLF.
-    if (char === "\r") {
-      if (await stream.readString(1) === "\n") return line;
-      throw new Error("Некорректный ответ клиента");
+    const chunk = await stream.readString();
+    if (!chunk || /[^\x20-\x7e\r\n]/.test(chunk)) throw new Error("Некорректный ответ клиента");
+    line += chunk;
+    const end = line.indexOf("\n");
+    if (end >= 0) {
+      if (end !== line.length - 1) throw new Error("Лишние данные от клиента");
+      line = line.slice(0, end);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      if (line.includes("\r") || line.length > limit) throw new Error("Некорректный ответ клиента");
+      return line;
     }
-    if (!char || char.charCodeAt(0) < 32 || char.charCodeAt(0) > 126) throw new Error("Некорректный ответ клиента");
-    line += char;
+    if (line.includes("\r") && !line.endsWith("\r")) throw new Error("Некорректный ответ клиента");
   }
   throw new Error("Слишком длинный ответ клиента");
 }
@@ -109,6 +115,36 @@ export async function openNativeSession({ command, args, verifyExecutable, timeo
         const response = parseLine(await bounded(readLine(proc.stdout), proc, timeoutMs));
         if (!validStatus(response, id)) throw new Error("Не удалось проверить состояние локального клиента");
         return response.status;
+      } catch (error) {
+        closed = true;
+        await kill(proc);
+        throw error;
+      } finally { busy = false; }
+    },
+    async getAsset(path) {
+      if (closed || busy || nextId > 2147483647 || typeof path !== "string" || ASSET_PATH.exec(path)?.[0] !== path) throw new Error("Ресурс клиента недоступен");
+      busy = true;
+      let offset = 0, total = null, expected = "", bytes = null;
+      try {
+        do {
+          if (nextId > 2147483647) throw new Error("Сеанс исчерпан");
+          const id = nextId++;
+          await bounded(proc.stdin.write(JSON.stringify({ id, method: "asset", path, offset }) + "\n"), proc, timeoutMs);
+          const result = parseLine(await bounded(readLine(proc.stdout, 12000), proc, timeoutMs));
+          if (!result || Object.keys(result).length !== 6 || !["id", "ok", "offset", "total", "data", "sha256"].every(key => Object.hasOwn(result, key)) ||
+              result.id !== id || result.ok !== true || result.offset !== offset || !Number.isInteger(result.total) || result.total < 0 || result.total > ASSET_LIMIT ||
+              (total !== null && total !== result.total) || typeof result.data !== "string" || typeof result.sha256 !== "string" ||
+              (offset === 0 ? !/^[a-f0-9]{64}$/.test(result.sha256) : result.sha256 !== "")) throw new Error("Некорректный ресурс клиента");
+          if (total === null) { total = result.total; expected = result.sha256; bytes = new Uint8Array(total); }
+          let decoded;
+          try { decoded = atob(result.data); } catch { throw new Error("Некорректный ресурс клиента"); }
+          if (btoa(decoded) !== result.data || decoded.length !== Math.min(ASSET_CHUNK, total - offset)) throw new Error("Некорректный ресурс клиента");
+          for (let i = 0; i < decoded.length; i++) bytes[offset + i] = decoded.charCodeAt(i);
+          offset += decoded.length;
+        } while (offset < total);
+        const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), value => value.toString(16).padStart(2, "0")).join("");
+        if (hash !== expected) throw new Error("Ресурс клиента изменился при чтении");
+        return bytes;
       } catch (error) {
         closed = true;
         await kill(proc);

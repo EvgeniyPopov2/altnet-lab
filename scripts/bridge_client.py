@@ -217,19 +217,25 @@ class SOCKS(socketserver.ThreadingTCPServer):
 
 
 def serve_native_parent(stream, output, server, manager):
-    # Only a bounded, allowlisted status command is accepted over this pipe.
+    # Только состояние и ограниченные статические ресурсы приложения, без HTTP-токена.
     try:
         while True:
             try:
-                request_id = bridge_native.read_request(stream)
+                command = bridge_native.read_command(stream)
             except ValueError:
                 break
-            if request_id is None:
+            if command is None:
                 break
             try:
-                result = {"id": request_id, "ok": True, "status": bridge_native.public_route_status(manager)}
+                if command["method"] == "status":
+                    result = {"id": command["id"], "ok": True, "status": bridge_native.public_route_status(manager)}
+                else:
+                    total, data, fingerprint = bridge_native.read_asset(server.dist, command["path"], command["offset"])
+                    result = {"id": command["id"], "ok": True, "offset": command["offset"],
+                              "total": total, "data": data, "sha256": fingerprint}
             except Exception:
-                result = {"id": request_id, "ok": False, "error": "status_unavailable"}
+                result = {"id": command["id"], "ok": False,
+                          "error": "status_unavailable" if command["method"] == "status" else "asset_unavailable"}
             output.write(json.dumps(result, separators=(",", ":")) + "\n")
             output.flush()
     except (OSError, ValueError):

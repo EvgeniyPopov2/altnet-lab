@@ -135,6 +135,9 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                 client.call("WebDriver:ElementClick", {"id": hostile})
                 time.sleep(0.3)
                 assert client.call("WebDriver:GetWindowHandles") == [original], "A web page opened privileged settings"
+                if native_channel:
+                    denied = client.call("WebDriver:ExecuteScript", {"script": "let u='moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs'; return Promise.all([import(u).then(()=>false,()=>true),fetch(u).then(()=>false,()=>true)]);", "args": []})["value"]
+                    assert denied == [True, True], "Обычная страница получила доступ к каналу клиента"
                 client.call("WebDriver:Navigate", {"url": "about:altnet"})
                 logo = client.call("WebDriver:ExecuteScript", {"script": "let img = document.querySelector('.mark img'); return {source: img?.getAttribute('src'), loaded: !!img?.naturalWidth};", "args": []})["value"]
                 assert logo == {"source": "chrome://branding/content/about-logo.png", "loaded": True}, logo
@@ -167,7 +170,7 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                 if native_channel:
                     channel_script = """let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs');
 let p=arguments[0]; return (async()=>{
-  let denied=false,called=false,blocked=0,badReady=false,badStatus=false,hung=false,checking=false;
+  let denied=false,called=false,blocked=0,badReady=false,badStatus=false,hung=false,checking=false,badAsset=false;
   try { await m.openNativeSession({command:p.command,args:p.args,verifyExecutable:async()=>false}); } catch { denied=true; }
   for (const option of ['--port=123','--native-http-proof','--native-http-pr']) {
     try { await m.openNativeSession({command:p.command,args:[...p.args,option],verifyExecutable:async()=>{called=true;return true;}}); } catch { blocked++; }
@@ -176,16 +179,26 @@ let p=arguments[0]; return (async()=>{
   if (p.badStatusArgs) try { let s=await m.openNativeSession({command:p.command,args:p.badStatusArgs,verifyExecutable:async()=>true,timeoutMs:2000}); await s.getStatus(); await s.close(); } catch { badStatus=true; }
   if (p.hangArgs) try { await m.openNativeSession({command:p.command,args:p.hangArgs,verifyExecutable:async()=>true,timeoutMs:400}); } catch { hung=true; }
   if (p.checkingArgs) { let s=await m.openNativeSession({command:p.command,args:p.checkingArgs,verifyExecutable:async()=>true,timeoutMs:2000}); try { let v=await s.getStatus(); checking=v.internet==='checking' && v.torConnected && v.fastAvailable===false; } finally { await s.close(); } }
+  if (p.badAssetArgs) try { let s=await m.openNativeSession({command:p.command,args:p.badAssetArgs,verifyExecutable:async()=>true,timeoutMs:2000}); await s.getAsset('index.html'); await s.close(); } catch { badAsset=true; }
   let session=await m.openNativeSession({command:p.command,args:p.args,verifyExecutable:async(command,args)=>command===p.command && JSON.stringify(args)===JSON.stringify(p.args),timeoutMs:15000});
-  try { let first=session.getStatus();let concurrent=await session.getStatus().then(()=>false,()=>true);let status=await first;await session.close();let closed=false;try{await session.getStatus();}catch{closed=true;}return {denied,blocked,called,badReady,badStatus,hung,checking,concurrent,status,closed}; }
+  try { let first=session.getStatus();let concurrent=await session.getStatus().then(()=>false,()=>true);let status=await first;
+    let asset=await session.getAsset('assets/app-test.js');
+    let hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',asset)),b=>b.toString(16).padStart(2,'0')).join('');
+    let index=new TextDecoder().decode(await session.getAsset('index.html'));
+    let checked=0; for (const item of p.assetChecks || []) { let data=await session.getAsset(item.path); let actual=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),b=>b.toString(16).padStart(2,'0')).join(''); if (actual!==item.sha256) throw Error('Built asset differs'); checked++; }
+    let invalid=0; for (const path of ['../secret.js','assets/../secret.js','assets/app-test.js?x','assets/app-test.js'+String.fromCharCode(10)]) try { await session.getAsset(path); } catch { invalid++; }
+    await session.close();let closed=false;try{await session.getStatus();}catch{closed=true;}return {denied,blocked,called,badReady,badStatus,hung,checking,badAsset,concurrent,status,closed,hash,index,invalid,checked}; }
   finally { await session.close(); }
 })();"""
                     channel = client.call("WebDriver:ExecuteScript", {"script": channel_script, "args": [native_channel]})["value"]
                     assert channel["denied"] and channel["blocked"] == 3 and not channel["called"] and channel["concurrent"] and channel["closed"], channel
                     if native_channel.get("badReadyArgs"):
-                        assert channel["badReady"] and channel["badStatus"] and channel["hung"] and channel["checking"], channel
+                        assert channel["badReady"] and channel["badStatus"] and channel["hung"] and channel["checking"] and channel["badAsset"], channel
                     assert channel["status"]["torConnected"] is False and channel["status"]["fastAvailable"] is False, channel
+                    assert channel["hash"] == native_channel["assetSha256"] and channel["index"] == "<html><head></head></html>" and channel["invalid"] == 4, channel
+                    assert channel["checked"] == len(native_channel["assetChecks"]), channel
                     print("PASS: Gecko starts a verified-test child, reads bounded status over pipes and closes it")
+                    print("PASS: Gecko reads and verifies multi-chunk client assets over the child pipe")
                 if native_tor:
                     create_script = """let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs');
 let p=arguments[0],w=Services.wm.getMostRecentWindow('navigator:browser');return (async()=>{

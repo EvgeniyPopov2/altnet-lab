@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import queue
 import secrets
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -56,6 +57,43 @@ class NativeSessionTests(unittest.TestCase):
         for bad in ("localhost:17231", "127.0.0.1:0", "127.0.0.1:65536", "127.0.0.1:17231\n"):
             with self.assertRaises(ValueError):
                 bridge_native.proof(self.secret, bad, self.challenge)
+
+    def test_native_assets_are_bounded_allowlisted_and_do_not_add_http_token(self):
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TEMP")) as tmp:
+            root = Path(tmp); dist = root / "ui"; (dist / "assets").mkdir(parents=True)
+            content = bytes(range(256)) * 40
+            (dist / "index.html").write_bytes(b"<html>original</html>")
+            (dist / "assets/app-ABC.js").write_bytes(content)
+            (root / "secret.js").write_text("secret")
+            total, encoded, fingerprint = bridge_native.read_asset(dist, "assets/app-ABC.js", 0)
+            self.assertEqual(total, len(content))
+            self.assertEqual(base64.b64decode(encoded), content[:bridge_native.ASSET_CHUNK])
+            self.assertEqual(fingerprint, hashlib.sha256(content).hexdigest())
+            self.assertEqual(base64.b64decode(bridge_native.read_asset(dist, "assets/app-ABC.js", bridge_native.ASSET_CHUNK)[1]), content[bridge_native.ASSET_CHUNK:])
+            self.assertNotIn(b"altnet-session", base64.b64decode(bridge_native.read_asset(dist, "index.html", 0)[1]))
+            for name in ("../secret.js", "assets/../secret.js", "assets/a.js?x", "assets/a.js\n", "/index.html", "assets/a.json", "state/private.js"):
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    bridge_native.read_asset(dist, name, 0)
+            for offset in (-1, True, len(content) + 1, bridge_native.ASSET_LIMIT + 1):
+                with self.assertRaises(ValueError):
+                    bridge_native.read_asset(dist, "assets/app-ABC.js", offset)
+            with (dist / "assets/oversize.js").open("wb") as file:
+                file.truncate(bridge_native.ASSET_LIMIT + 1)
+            with self.assertRaises(ValueError): bridge_native.read_asset(dist, "assets/oversize.js", 0)
+            command = b'{"id":3,"method":"asset","path":"assets/app-ABC.js","offset":0}\n'
+            self.assertEqual(bridge_native.read_command(io.BytesIO(command))["path"], "assets/app-ABC.js")
+            with self.assertRaises(ValueError): bridge_native.read_request(io.BytesIO(command))
+            for invalid in (b'{"id":3,"method":"asset","path":"../secret.js","offset":0}\n',
+                            b'{"id":3,"method":"asset","path":"index.html","offset":true}\n',
+                            b'{"id":3,"method":"asset","path":"index.html","offset":0,"extra":1}\n'):
+                with self.assertRaises(ValueError): bridge_native.read_command(io.BytesIO(invalid))
+
+    def test_current_built_ui_resources_fit_allowlist(self):
+        dist = ROOT / "ui/altnet-ui/dist"
+        if not (dist / "index.html").is_file(): self.skipTest("Build the client UI to check its full resource inventory")
+        unsupported = [path.relative_to(dist).as_posix() for path in dist.rglob("*")
+                       if path.is_file() and (not bridge_native._ASSET.fullmatch(path.relative_to(dist).as_posix()) or path.stat().st_size > bridge_native.ASSET_LIMIT)]
+        self.assertEqual(unsupported, [])
 
     def test_loopback_endpoint_is_opt_in_and_rejects_spoofing(self):
         with ThreadingHTTPServer(("127.0.0.1", 0), LocalUI) as server:
@@ -330,6 +368,16 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
             self.skipTest("The isolated browser copy lacks the bundled Tor binaries")
         with tempfile.TemporaryDirectory(dir=os.environ.get("TEMP")) as tmp:
             root = Path(tmp); dist = root / "ui"; dist.mkdir(); (dist / "index.html").write_text("<html><head></head></html>")
+            (dist / "assets").mkdir(); content = bytes(range(256)) * 80; (dist / "assets/app-test.js").write_bytes(content)
+            built = ROOT / "ui/altnet-ui/dist"
+            selected = [*sorted((built / "assets").glob("index-*.js")), *sorted((built / "assets").glob("jszip*.js")),
+                        built / "altnet-logo.png", built / "icons/aura/basic-heading.svg", built / "fonts/manrope/Manrope-Regular.ttf"]
+            asset_checks = []
+            for source in selected:
+                if not source.is_file(): continue
+                relative = source.relative_to(built); target = dist / relative; target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, target)
+                asset_checks.append({"path": relative.as_posix(), "sha256": hashlib.sha256(source.read_bytes()).hexdigest()})
             keyring = root / "keyring"; keyring.write_bytes(b"empty test keyring")
             args = [str(ROOT / "scripts/bridge_client.py"), "--state", str(root / "state"), "--dist", str(dist),
                     "--tor", str(tor), "--transport", str(transport), "--keyring", str(keyring), "--no-official", "--no-lan"]
@@ -339,6 +387,7 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
                 "bad-status": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\nsys.stdin.buffer.readline()\nprint('{\"id\":1,\"ok\":true,\"status\":{\"phase\":\"ready\",\"progress\":100,\"torConnected\":true,\"internet\":\"verified\",\"fastAvailable\":true}}',flush=True)\ntime.sleep(60)\n",
                 "hung": fake_header + "time.sleep(60)\n",
                 "checking": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\nsys.stdin.buffer.readline()\nprint('{\"id\":1,\"ok\":true,\"status\":{\"phase\":\"ready\",\"progress\":100,\"torConnected\":true,\"internet\":\"checking\",\"fastAvailable\":false}}',flush=True)\nsys.stdin.buffer.read()\n",
+                "bad-asset": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\nsys.stdin.buffer.readline()\nprint('{\"id\":1,\"ok\":true,\"offset\":0,\"total\":1,\"data\":\"eA==\",\"sha256\":\"'+'0'*64+'\"}',flush=True)\ntime.sleep(60)\n",
             }
             fake_args = {}
             for name, source in fixtures.items():
@@ -347,11 +396,13 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
             command = [sys.executable, "-B", str(ROOT / "tests/tor-native-ui.py"), "--browser", str(browser_path),
                        "--theme", "dark", "--expect-no-updater", "--native-channel-from-stdin"]
             config = {"command": sys.executable, "args": args, "badReadyArgs": fake_args["bad-ready"],
-                      "badStatusArgs": fake_args["bad-status"], "hangArgs": fake_args["hung"], "checkingArgs": fake_args["checking"]}
+                      "badStatusArgs": fake_args["bad-status"], "hangArgs": fake_args["hung"], "checkingArgs": fake_args["checking"],
+                      "badAssetArgs": fake_args["bad-asset"], "assetSha256": hashlib.sha256(content).hexdigest(), "assetChecks": asset_checks}
             result = subprocess.run(command, input=json.dumps(config),
                                     text=True, capture_output=True, timeout=90)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("PASS: Gecko starts a verified-test child, reads bounded status over pipes and closes it", result.stdout)
+            self.assertIn("PASS: Gecko reads and verifies multi-chunk client assets over the child pipe", result.stdout)
             if os.name == "nt":
                 import ctypes
                 kernel = ctypes.WinDLL("kernel32", use_last_error=True)
