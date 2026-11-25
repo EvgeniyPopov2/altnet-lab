@@ -65,6 +65,9 @@ export default function BrowserAlt({
   const addressRef = useRef<HTMLInputElement>(null);
   const [addressValue, setAddressValue] = useState<string>(() => tabs[0].url);
   const [navigationError, setNavigationError] = useState("");
+  const [standaloneAvailable, setStandaloneAvailable] = useState(false);
+  const [standaloneStatus, setStandaloneStatus] = useState("");
+  const [standaloneStarting, setStandaloneStarting] = useState(false);
   const [bookmarksState, setBookmarksState] = useState<{ profile: PrivacyProfile; items: BrowserBookmark[]; error: string; legacyPresent: boolean } | null>(null);
   const bookmarksReady = bookmarksState?.profile === privacyProfile;
   const bookmarks = bookmarksReady ? bookmarksState.items : [];
@@ -90,6 +93,34 @@ export default function BrowserAlt({
   const [copyingIpfsVisible, setCopyingIpfsVisible] = useState(false);
   const siteFrameRef = useRef<HTMLIFrameElement>(null);
   const deletingSites = useRef(new Set<string>());
+
+  useEffect(() => {
+    const token = document.querySelector<HTMLMetaElement>('meta[name="altnet-session"]')?.content;
+    if (!token) return;
+    let active = true;
+    fetch("/api/browser/standalone", { headers: { "X-AltNet-Session": token }, signal: AbortSignal.timeout(5000) })
+      .then(response => response.ok ? response.json() : null)
+      .then(result => { if (active) setStandaloneAvailable(result?.available === true); })
+      .catch(() => { if (active) setStandaloneAvailable(false); });
+    return () => { active = false; };
+  }, []);
+
+  const openStandaloneBrowser = async () => {
+    const token = document.querySelector<HTMLMetaElement>('meta[name="altnet-session"]')?.content;
+    if (!token || !standaloneAvailable || privacyProfile !== "anon" || standaloneStarting) return;
+    setStandaloneStarting(true);
+    setStandaloneStatus("");
+    try {
+      const response = await fetch("/api/browser/standalone", {
+        method: "POST", headers: { "X-AltNet-Session": token, "Content-Type": "application/json" },
+        body: "{}", signal: AbortSignal.timeout(5000),
+      });
+      if (!response.ok) throw new Error();
+      setStandaloneStatus("Команда запуска отправлена. Проверьте отдельное окно браузера.");
+    } catch {
+      setStandaloneStatus("Не удалось запустить браузер. Проверьте доступность его файлов.");
+    } finally { setStandaloneStarting(false); }
+  };
 
   useEffect(() => {
     const read = () => {
@@ -680,6 +711,17 @@ export default function BrowserAlt({
       {bookmarksError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{bookmarksError}</div>}
       {ipfsDeleteError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{ipfsDeleteError}</div>}
       {copyStatus && <div role="status" className="rounded-lg border border-white/20 p-2 text-sm text-white/80">{copyStatus} <button type="button" className="underline" onClick={() => setCopyStatus("")}>Закрыть</button></div>}
+      <section className="browser-integration" aria-label="Браузер AltNet">
+        <div>
+          <strong>Браузер AltNet пока не встроен в клиент</strong>
+          <p>Здесь открыт просмотрщик Alt и проверенных копий IPFS. Полноценный браузер на основе Tor Browser пока работает отдельно; общие вкладки и маршруты профилей не подключены.</p>
+          {standaloneStatus && <p role="status">{standaloneStatus}</p>}
+        </div>
+        {standaloneAvailable && <button type="button" disabled={privacyProfile !== "anon" || standaloneStarting} onClick={() => void openStandaloneBrowser()}>
+          {standaloneStarting ? "Запускаем…" : "Открыть отдельное окно"}
+        </button>}
+        {standaloneAvailable && privacyProfile !== "anon" && <p>Запуск из быстрого профиля отключён: отдельный браузер пока не использует его маршрут.</p>}
+      </section>
       <div className="browser-chrome">
       <div className="browser-tab-strip">
         <div role="tablist" aria-label="Вкладки браузера" className="browser-tabs" onKeyDown={event => {

@@ -6,6 +6,15 @@
   color: #e8ebf6;
 }
 
+.browser-integration { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; padding: 12px 14px; border: 1px solid #49456a; border-radius: 10px; background: #211f34; color: #e3dff8; font-size: 12px; line-height: 1.5; }
+.browser-integration > div { flex: 1 1 260px; }
+.browser-integration strong { font-size: 13px; }
+.browser-integration p { max-width: 80ch; margin: 4px 0 0; color: #c5c5d9; }
+.browser-integration > button { flex: 0 0 auto; min-height: 36px; padding: 0 12px; border: 1px solid #756ab3; border-radius: 8px; color: #f3f0ff; font-weight: 600; }
+.browser-integration > button:hover:not(:disabled) { background: #ffffff12; }
+.browser-integration > button:disabled { opacity: .5; cursor: not-allowed; }
+.browser-integration > button:focus-visible { outline: 2px solid #b4a8ff; outline-offset: 3px; }
+
 .browser-chrome {
   min-width: 0;
   overflow: hidden;

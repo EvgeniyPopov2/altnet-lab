@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$NoBrowser)
+param([switch]$NoBrowser, [string]$StandaloneBrowser)
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
@@ -12,7 +12,11 @@ function Test-Client {
     } catch { return $false }
 }
 
-if (-not (Test-Client)) {
+$clientRunning = Test-Client
+if ($clientRunning -and $StandaloneBrowser) {
+    throw 'AltNet is already running; the new browser path cannot be applied to the existing process.'
+}
+if (-not $clientRunning) {
     $state = Join-Path $root 'state'
     New-Item -Path $state -ItemType Directory -Force | Out-Null
     $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -30,6 +34,12 @@ if (-not (Test-Client)) {
     $params = @('-B', '-X', 'utf8', 'scripts/bridge_client.py', '--state', 'state', '--dist', 'ui',
                 '--tor', 'runtime/tor/tor.exe', '--transport', $pt, '--snowflake', $pt, '--seed', 'seed',
                 '--gpgv', $gpgv, '--keyring', 'trusted.gpg')
+    if ($StandaloneBrowser) {
+        if (-not [IO.Path]::IsPathRooted($StandaloneBrowser) -or -not (Test-Path -LiteralPath $StandaloneBrowser -PathType Leaf)) {
+            throw 'StandaloneBrowser must be an absolute path to an existing executable.'
+        }
+        $params += @('--standalone-browser', $StandaloneBrowser)
+    }
     $settingsFile = Join-Path $root 'network.json'
     if (Test-Path -LiteralPath $settingsFile) {
         $settings = Get-Content -LiteralPath $settingsFile -Raw | ConvertFrom-Json

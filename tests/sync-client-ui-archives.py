@@ -108,6 +108,18 @@ class SyncArchivesTests(unittest.TestCase):
         with tarfile.open(self.output / "AltNet-Client-linux-x86_64.tar.gz") as archive:
             self.assertEqual(archive.extractfile("AltNet/scripts/bridge_tor.py").read(), b"isolated Tor")
 
+    def test_updates_windows_launcher_without_adding_it_to_linux(self):
+        launcher = self.root / "Start-AltNet.ps1"
+        launcher.write_text("windows launcher", encoding="utf-8")
+        result = self.run_sync("--windows-launcher", str(launcher))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with zipfile.ZipFile(self.output / "AltNet-Client-windows-x86_64.zip") as archive:
+            self.assertEqual(archive.read("AltNet/Start-AltNet.ps1"), b"windows launcher")
+        with tarfile.open(self.output / "AltNet-Client-linux-x86_64.tar.gz") as archive:
+            self.assertNotIn("AltNet/Start-AltNet.ps1", archive.getnames())
+        manifest = json.loads((self.output / "SHA256.json").read_text(encoding="utf-8"))
+        self.assertIn("AltNet/Start-AltNet.ps1", manifest["windows_replaced_scripts"])
+
 
 if __name__ == "__main__":
     unittest.main()

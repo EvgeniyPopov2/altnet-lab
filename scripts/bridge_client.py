@@ -13,6 +13,7 @@ import select
 import shutil
 import socket
 import socketserver
+import subprocess
 import sys
 import threading
 from urllib.parse import urlsplit
@@ -90,6 +91,10 @@ class LocalUI(HTTP):
             if not self.authorized():
                 return self.reply(403)
             return self.reply(200, json.dumps(self.server.site_share.status()).encode())
+        if route == "/api/browser/standalone":
+            if not self.authorized():
+                return self.reply(403)
+            return self.reply(200, json.dumps({"available": bool(getattr(self.server, "standalone_browser", None))}).encode())
         if route in ("/", "/index.html"):
             doc = (self.server.dist / "index.html").read_bytes()
             tag = f'<meta name="altnet-session" content="{self.server.token}">'
@@ -108,8 +113,10 @@ class LocalUI(HTTP):
         if self.headers.get_content_type() != "application/json":
             return self.reply(403)
         allowed = {"/api/bridges/" + a: a for a in ("refresh", "switch", "manual", "pause", "resume")}
-        if self.path not in allowed and self.path not in ("/api/sites/onion-car", "/api/sites/share-stop"):
+        if self.path not in allowed and self.path not in ("/api/sites/onion-car", "/api/sites/share-stop", "/api/browser/standalone"):
             return self.reply(404)
+        if self.path == "/api/browser/standalone" and (self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) != 1):
+            return self.reply(400)
         try:
             size = int(self.headers.get("Content-Length", "0"))
             if not 0 < size <= 32768:
@@ -120,6 +127,20 @@ class LocalUI(HTTP):
                 raise ValueError()
         except (ValueError, OSError):
             return self.reply(400)
+        if self.path == "/api/browser/standalone":
+            # Страница не выбирает ни исполняемый файл, ни аргументы, ни адрес.
+            # Это только запуск отдельного окна; профили клиента не подключены.
+            if body != {}:
+                return self.reply(400)
+            executable = getattr(self.server, "standalone_browser", None)
+            if executable is None:
+                return self.reply(503)
+            with self.server.browser_launch_lock:
+                try:
+                    subprocess.Popen([str(executable)], cwd=str(executable.parent), close_fds=True)
+                except OSError:
+                    return self.reply(503)
+            return self.reply(202, b'{}')
         if self.path == "/api/sites/share-stop":
             self.server.site_share.stop()
             return self.reply(200, json.dumps(self.server.site_share.status()).encode())
@@ -234,7 +255,12 @@ def main():
     parser.add_argument("--socks-port", type=int, default=17861)
     parser.add_argument("--native-stdio", action="store_true", help="Экспериментальный запуск дочернего сеанса через stdin/stdout")
     parser.add_argument("--native-http-proof", action="store_true", help="Только для экспериментов: включить HTTP-подтверждение сеанса")
+    parser.add_argument("--standalone-browser", type=Path, help="Явно заданный исполняемый файл для запуска браузера в отдельном окне")
     args = parser.parse_args()
+    if args.standalone_browser and (not args.standalone_browser.is_absolute() or not args.standalone_browser.is_file()
+                                    or (os.name == "nt" and args.standalone_browser.suffix.lower() != ".exe")
+                                    or (os.name != "nt" and not os.access(args.standalone_browser, os.X_OK))):
+        parser.error("Нужен абсолютный путь к существующему исполняемому файлу браузера")
     if args.native_http_proof and not args.native_stdio:
         parser.error("HTTP-подтверждение доступно только в дочернем сеансе")
     native_secret = None
@@ -261,6 +287,8 @@ def main():
             sources.route = lambda: manager.active_port if not manager.paused else 0
             ui.dist, ui.authority = dist, f"127.0.0.1:{ui.server_port}"
             ui.token = secrets.token_urlsafe(32)
+            ui.standalone_browser = args.standalone_browser.resolve() if args.standalone_browser else None
+            ui.browser_launch_lock = threading.Lock()
             ui.native_secret = native_secret if args.native_http_proof else None
             ui.manager = proxy.manager = manager
             ui.socks_port = proxy.server_address[1]

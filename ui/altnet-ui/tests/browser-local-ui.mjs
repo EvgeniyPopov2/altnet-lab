@@ -21,10 +21,18 @@ try {
       return route.continue();
     });
     const page = await context.newPage();
+    let launches = 0;
+    await page.route("**/api/browser/standalone", route => {
+      if (route.request().method() === "GET") return route.fulfill({ json: { available: true } });
+      assert.equal(route.request().postData(), "{}");
+      launches++;
+      return route.fulfill({ status: 202, json: {} });
+    });
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(values.url);
     await page.evaluate(() => {
+      const meta = document.createElement("meta"); meta.name = "altnet-session"; meta.content = "test-only"; document.head.append(meta);
       localStorage.setItem("altnet.sites.published.index.v1", JSON.stringify([
         { slug: "alpha", title: "Сайт Альфа", createdAt: 1, updatedAt: 2 },
         { slug: "beta", title: "Сайт Бета", createdAt: 1, updatedAt: 2 },
@@ -34,6 +42,11 @@ try {
     });
     if (width < 768) await page.getByRole("button", { name: "Ещё", exact: true }).click();
     await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
+    await page.getByText("Браузер AltNet пока не встроен в клиент").waitFor();
+    const launch = page.getByRole("button", { name: "Открыть отдельное окно" });
+    await launch.click();
+    await page.getByRole("status").filter({ hasText: "Команда запуска отправлена" }).waitFor();
+    assert.equal(launches, 1);
     const profileNotice = page.locator(".browser-profile-notice");
     await profileNotice.getByText("Профиль AltNet: анонимный", { exact: false }).waitFor();
     await profileNotice.locator("summary").click();
@@ -43,6 +56,8 @@ try {
       window.dispatchEvent(new CustomEvent("altnet:profile", { detail: { profile: "fast" } }));
     });
     await profileNotice.getByText("Профиль AltNet: приватный быстрый", { exact: false }).waitFor();
+    assert.equal(await launch.isDisabled(), true);
+    assert.equal(launches, 1);
     await profileNotice.locator("summary").click();
     assert.equal(await page.locator(".browser-toolbar").evaluate(element => element.scrollWidth <= element.clientWidth), true, `toolbar overflow at ${width}px`);
     const address = page.getByRole("textbox", { name: "Адрес сайта" });

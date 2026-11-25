@@ -106,6 +106,7 @@ def main():
     parser.add_argument("--site-transport-dir", type=Path, help="Replace site transport scripts as well as the UI")
     parser.add_argument("--bridge-catalog", type=Path, help="Replace the Tor bridge catalog verifier")
     parser.add_argument("--bridge-tor", type=Path, help="Replace the managed Tor launcher")
+    parser.add_argument("--windows-launcher", type=Path, help="Replace the Windows client launcher")
     args = parser.parse_args()
     if args.output.exists():
         parser.error("Output directory already exists")
@@ -127,6 +128,12 @@ def main():
         replacements["AltNet/scripts/bridge_tor.py"] = args.bridge_tor
     expected_ui = {name: file_digest(path) for name, path in ui.items()}
     expected_replacements = {name: file_digest(path) for name, path in replacements.items()}
+    windows_replacements = dict(replacements)
+    if args.windows_launcher:
+        if args.windows_launcher.is_symlink() or not args.windows_launcher.is_file() or args.windows_launcher.name != "Start-AltNet.ps1":
+            raise ValueError("Expected the Windows client launcher")
+        windows_replacements["AltNet/Start-AltNet.ps1"] = args.windows_launcher
+    expected_windows_replacements = {name: file_digest(path) for name, path in windows_replacements.items()}
     original = {"windows": zip_hashes(args.windows), "linux": tar_hashes(args.linux)}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="altnet-ui-sync-", dir=args.output.parent) as temporary:
@@ -134,13 +141,14 @@ def main():
         stage.mkdir()
         win_out = stage / "AltNet-Client-windows-x86_64.zip"
         linux_out = stage / "AltNet-Client-linux-x86_64.tar.gz"
-        make_zip(args.windows, win_out, ui, replacements)
+        make_zip(args.windows, win_out, ui, windows_replacements)
         make_tar(args.linux, linux_out, ui, replacements)
         for platform, actual in (("windows", zip_hashes(win_out)), ("linux", tar_hashes(linux_out))):
-            expected = {name: sha for name, sha in original[platform].items() if not name.startswith(PREFIX) and name not in replacements} | expected_ui | expected_replacements
+            changed = expected_windows_replacements if platform == "windows" else expected_replacements
+            expected = {name: sha for name, sha in original[platform].items() if not name.startswith(PREFIX) and name not in changed} | expected_ui | changed
             if actual != expected:
                 raise ValueError("Verification failed for " + platform)
-        manifest = {"description": "Experimental portable archives; UI and listed scripts replaced, other files verified unchanged", "ui_index_sha256": expected_ui[PREFIX + "index.html"], "replaced_scripts": expected_replacements, "base_archives": {}, "archives": {}}
+        manifest = {"description": "Experimental portable archives; UI and listed scripts replaced, other files verified unchanged", "ui_index_sha256": expected_ui[PREFIX + "index.html"], "replaced_scripts": expected_replacements, "windows_replaced_scripts": expected_windows_replacements, "base_archives": {}, "archives": {}}
         for label, source, result in (("windows", args.windows, win_out), ("linux", args.linux, linux_out)):
             with source.open("rb") as stream:
                 manifest["base_archives"][label] = digest(stream)
