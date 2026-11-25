@@ -40,11 +40,13 @@ export function parseBrowserAddress(raw: string): BrowserAddress {
     const path = page || "index.html";
     return { kind: "site", slug, path, fragment, url: `alt://site/${slug}${page && page !== "index.html" ? "/" + page : ""}${fragment ? "#" + fragment : ""}` };
   }
-  const ipfs = /^ipfs:\/\/([a-zA-Z0-9]{1,120})(?:\/([^#?]+))?(?:#([a-zA-Z0-9_-]{1,128}))?$/.exec(value);
+  const ipfs = /^ipfs:\/\/([a-zA-Z0-9]{1,120})(?:\/([^#?]*))?(?:#([a-zA-Z0-9_-]{1,128}))?$/.exec(value);
   if (ipfs) {
     const root = parseBrowserRoot(ipfs[1]).toString();
-    const path = ipfs[2] || "index.html", fragment = ipfs[3] || "";
-    if (!validSitePath(path) || !/\.html$/.test(path)) throw new Error("Недопустимый путь страницы IPFS.");
+    const requested = ipfs[2] || "";
+    const path = !requested ? "index.html" : requested.endsWith("/") ? `${requested}index.html` : requested.split("/").at(-1)?.includes(".") ? requested : `${requested}/index.html`;
+    const fragment = ipfs[3] || "";
+    if (!validSitePath(path) || !/\.html?$/i.test(path)) throw new Error("Недопустимый путь страницы IPFS.");
     return { kind: "ipfs", root, path, fragment, url: `ipfs://${root}${path !== "index.html" ? "/" + path : ""}${fragment ? "#" + fragment : ""}` };
   }
   const share = /^alt:\/\/onion\/([a-z2-7]{56}\.onion)\/([a-z2-7]{1,120})$/.exec(value);

@@ -23,6 +23,9 @@ describe("адреса браузера Alt", () => {
     expect(parseBrowserAddress(`ipfs://${root}/index.html#top`)).toMatchObject({ kind: "ipfs", root, path: "index.html", url: `ipfs://${root}#top` });
     expect(parseBrowserAddress(`ipfs://${root}/about.html`)).toMatchObject({ kind: "ipfs", path: "about.html" });
     expect(parseBrowserAddress(`ipfs://${root}/pages/about.html`)).toMatchObject({ kind: "ipfs", path: "pages/about.html" });
+    expect(parseBrowserAddress(`ipfs://${root}/pages/`)).toMatchObject({ kind: "ipfs", path: "pages/index.html" });
+    expect(parseBrowserAddress(`ipfs://${root}/pages`)).toMatchObject({ kind: "ipfs", path: "pages/index.html" });
+    expect(parseBrowserAddress(`ipfs://${root}/`)).toMatchObject({ kind: "ipfs", path: "index.html" });
     for (const bad of [`ipfs://${root}/../about.html`, `ipfs://${root}?x=1`, `ipfs://${root.toUpperCase()}`, "ipfs://example.com/", `ipfs://${root}/other.js`]) expect(() => parseBrowserAddress(bad)).toThrow();
   });
 

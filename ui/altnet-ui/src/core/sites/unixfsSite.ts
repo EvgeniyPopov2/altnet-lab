@@ -86,8 +86,8 @@ export async function verifyUnixfsSite(car: Uint8Array, expectedRoot: string): P
       if (!validSitePath(path)) throw new Error("Недопустимый путь UnixFS.");
       const childEntry = await exporter(child.cid, store, { offline: true });
       if (childEntry.type === "directory") { await walk(child.cid, path, ancestors); continue; }
-      if (/\.html$/.test(child.name)) await readPage(child.cid, path);
-      else if (/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}\.(?:css|png|jpe?g|webp|gif|mp4|webm|mp3|ogg|wav)$/i.test(child.name)) {
+      if (/\.html?$/i.test(child.name)) await readPage(child.cid, path);
+      else if (/^[a-zA-Z0-9._-]{1,128}\.(?:css|png|jpe?g|webp|gif|mp4|webm|mp3|ogg|wav)$/i.test(child.name)) {
         const ext = child.name.split(".").pop()!.toLowerCase();
         const mime = ({css:"text/css",png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",webp:"image/webp",gif:"image/gif",mp4:"video/mp4",webm:"video/webm",mp3:"audio/mpeg",ogg:"audio/ogg",wav:"audio/wav"} as Record<string, string>)[ext];
         const bytes = await readFile(child.cid);

@@ -8,5 +8,6 @@ describe("пути внутри проверенного сайта", () => {
     for (const path of ["../../outside.html", "//host/a", "https://host/a", "%2e%2e/a", "a\\b", "a?x=1"]) expect(resolveSitePath("pages/about.html", path)).toBeNull();
     expect(validSitePath("../index.html")).toBe(false);
     expect(validSitePath("pages/about.html")).toBe(true);
+    expect(validSitePath("_assets/.theme/main.css")).toBe(true);
   });
 });

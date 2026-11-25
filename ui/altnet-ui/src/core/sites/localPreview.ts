@@ -19,7 +19,7 @@ export async function prepareLocalSite(html: string, pagePaths: readonly string[
 
 export function prepareLocalPreviewHtml(html: string, pagePaths: readonly string[] = [], fragment = "", animationEngine = "", resources: readonly { path: string; mime: string; data: string }[] = [], pagePath = "index.html"): string {
   const guard = `<meta http-equiv="Content-Security-Policy" content="${policy}">`;
-  const localPages = new Set(pagePaths.filter(path => validSitePath(path) && path.endsWith(".html")));
+  const localPages = new Set(pagePaths.filter(path => validSitePath(path) && /\.html?$/i.test(path)));
   if (html.length > 64_000_000) throw new Error("Страница превышает допустимый размер.");
   if (typeof document === "undefined") return `<!doctype html>${guard}<pre>${escapeText(html)}</pre>`;
   const template = document.createElement("template");
@@ -165,7 +165,8 @@ export function prepareLocalPreviewHtml(html: string, pagePaths: readonly string
         element.removeAttribute(attribute.name);
         if (element.tagName.toLowerCase() === "a") {
           const match = /^([^#]+)(?:#([a-zA-Z0-9_-]{1,128}))?$/.exec(value);
-          const path = match ? resolveSitePath(pagePath, match[1]) : null;
+          const resolved = match ? resolveSitePath(pagePath, match[1]) : null;
+          const path = match?.[1] === "/" ? "index.html" : resolved && !localPages.has(resolved) && localPages.has(`${resolved}/index.html`) ? `${resolved}/index.html` : resolved;
           if (name === "href" && path && localPages.has(path)) {
             element.setAttribute("href", "#"); element.setAttribute("data-alt-local-page", path);
             if (match?.[2]) element.setAttribute("data-alt-local-fragment", match[2]);

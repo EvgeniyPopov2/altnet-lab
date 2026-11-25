@@ -2,7 +2,7 @@
 export function validSitePath(path: string): boolean {
   if (!path || path.length > 1024) return false;
   const parts = path.split("/");
-  return parts.length <= 16 && parts.every(part => /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(part));
+  return parts.length <= 16 && parts.every(part => part !== "." && part !== ".." && /^[a-zA-Z0-9._-]{1,128}$/.test(part));
 }
 
 export function resolveSitePath(base: string, reference: string): string | null {
