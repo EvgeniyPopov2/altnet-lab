@@ -31,6 +31,10 @@ class BrandingTests(unittest.TestCase):
         self.assertEqual(changed, "torConnect.couldNotConnect=Браузер AltNet не может подключиться к сети Tor\nmanual=Руководство Браузер Tor\n")
         en = "torConnect.restartTorBrowser=Restart Tor Browser\n    .label = Tor Browser Manual\n"
         self.assertEqual(branding.rewrite_product_text(en, "en-US"), "torConnect.restartTorBrowser=Restart AltNet Browser\n    .label = Tor Browser Manual\n")
+        ru = "torlauncher.tor_exited_during_startup=Для запуска Tor Browser нужен Tor\n"
+        self.assertEqual(branding.rewrite_product_text(ru, "ru"), "torlauncher.tor_exited_during_startup=Для запуска браузера AltNet нужен Tor\n")
+        ru = "tor-browser-home-tor-check-warning=Соединение с Tor управляется браузером Tor\n"
+        self.assertEqual(branding.rewrite_product_text(ru, "ru"), "tor-browser-home-tor-check-warning=Соединение с Tor управляется браузером AltNet\n")
 
     def test_missing_brand_fields_fail_closed(self):
         with self.assertRaises(ValueError):

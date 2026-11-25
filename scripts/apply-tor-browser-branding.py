@@ -34,6 +34,10 @@ def rewrite_brand(text, locale, is_ftl):
         if match and match.group(2) in keys:
             seen.add(match.group(2))
             line = f"{match.group(1)}{match.group(2)}{match.group(3)}{label}{match.group(5) or ''}"
+        elif match and not is_ftl and match.group(2) in {"brandShortName_alpha", "brandFullName_alpha", "brandShortName_nightly", "brandFullName_nightly"}:
+            alpha = match.group(2).endswith("_alpha")
+            suffix = (" (альфа)" if alpha else " (тестовая)") if locale == "ru" else (" Alpha" if alpha else " Nightly")
+            line = f"{match.group(1)}{match.group(2)}{match.group(3)}{label}{suffix}{match.group(5) or ''}"
         output.append(line)
     required = {"-brand-short-name", "-brand-full-name"} if is_ftl else {"brandShortName", "brandFullName"}
     if not required <= seen:
@@ -46,11 +50,13 @@ def rewrite_product_text(text, locale):
         return text
     replacements = (("Tor Browser", "AltNet Browser"),) if locale == "en-US" else (
         ("Браузер Tor", "Браузер AltNet"), ("браузера Tor", "браузера AltNet"),
-        ("браузер Tor", "браузер AltNet"), ("браузере Tor", "браузере AltNet"))
+        ("браузер Tor", "браузер AltNet"), ("браузере Tor", "браузере AltNet"),
+        ("браузером Tor", "браузером AltNet"), ("Для запуска Tor Browser", "Для запуска браузера AltNet"),
+        ("Tor Browser", "браузер AltNet"))
     lines = []
     for line in text.splitlines(keepends=True):
         key = line.split("=", 1)[0].strip()
-        if key in TEXT_KEYS or line.strip() == ".label = Tor Browser Home":
+        if key in TEXT_KEYS or line.strip() in (".label = Tor Browser Home", ".label = Домашняя страница браузера Tor"):
             for before, after in replacements:
                 line = line.replace(before, after)
         lines.append(line)
