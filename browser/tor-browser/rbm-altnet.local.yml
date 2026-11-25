@@ -1,0 +1,10 @@
+# Merge these target values into the build machine's existing rbm.local.conf.
+# Keep project-name and project_initials unchanged: they identify upstream
+# sources, browser paths and Tor's network components.
+targets:
+  torbrowser:
+    var:
+      Project_Name: AltNet Browser
+      # An AltNet fork must not silently install official Tor Browser updates.
+      # A separately authenticated AltNet update service is not implemented yet.
+      updater_enabled: 0

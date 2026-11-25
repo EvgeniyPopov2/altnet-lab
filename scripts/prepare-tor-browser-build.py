@@ -7,6 +7,13 @@ import subprocess
 BUILD_COMMIT = "39daa983dc1326f50905bca856ab273a4bb0c7ca"
 PATCH = Path(__file__).resolve().parents[1] / "browser/tor-browser/patches/0001-about-altnet.patch"
 PATCH_NAME = "altnet-about-page.patch"
+BRANDING = Path(__file__).resolve().parent / "apply-tor-browser-branding.py"
+BRANDING_NAME = "altnet-branding.py"
+ICONS = Path(__file__).resolve().parents[1] / "browser/tor-browser/assets/altnet-icons.tar"
+ICONS_NAME = "altnet-icons.tar"
+LOCALIZATION = b"[% INCLUDE 'browser-localization' %]\n"
+BRANDING_COMMAND = (LOCALIZATION + b'python3 "$rootdir/altnet-branding.py" "$PWD" '
+                    b'"$HOME/.mozbuild/l10n-central" "$rootdir/altnet-icons.tar"\n')
 PDB_BEFORE = b"  find . -path ./_tests -prune -o -name '*.pdb' -exec cp -l {} $distdir/Debug/Browser/ \\;\n"
 PDB_AFTER = b'''  # Keep the original flat symbol layout, but do not discard different PDBs
   # with the same basename. Preserve their source paths under duplicates/.
@@ -36,7 +43,8 @@ def prepare(root):
     changes = {
         "projects/firefox/config": (
             b"input_files:\n  - project: container-image\n",
-            b"input_files:\n  - filename: altnet-about-page.patch\n  - project: container-image\n",
+            b"input_files:\n  - filename: altnet-about-page.patch\n"
+            b"  - filename: altnet-branding.py\n  - filename: altnet-icons.tar\n  - project: container-image\n",
         ),
         "projects/firefox/build": (
             b'cd /var/tmp/build/[% project %]-[% c("version") %]\ncp $rootdir/mozconfig ./\n',
@@ -52,20 +60,30 @@ def prepare(root):
         if original.count(before) != 1:
             raise ValueError(f"Неожиданная структура исходного рецепта: {relative}")
         prepared = original.replace(before, after, 1)
-        old_prepared = prepared
+        if relative == "projects/firefox/config":
+            old_prepared = original.replace(before, b"input_files:\n  - filename: altnet-about-page.patch\n  - project: container-image\n", 1)
+            accepted = (original, old_prepared, prepared)
+        else:
+            old_prepared = prepared
         if relative == "projects/firefox/build":
             if original.count(PDB_BEFORE) != 1:
                 raise ValueError("Неожиданная команда упаковки отладочных символов.")
-            prepared = prepared.replace(PDB_BEFORE, PDB_AFTER, 1)
+            if original.count(LOCALIZATION) != 1:
+                raise ValueError("Неожиданный этап локализации браузера.")
+            old_with_pdb = old_prepared.replace(PDB_BEFORE, PDB_AFTER, 1)
+            prepared = prepared.replace(PDB_BEFORE, PDB_AFTER, 1).replace(LOCALIZATION, BRANDING_COMMAND, 1)
+            accepted = (original, old_prepared, old_with_pdb, prepared)
         current = path.read_bytes()
-        if current not in (original, old_prepared, prepared):
+        if current not in accepted:
             raise ValueError(f"Файл содержит другие изменения: {relative}")
         replacements.append((path, prepared))
-    patch = PATCH.read_bytes()
-    destination = root / "projects/firefox" / PATCH_NAME
-    if destination.exists() and destination.read_bytes() != patch:
-        raise ValueError("Существующий патч отличается; изменения не выполнены.")
-    destination.write_bytes(patch)
+    inputs = [(root / "projects/firefox" / name, source.read_bytes()) for name, source in
+              ((PATCH_NAME, PATCH), (BRANDING_NAME, BRANDING), (ICONS_NAME, ICONS))]
+    for destination, content in inputs:
+        if destination.exists() and destination.read_bytes() != content:
+            raise ValueError(f"Существующий файл {destination.name} отличается; изменения не выполнены.")
+    for destination, content in inputs:
+        destination.write_bytes(content)
     for path, content in replacements:
         path.write_bytes(content)
     print("Рецепт подготовлен; исходная метка Tor остаётся неизменной, патч применяется при сборке.")

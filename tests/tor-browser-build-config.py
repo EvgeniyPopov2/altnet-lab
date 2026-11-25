@@ -15,7 +15,7 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 CONFIG = b"input_files:\n  - project: container-image\n"
-BUILD = b'cd /var/tmp/build/[% project %]-[% c("version") %]\ncp $rootdir/mozconfig ./\n' + module.PDB_BEFORE
+BUILD = b'cd /var/tmp/build/[% project %]-[% c("version") %]\ncp $rootdir/mozconfig ./\n' + module.LOCALIZATION + module.PDB_BEFORE
 
 
 class BuildOverlayTests(unittest.TestCase):
@@ -48,7 +48,10 @@ class BuildOverlayTests(unittest.TestCase):
         config = (self.root / "projects/firefox/config").read_bytes()
         build = (self.root / "projects/firefox/build").read_bytes()
         self.assertIn(b"filename: altnet-about-page.patch", config)
+        self.assertIn(b"filename: altnet-branding.py", config)
+        self.assertIn(b"filename: altnet-icons.tar", config)
         self.assertIn(b'patch -p1 --batch --forward < "$rootdir/altnet-about-page.patch"', build)
+        self.assertIn(module.BRANDING_COMMAND, build)
         self.assertIn(module.PDB_AFTER, build)
         self.run_prepare()
         self.assertEqual((self.root / "projects/firefox/config").read_bytes(), config)
@@ -75,7 +78,7 @@ class BuildOverlayTests(unittest.TestCase):
         self.run_prepare()
         build = self.root / "projects/firefox/build"
         expected = build.read_bytes()
-        build.write_bytes(expected.replace(module.PDB_AFTER, module.PDB_BEFORE))
+        build.write_bytes(expected.replace(module.BRANDING_COMMAND, module.LOCALIZATION).replace(module.PDB_AFTER, module.PDB_BEFORE))
         self.run_prepare()
         self.assertEqual(build.read_bytes(), expected)
 
@@ -91,6 +94,15 @@ class BuildOverlayTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 module.prepare(self.root)
         self.assertEqual((self.root / "projects/firefox/config").read_bytes(), CONFIG)
+
+    def test_refuses_modified_existing_branding_without_changing_recipe(self):
+        destination = self.root / "projects/firefox/altnet-branding.py"
+        destination.write_bytes(b"user content")
+        with self.assertRaises(ValueError):
+            self.run_prepare()
+        self.assertEqual(destination.read_bytes(), b"user content")
+        self.assertEqual((self.root / "projects/firefox/config").read_bytes(), CONFIG)
+        self.assertFalse((self.root / "projects/firefox/altnet-about-page.patch").exists())
 
     @unittest.skipIf(os.name == "nt" or not shutil.which("bash"), "Requires a POSIX bash")
     def test_preserves_different_pdbs_with_the_same_name(self):

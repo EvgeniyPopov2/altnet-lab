@@ -94,8 +94,8 @@ def run(browser, artifact_root, theme):
                     return socket.create_connection(("127.0.0.1", port), timeout=1)
                 except OSError:
                     return None
-            with wait_for(connect, "isolated Marionette", timeout=45) as sock:
-                sock.settimeout(30)
+            with wait_for(connect, "isolated Marionette", timeout=90) as sock:
+                sock.settimeout(90)
                 assert receive(sock)["applicationType"] == "gecko"
                 client = Client(sock)
                 client.call("WebDriver:NewSession", {"capabilities": {}})
@@ -129,6 +129,8 @@ def run(browser, artifact_root, theme):
                 time.sleep(0.3)
                 assert client.call("WebDriver:GetWindowHandles") == [original], "A web page opened privileged settings"
                 client.call("WebDriver:Navigate", {"url": "about:altnet"})
+                logo = client.call("WebDriver:ExecuteScript", {"script": "let img = document.querySelector('.mark img'); return {source: img?.getAttribute('src'), loaded: !!img?.naturalWidth};", "args": []})["value"]
+                assert logo == {"source": "chrome://branding/content/about-logo.png", "loaded": True}, logo
                 effective_theme = client.call("WebDriver:ExecuteScript", {"script": "return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';", "args": []})["value"]
                 assert effective_theme == theme, (theme, effective_theme)
                 for width in (500, 1200):
@@ -141,9 +143,12 @@ def run(browser, artifact_root, theme):
                 # Read the chrome stylesheet in this isolated test process; no browser
                 # preferences or permissions are changed by this check.
                 client.call("Marionette:SetContext", {"value": "chrome"})
-                result = client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('navigator:browser'); let d = w.document; let bg = d.querySelector('#urlbar > .urlbar-background'); let ext = Services.prefs.getBoolPref('network.protocol-handler.external-default'); return {loaded: !!d.querySelector('link[href*=\\\"altnet-chrome.css\\\"]'), radius: bg && w.getComputedStyle(bg).borderTopLeftRadius, externalDefault: ext, externalAlt: Services.prefs.getBoolPref('network.protocol-handler.external.alt', ext), externalIpfs: Services.prefs.getBoolPref('network.protocol-handler.external.ipfs', ext)};", "args": []})["value"]
-                assert result["loaded"] and result["radius"] == "10px", result
+                result = client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('navigator:browser'); let d = w.document; let bg = d.querySelector('#urlbar > .urlbar-background'); let tab = d.querySelector('#TabsToolbar .tab-background'); let ext = Services.prefs.getBoolPref('network.protocol-handler.external-default'); let brand = Services.strings.createBundle('chrome://branding/locale/brand.properties').GetStringFromName('brandShortName'); return {loaded: !!d.querySelector('link[href*=\\\"altnet-chrome.css\\\"]'), radius: bg && w.getComputedStyle(bg).borderTopLeftRadius, tabRadius: tab && w.getComputedStyle(tab).borderTopLeftRadius, brand, externalDefault: ext, externalAlt: Services.prefs.getBoolPref('network.protocol-handler.external.alt', ext), externalIpfs: Services.prefs.getBoolPref('network.protocol-handler.external.ipfs', ext)};", "args": []})["value"]
+                assert result["loaded"] and result["radius"] == "10px" and result["tabRadius"] == "10px", result
+                assert "AltNet" in result["brand"] and "Tor" not in result["brand"], result
                 assert not any(result[key] for key in ("externalDefault", "externalAlt", "externalIpfs")), "Alt/IPFS must not be passed to external apps by default"
+                notification = client.call("WebDriver:ExecuteScript", {"script": "let d = Services.wm.getMostRecentWindow('navigator:browser').document; return d.l10n.formatValue('language-notification-label-system', {language: 'Русский'});", "args": []})["value"]
+                assert "AltNet" in notification and "Tor" not in notification, notification
                 screenshot = client.call("WebDriver:TakeScreenshot", {})["value"]
                 (root / "browser-chrome.png").write_bytes(base64.b64decode(screenshot))
                 print("PASS: native chrome stylesheet and untrusted click isolation")

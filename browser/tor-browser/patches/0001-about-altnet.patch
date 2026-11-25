@@ -10,6 +10,55 @@ index f7ed578..8b90200 100644
 
    <link rel="stylesheet" href="chrome://browser/skin/controlcenter/panel.css" />
    <link
+diff --git a/browser/branding/tb-release/configure.sh b/browser/branding/tb-release/configure.sh
+index 2430914..76a8560 100644
+--- a/browser/branding/tb-release/configure.sh
++++ b/browser/branding/tb-release/configure.sh
+@@ -2,4 +2,4 @@
+ # License, v. 2.0. If a copy of the MPL was not distributed with this
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+-MOZ_APP_DISPLAYNAME="Tor Browser"
++MOZ_APP_DISPLAYNAME="AltNet Browser"
+diff --git a/browser/branding/tb-release/locales/en-US/brand.ftl b/browser/branding/tb-release/locales/en-US/brand.ftl
+index ca295f4..6981495 100644
+--- a/browser/branding/tb-release/locales/en-US/brand.ftl
++++ b/browser/branding/tb-release/locales/en-US/brand.ftl
+@@ -3,14 +3,14 @@
+ # that Mozilla includes in the Firefox language packs.
+
+ # The shortened application name for Tor Browser. Shared between versions.
+--brand-shorter-name = Tor Browser
++-brand-shorter-name = AltNet Browser
+ # The default application name for the stable release.
+--brand-short-name = Tor Browser
++-brand-short-name = AltNet Browser
+ # The full application name for the stable release.
+--brand-full-name = Tor Browser
++-brand-full-name = AltNet Browser
+ # This brand name can be used in messages where the product name needs to
+ # remain unchanged across different versions (Nightly, Beta, etc.).
+--brand-product-name = Tor Browser
++-brand-product-name = AltNet Browser
+ # The name of the Tor Project organisation.
+ -vendor-short-name = Tor Project
+ # "Tor" is a trademark names, so should not be translated (not including the quote marks, which can be localized).
+diff --git a/browser/branding/tb-release/locales/en-US/brand.properties b/browser/branding/tb-release/locales/en-US/brand.properties
+index e27df0b..3657f48 100644
+--- a/browser/branding/tb-release/locales/en-US/brand.properties
++++ b/browser/branding/tb-release/locales/en-US/brand.properties
+@@ -4,8 +4,8 @@
+ # file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+ # The shortened application name for Tor Browser. Shared between versions.
+-brandShorterName=Tor Browser
++brandShorterName=AltNet Browser
+ # The default application name for the stable release.
+-brandShortName=Tor Browser
++brandShortName=AltNet Browser
+ # The full application name for the stable release.
+-brandFullName=Tor Browser
++brandFullName=AltNet Browser
 diff --git a/browser/components/DesktopActorRegistry.sys.mjs b/browser/components/DesktopActorRegistry.sys.mjs
 index b37054a..e0019ec 100644
 --- a/browser/components/DesktopActorRegistry.sys.mjs
@@ -139,10 +188,10 @@ index 0000000..47cfd0b
 +}
 diff --git a/browser/components/abouttor/content/aboutAltNet.css b/browser/components/abouttor/content/aboutAltNet.css
 new file mode 100644
-index 0000000..8e7fb4e
+index 0000000..e0cec8b
 --- /dev/null
 +++ b/browser/components/abouttor/content/aboutAltNet.css
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,55 @@
 +* { box-sizing: border-box; }
 +:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
 +body { margin: 0; min-height: 100vh; color: #1c2340; background: #f5f6fc; }
@@ -151,7 +200,8 @@ index 0000000..8e7fb4e
 +.topline, .section-heading { justify-content: space-between; gap: 16px; }
 +.brand { gap: 10px; font-weight: 750; font-size: 17px; letter-spacing: -.02em; }
 +.brand small { display: block; margin-top: 1px; color: #777e96; font-size: 9px; letter-spacing: .14em; }
-+.mark { display: grid; place-items: center; width: 37px; height: 37px; border-radius: 12px; color: #fff; background: linear-gradient(145deg,#9680ff,#5d3ddd); font-size: 21px; box-shadow: 0 6px 18px #7255ea3b; }
++.mark { display: grid; place-items: center; width: 37px; height: 37px; }
++.mark img { display: block; width: 37px; height: 37px; }
 +.badge { padding: 7px 11px; border: 1px solid #dfe2f0; border-radius: 999px; color: #6a718a; font-size: 11px; }
 +.hero { margin-top: clamp(58px, 10vh, 112px); max-width: 760px; }
 +.eyebrow { color: #725be1; font-size: 11px; font-weight: 750; letter-spacing: .13em; }
@@ -199,7 +249,7 @@ index 0000000..8e7fb4e
 +}
 diff --git a/browser/components/abouttor/content/aboutAltNet.html b/browser/components/abouttor/content/aboutAltNet.html
 new file mode 100644
-index 0000000..7d735b7
+index 0000000..d2efa6f
 --- /dev/null
 +++ b/browser/components/abouttor/content/aboutAltNet.html
 @@ -0,0 +1,33 @@
@@ -208,20 +258,20 @@ index 0000000..7d735b7
 +<head>
 +  <meta charset="utf-8">
 +  <meta name="viewport" content="width=device-width, initial-scale=1">
-+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src chrome:; base-uri 'none'; form-action 'none'">
++  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src chrome:; img-src chrome:; base-uri 'none'; form-action 'none'">
 +  <link rel="stylesheet" href="chrome://browser/content/abouttor/aboutAltNet.css">
 +  <title>AltNet — начальная страница</title>
 +</head>
 +<body>
 +  <main>
 +    <header class="topline">
-+      <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32" width="23" height="23"><path fill="#fff" d="M4 14.7 27 5c1-.4 1.7.3 1.4 1.3l-7 21.2c-.3.9-1.4 1.1-2 .4l-5.1-7-5.4-2.1c-.9-.4-.9-1.8.1-2.2L25 7.7 11.8 19.1l3.7-.5z"/></svg></span><span>AltNet <small>БРАУЗЕР</small></span></div>
++      <div class="brand"><span class="mark"><img src="chrome://branding/content/about-logo.png" alt=""></span><span>AltNet <small>БРАУЗЕР</small></span></div>
 +      <span class="badge">Экспериментальная версия</span>
 +    </header>
 +    <section class="hero" aria-labelledby="welcome">
 +      <p class="eyebrow">ВАШ БРАУЗЕР · ВАШЕ ПРОСТРАНСТВО</p>
 +      <h1 id="welcome">Интернет и AltNet<br><span>в одном пространстве.</span></h1>
-+      <p class="intro">Здесь появится безопасный доступ к сайтам Alt и IPFS. Настройки Tor Browser доступны уже сейчас.</p>
++      <p class="intro">Здесь появится безопасный доступ к сайтам Alt и IPFS. Основные настройки браузера доступны уже сейчас.</p>
 +      <div class="actions"><button class="primary" type="button" data-altnet-setting="general">Настройки браузера <span aria-hidden="true">↗</span></button><button class="secondary" type="button" data-altnet-setting="privacy">Приватность</button></div>
 +    </section>
 +    <section class="tools" aria-labelledby="tools-title">
