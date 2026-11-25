@@ -10,6 +10,7 @@ const INTERNET = new Set(["unchecked", "checking", "verified", "https", "unreach
 const ASSET_PATH = /^(?:index\.html|altnet-logo\.png|vite\.svg|assets\/[A-Za-z0-9_.-]{1,200}\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?|ico)|icons\/aura\/[A-Za-z0-9_-]{1,200}\.svg|fonts\/manrope\/(?:Manrope-Regular\.ttf|OFL\.txt))$/;
 const ASSET_CHUNK = 8192;
 const ASSET_LIMIT = 10 * 1024 * 1024;
+const ASSET_QUEUE_LIMIT = 16;
 
 async function readLine(stream, limit = 1024) {
   let line = "";
@@ -94,6 +95,23 @@ export async function openNativeSession({ command, args, verifyExecutable, timeo
   if (await verifyExecutable(command, fixedArgs) !== true) throw new Error("Подлинность локального клиента не подтверждена");
   const proc = await Subprocess.call({ command, arguments: [...fixedArgs, "--port", "0", "--socks-port", "0", "--native-stdio"] });
   let closed = false, busy = false, nextId = 1;
+  const assetQueue = [];
+  const rejectQueued = () => {
+    for (const pending of assetQueue.splice(0)) pending.reject(new Error("Локальный сеанс недоступен"));
+  };
+  const release = () => {
+    if (closed) { busy = false; rejectQueued(); return; }
+    const next = assetQueue.shift();
+    if (next) next.resolve();
+    else busy = false;
+  };
+  const acquireAsset = async () => {
+    if (closed) throw new Error("Локальный сеанс недоступен");
+    if (!busy) { busy = true; return; }
+    if (assetQueue.length >= ASSET_QUEUE_LIMIT) throw new Error("Слишком много запросов ресурсов клиента");
+    await new Promise((resolve, reject) => assetQueue.push({ resolve, reject }));
+    if (closed) throw new Error("Локальный сеанс недоступен");
+  };
   try {
     const secret = crypto.getRandomValues(new Uint8Array(32));
     const encoded = btoa(String.fromCharCode(...secret)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -119,11 +137,11 @@ export async function openNativeSession({ command, args, verifyExecutable, timeo
         closed = true;
         await kill(proc);
         throw error;
-      } finally { busy = false; }
+      } finally { release(); }
     },
     async getAsset(path) {
-      if (closed || busy || nextId > 2147483647 || typeof path !== "string" || ASSET_PATH.exec(path)?.[0] !== path) throw new Error("Ресурс клиента недоступен");
-      busy = true;
+      if (closed || nextId > 2147483647 || typeof path !== "string" || ASSET_PATH.exec(path)?.[0] !== path) throw new Error("Ресурс клиента недоступен");
+      await acquireAsset();
       let offset = 0, total = null, expected = "", bytes = null;
       try {
         do {
@@ -149,11 +167,12 @@ export async function openNativeSession({ command, args, verifyExecutable, timeo
         closed = true;
         await kill(proc);
         throw error;
-      } finally { busy = false; }
+      } finally { release(); }
     },
     async close() {
       if (closed) return;
       closed = true;
+      rejectQueued();
       if (busy) { await kill(proc); return; }
       try { await bounded(proc.stdin.close(), proc, timeoutMs); await bounded(proc.wait(), proc, timeoutMs); }
       finally { try { proc.stdout.close(); } catch { /* уже закрыт */ } }

@@ -24,7 +24,7 @@ try {
       if (url.endsWith("/api/sites/onion-car")) {
         calls++;
         assert.equal(route.request().headers()["x-altnet-session"], "test-session");
-        assert.deepEqual(route.request().postDataJSON(), { onion, cid: site.root });
+        assert.deepEqual(route.request().postDataJSON(), { onion, cid: site.root, profile: "anon" });
         if (response === "unavailable") return route.fulfill({ status: 502 });
         const body = response === "tampered" ? bad : Buffer.from(site.car);
         return route.fulfill({ status: 200, contentType: "application/vnd.ipld.car", headers: { "content-length": String(body.length) }, body });
@@ -52,6 +52,22 @@ try {
     await open.click();
     await page.frameLocator('iframe[title="Проверка Tor"]').getByText("Проверенный сайт").waitFor();
     assert.equal(calls, 3);
+    await page.evaluate(() => {
+      localStorage.setItem("altnet.profile.v1", "fast");
+      window.dispatchEvent(new CustomEvent("altnet:profile", { detail: { profile: "fast" } }));
+    });
+    await page.getByText("Открыть IPFS-пакет CAR с устройства", { exact: true }).click();
+    await page.getByLabel("CID сайта для импорта").fill(site.root);
+    await page.getByLabel("Адрес onion-шлюза").fill(onion);
+    assert.equal(await page.getByRole("button", { name: "Получить через Tor и открыть" }).isDisabled(), true);
+    await page.getByText("Быстрый маршрут пока не подключён.", { exact: false }).first().waitFor();
+    await page.getByLabel("Файл CAR").setInputFiles({ name: "fixture.car", mimeType: "application/vnd.ipld.car", buffer: Buffer.from(site.car) });
+    await page.getByRole("button", { name: "Проверить и открыть" }).click();
+    await page.frameLocator('iframe[title="Проверка Tor"]').getByText("Проверенный сайт").waitFor();
+    await page.getByLabel("Адрес сайта").fill(`alt://onion/${onion}/${site.root}`);
+    await page.getByLabel("Адрес сайта").press("Enter");
+    assert.equal(await page.getByRole("button", { name: "Получить и открыть" }).isDisabled(), true);
+    assert.equal(calls, 3, "В быстром профиле нельзя запускать Tor-запрос");
     await context.close();
   }
   console.log(values.engine, "PASS: simulated API failure, tampering rejection, verified CAR opening on mobile and desktop");

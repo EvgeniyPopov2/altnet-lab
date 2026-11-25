@@ -129,7 +129,7 @@ def main():
         onion = json.loads(body)["onion"]
         received = None
         while time.monotonic() < deadline:
-            payload = json.dumps({"onion": onion, "cid": cid}).encode()
+            payload = json.dumps({"onion": onion, "cid": cid, "profile": "anon"}).encode()
             try:
                 status, body = request(clients[1][1], "/api/sites/onion-car", reader_token, payload, timeout=135)
                 if status == 200:

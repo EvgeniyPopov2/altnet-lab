@@ -163,10 +163,10 @@ class TransportTest(unittest.TestCase):
             worker = threading.Thread(target=ui.serve_forever, daemon=True)
             worker.start()
             try:
-                def post(headers):
+                def post(headers, body=None):
                     conn = http.client.HTTPConnection("127.0.0.1", ui.server_port, timeout=3)
                     try:
-                        conn.request("POST", "/api/sites/onion-car", json.dumps({"onion": onion(), "cid": CID}), headers)
+                        conn.request("POST", "/api/sites/onion-car", json.dumps(body if body is not None else {"onion": onion(), "cid": CID, "profile": "anon"}), headers)
                         response = conn.getresponse()
                         return response.status, response.read()
                     finally:
@@ -181,6 +181,19 @@ class TransportTest(unittest.TestCase):
                         status = None
                     self.assertIn(status, (403, None))
                 self.assertEqual(post(headers), (200, b"car!"))
+                with patch("bridge_client.fetch_car", side_effect=AssertionError("unexpected network request")):
+                    self.assertEqual(post(headers, {"onion": onion(), "cid": CID, "profile": "fast"})[0], 409)
+                    self.assertEqual(post(headers, {"onion": onion(), "cid": CID})[0], 400)
+                    self.assertEqual(post(headers, {"onion": onion(), "cid": CID, "profile": "unknown"})[0], 400)
+                    conn = http.client.HTTPConnection("127.0.0.1", ui.server_port, timeout=3)
+                    try:
+                        conn.putrequest("POST", "/api/sites/onion-car", skip_host=True)
+                        for key, value in headers.items(): conn.putheader(key, value)
+                        conn.putheader("Content-Length", "2"); conn.putheader("Content-Length", "2")
+                        conn.endheaders(b"{}")
+                        try: self.assertEqual(conn.getresponse().status, 400)
+                        except ConnectionResetError: pass  # Сервер мог закрыть непрочитанное тело.
+                    finally: conn.close()
                 manager.paused = True
                 self.assertEqual(post(headers)[0], 502)
                 manager.paused, manager.active_port = False, 0

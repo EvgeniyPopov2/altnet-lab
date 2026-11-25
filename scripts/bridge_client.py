@@ -115,7 +115,7 @@ class LocalUI(HTTP):
         allowed = {"/api/bridges/" + a: a for a in ("refresh", "switch", "manual", "pause", "resume")}
         if self.path not in allowed and self.path not in ("/api/sites/onion-car", "/api/sites/share-stop", "/api/browser/standalone"):
             return self.reply(404)
-        if self.path == "/api/browser/standalone" and (self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) != 1):
+        if self.path in ("/api/browser/standalone", "/api/sites/onion-car") and (self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) != 1):
             return self.reply(400)
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -145,6 +145,10 @@ class LocalUI(HTTP):
             self.server.site_share.stop()
             return self.reply(200, json.dumps(self.server.site_share.status()).encode())
         if self.path == "/api/sites/onion-car":
+            if set(body) != {"onion", "cid", "profile"} or body.get("profile") not in ("anon", "fast"):
+                return self.reply(400)
+            if body["profile"] != "anon":
+                return self.reply(409, json.dumps({"error": "Быстрый маршрут пока не подключён."}).encode())
             if not self.server.site_fetch.acquire(blocking=False):
                 return self.reply(429, json.dumps({"error": "Дождитесь окончания текущей загрузки."}).encode())
             try:

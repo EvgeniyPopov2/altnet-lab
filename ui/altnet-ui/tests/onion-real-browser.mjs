@@ -14,10 +14,14 @@ try {
     const page = await context.newPage();
     let requests = 0;
     let hostileRequests = 0;
+    const apiStatuses = [];
+    const apiFailures = [];
     page.on("request", request => {
       if (request.url().endsWith("/api/sites/onion-car")) requests++;
       if (request.url().startsWith("https://example.invalid/")) hostileRequests++;
     });
+    page.on("response", response => { if (response.url().endsWith("/api/sites/onion-car")) apiStatuses.push(response.status()); });
+    page.on("requestfailed", request => { if (request.url().endsWith("/api/sites/onion-car")) apiFailures.push(request.failure()?.errorText || "failed"); });
     await page.goto(base);
     if (viewport.width < 768) await page.getByRole("button", { name: "Ещё", exact: true }).click();
     await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
@@ -28,7 +32,13 @@ try {
     await page.getByRole("button", { name: "Получить и открыть" }).click();
     const title = mode === "unixfs" ? "index.html" : "Главная";
     const expected = mode === "unixfs" ? "Проверка UnixFS через Tor" : "Привет из AltNet";
-    await page.frameLocator(`iframe[title="${title}"]`).getByText(expected).waitFor({ timeout: 150000 });
+    try {
+      await page.frameLocator(`iframe[title="${title}"]`).getByText(expected).waitFor({ timeout: 150000 });
+    } catch (error) {
+      const alerts = await page.getByRole("alert").allTextContents();
+      console.error("Тест интерфейса:", JSON.stringify({ viewport: viewport.width, requests, apiStatuses, apiFailures, alerts }));
+      throw error;
+    }
     assert.equal(await page.frameLocator(`iframe[title="${title}"]`).locator("body").getAttribute("data-attack"), null);
     assert.equal(hostileRequests, 0, "Код и внешние ресурсы сайта не должны выполняться или загружаться");
     assert.equal(requests, 1);

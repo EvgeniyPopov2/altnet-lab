@@ -53,6 +53,17 @@ try {
     try { await frame.getByText("Открыто через локальный SOCKS").waitFor({ timeout: 10000 }); }
     catch (error) { throw new Error(`Opening failed (API ${apiStatus}, Origin ${origin}): ${await page.getByRole("alert").allTextContents()}`, { cause: error }); }
     assert.equal(await page.locator('iframe[title="Тест транспорта"]').getAttribute("sandbox"), "allow-scripts");
+    await page.getByLabel("Адрес сайта").fill(`alt://onion/${onion}/${site.root}`);
+    await page.getByLabel("Адрес сайта").press("Enter");
+    await page.getByRole("button", { name: "Получить и открыть" }).click();
+    await page.frameLocator('iframe[title="Главная"]').getByText("Открыто через локальный SOCKS").waitFor({ timeout: 10000 });
+    await page.route("**/api/sites/onion-car", route => route.abort());
+    await page.reload();
+    if (viewport.width < 768) await page.getByRole("button", { name: "Ещё", exact: true }).click();
+    await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
+    await page.getByLabel("Адрес сайта").fill(`ipfs://${site.root}`);
+    await page.getByLabel("Адрес сайта").press("Enter");
+    await page.frameLocator('iframe[title="Главная"]').getByText("Открыто через локальный SOCKS").waitFor({ timeout: 10000 });
     await context.close();
   }
   console.log(values.engine, "PASS: browser → local API → simulated SOCKS/gateway → verified sandbox on mobile and desktop");

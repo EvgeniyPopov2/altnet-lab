@@ -85,6 +85,7 @@ export default function BrowserAlt({
   const [carLoading, setCarLoading] = useState(false);
   const [carError, setCarError] = useState("");
   const carImportBusy = useRef(false);
+  const carAbort = useRef<AbortController | null>(null);
   const [siteState, setSiteState] = useState<{ slug: string; loading: boolean; site: PublishedSite | null; error: string } | null>(null);
   const [ipfsState, setIpfsState] = useState<{ root: string; loading: boolean; site: VerifiedSite | null; error: string } | null>(null);
   const [ipfsDeleteError, setIpfsDeleteError] = useState("");
@@ -93,6 +94,8 @@ export default function BrowserAlt({
   const [copyingIpfsVisible, setCopyingIpfsVisible] = useState(false);
   const siteFrameRef = useRef<HTMLIFrameElement>(null);
   const deletingSites = useRef(new Set<string>());
+
+  useEffect(() => () => { carAbort.current?.abort(); }, []);
 
   useEffect(() => {
     const token = document.querySelector<HTMLMetaElement>('meta[name="altnet-session"]')?.content;
@@ -405,6 +408,12 @@ export default function BrowserAlt({
 
   const importCar = async (source: "file" | "onion") => {
     if (carImportBusy.current || (source === "file" && !carFile)) return;
+    if (source === "onion" && privacyProfile !== "anon") {
+      setCarError("Быстрый маршрут пока не подключён. Для получения сайта через Tor выберите анонимный профиль.");
+      return;
+    }
+    const controller = source === "onion" ? new AbortController() : null;
+    carAbort.current = controller;
     carImportBusy.current = true;
     setCarLoading(true);
     setCarError("");
@@ -418,8 +427,9 @@ export default function BrowserAlt({
         data = new Uint8Array(await carFile.arrayBuffer());
       } else {
         const { fetchOnionCar } = await import("../core/sites/onionCar");
-        data = await fetchOnionCar(onionAddress.trim(), root);
+        data = await fetchOnionCar(onionAddress.trim(), root, privacyProfile, controller?.signal);
       }
+      if (controller?.signal.aborted) return;
       const { cacheVerifiedSite } = await import("../core/sites/ipfsSiteCache");
       const site = await cacheVerifiedSite(data, root, privacyProfile);
       if (parseBrowserRoot(root).code !== 0x71) {
@@ -435,6 +445,7 @@ export default function BrowserAlt({
     } catch (error) {
       setCarError(error instanceof Error ? error.message : "Не удалось проверить пакет сайта.");
     } finally {
+      if (carAbort.current === controller) carAbort.current = null;
       carImportBusy.current = false;
       setCarLoading(false);
     }
@@ -442,13 +453,20 @@ export default function BrowserAlt({
 
   const openOnionShare = async (address: Extract<NonNullable<typeof activeAddress>, { kind: "onion-share" }>) => {
     if (carImportBusy.current) return;
+    if (privacyProfile !== "anon") {
+      setCarError("Быстрый маршрут пока не подключён. Для получения сайта через Tor выберите анонимный профиль.");
+      return;
+    }
+    const controller = new AbortController();
+    carAbort.current = controller;
     const originalTab = activeTab;
     carImportBusy.current = true;
     setCarLoading(true);
     setCarError("");
     try {
       const { fetchOnionCar } = await import("../core/sites/onionCar");
-      const bytes = await fetchOnionCar(address.onion, address.root);
+      const bytes = await fetchOnionCar(address.onion, address.root, privacyProfile, controller.signal);
+      if (controller.signal.aborted) return;
       const { cacheVerifiedSite } = await import("../core/sites/ipfsSiteCache");
       await cacheVerifiedSite(bytes, address.root, privacyProfile);
       const nextUrl = `ipfs://${address.root}`;
@@ -461,6 +479,7 @@ export default function BrowserAlt({
     } catch (error) {
       setCarError(error instanceof Error ? error.message : "Не удалось проверить пакет сайта.");
     } finally {
+      if (carAbort.current === controller) carAbort.current = null;
       carImportBusy.current = false;
       setCarLoading(false);
     }
@@ -500,7 +519,8 @@ export default function BrowserAlt({
             <label className="mt-3 block text-sm">Адрес onion-шлюза
               <input aria-label="Адрес onion-шлюза" value={onionAddress} onChange={event => setOnionAddress(event.target.value)} disabled={carLoading} autoComplete="off" spellCheck={false} placeholder="адрес.onion" className="mt-1 block w-full rounded border border-white/20 bg-[#0c0f1a] p-2 text-white" />
             </label>
-            <button type="button" disabled={carLoading || !onionAddress.trim() || !carCid.trim()} onClick={() => void importCar("onion")} className="mt-3 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">{carLoading ? "Загружаем и проверяем…" : "Получить через Tor и открыть"}</button>
+            <button type="button" disabled={privacyProfile !== "anon" || carLoading || !onionAddress.trim() || !carCid.trim()} onClick={() => void importCar("onion")} className="mt-3 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">{carLoading ? "Загружаем и проверяем…" : "Получить через Tor и открыть"}</button>
+            {privacyProfile === "fast" && <p className="mt-2 text-sm text-amber-300">Быстрый маршрут пока не подключён. Для получения сайта через Tor выберите анонимный профиль.</p>}
           </div>
           {carError && <p role="alert" className="mt-2 text-sm text-amber-300">{carError}</p>}
         </details>
@@ -684,7 +704,8 @@ export default function BrowserAlt({
         <p className="mt-2 text-sm">Ссылка указывает на временную раздачу. При загрузке узел увидит запрос к сайту; содержимое будет проверено по CID, но авторство не подтверждено.</p>
         <p className="mt-3 break-all text-sm">Узел: <code>{address.onion}</code></p>
         <p className="break-all text-sm">CID: <code>{address.root}</code></p>
-        <button type="button" disabled={carLoading} onClick={() => void openOnionShare(address)} className="mt-4 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">{carLoading ? "Загружаем и проверяем…" : "Получить и открыть"}</button>
+        <button type="button" disabled={privacyProfile !== "anon" || carLoading} onClick={() => void openOnionShare(address)} className="mt-4 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">{carLoading ? "Загружаем и проверяем…" : "Получить и открыть"}</button>
+        {privacyProfile === "fast" && <p className="mt-2 text-sm text-amber-300">Быстрый маршрут пока не подключён. Для получения сайта через Tor выберите анонимный профиль.</p>}
         {carError && <p role="alert" className="mt-3 text-amber-300">{carError}</p>}
       </div>;
     }

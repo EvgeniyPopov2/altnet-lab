@@ -388,6 +388,7 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
                 "hung": fake_header + "time.sleep(60)\n",
                 "checking": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\nsys.stdin.buffer.readline()\nprint('{\"id\":1,\"ok\":true,\"status\":{\"phase\":\"ready\",\"progress\":100,\"torConnected\":true,\"internet\":\"checking\",\"fastAvailable\":false}}',flush=True)\nsys.stdin.buffer.read()\n",
                 "bad-asset": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\nsys.stdin.buffer.readline()\nprint('{\"id\":1,\"ok\":true,\"offset\":0,\"total\":1,\"data\":\"eA==\",\"sha256\":\"'+'0'*64+'\"}',flush=True)\ntime.sleep(60)\n",
+                "hung-asset": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\nsys.stdin.buffer.readline()\ntime.sleep(60)\n",
             }
             fake_args = {}
             for name, source in fixtures.items():
@@ -397,7 +398,8 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
                        "--theme", "dark", "--expect-no-updater", "--native-channel-from-stdin"]
             config = {"command": sys.executable, "args": args, "badReadyArgs": fake_args["bad-ready"],
                       "badStatusArgs": fake_args["bad-status"], "hangArgs": fake_args["hung"], "checkingArgs": fake_args["checking"],
-                      "badAssetArgs": fake_args["bad-asset"], "assetSha256": hashlib.sha256(content).hexdigest(), "assetChecks": asset_checks}
+                      "badAssetArgs": fake_args["bad-asset"], "hungAssetArgs": fake_args["hung-asset"],
+                      "assetSha256": hashlib.sha256(content).hexdigest(), "assetChecks": asset_checks}
             result = subprocess.run(command, input=json.dumps(config),
                                     text=True, capture_output=True, timeout=90)
             self.assertEqual(result.returncode, 0, result.stderr)
