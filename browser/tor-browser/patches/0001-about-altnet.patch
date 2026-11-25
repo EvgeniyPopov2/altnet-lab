@@ -481,3 +481,22 @@ index b42546e..6be7d89 100644
      "AboutTorChild.sys.mjs",
      "AboutTorMessage.sys.mjs",
      "AboutTorParent.sys.mjs",
+diff --git a/browser/components/preferences/config/about-firefox.mjs b/browser/components/preferences/config/about-firefox.mjs
+index 9f166dd..78e07b1 100644
+--- a/browser/components/preferences/config/about-firefox.mjs
++++ b/browser/components/preferences/config/about-firefox.mjs
+@@ -568,14 +568,6 @@ SettingGroupManager.registerGroups({
+             control: "moz-box-link",
+             supportPage: "preferences",
+           },
+-          {
+-            id: "supportShareIdeas",
+-            l10nId: "support-share-ideas",
+-            control: "moz-box-link",
+-            // Update the URL for Tor Browser. tor-browser#45178 and
+-            // tor-browser#45288.
+-            supportPage: "tor-manual:get-in-touch__bug-or-feedback",
+-          },
+         ],
+       },
+     ],

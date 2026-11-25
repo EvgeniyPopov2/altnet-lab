@@ -44,6 +44,37 @@ class BrandingTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             branding.rewrite_brand("unrelated = value\n", "ru", True)
 
+    def test_settings_labels_and_missing_support_are_honest(self):
+        original = ('pane-about-firefox-title = О { -brand-short-name }\n'
+                    '    .title = { pane-about-firefox-title }\n'
+                    'help-button-label2 = Поддержка { -brand-short-name }\n'
+                    '    .title = Поддержка { -brand-short-name }\n'
+                    'about-firefox-header =\n    .heading = О { -brand-short-name }\n'
+                    'support-application-heading =\n    .description = Старая поддержка\n'
+                    '    .label = Поддержка { -brand-short-name }\n'
+                    'unrelated = Tor — название сети\n')
+        changed = branding.rewrite_russian_preferences(original)
+        self.assertIn('pane-about-firefox-title = О браузере AltNet\n    .title = О браузере AltNet\n', changed)
+        self.assertIn('help-button-label2 = Поддержка AltNet\n    .title = Поддержка AltNet\n', changed)
+        self.assertIn('    .heading = О браузере AltNet\n', changed)
+        self.assertIn('    .description = Поддержка AltNet пока не подключена.', changed)
+        self.assertIn('unrelated = Tor — название сети\n', changed)
+        self.assertEqual(changed, branding.rewrite_russian_preferences(changed))
+        self.assertEqual(branding.rewrite_russian_base('pane-profiles-no-account-sync = Profiles\n    .title = Профили\n'),
+                         'pane-profiles-no-account-sync = Профили\n    .title = Профили\n')
+
+    def test_unavailable_updates_are_not_claimed_to_be_managed_by_os(self):
+        source = ('update-application-heading =\n    .label = Updates\n'
+                  '    .description = Old description\n'
+                  'update-application-updates-managed-by-os =\n    .message = Managed by OS\n')
+        ru = branding.rewrite_update_preferences(source, 'ru')
+        self.assertIn('.label = Обновления AltNet', ru)
+        self.assertIn('.message = Автоматические обновления AltNet пока не подключены.', ru)
+        self.assertEqual(ru, branding.rewrite_update_preferences(ru, 'ru'))
+        en = branding.rewrite_update_preferences(source, 'en-US')
+        self.assertIn('.message = Automatic AltNet updates are not available yet.', en)
+        self.assertNotIn('Managed by OS', en)
+
     def test_applies_assets_and_localized_brand_in_isolated_tree(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get("TEMP")) as tmp:
             root = Path(tmp); source = root / "src"; l10n = root / "l10n"
@@ -51,8 +82,17 @@ class BrandingTests(unittest.TestCase):
             brand = l10n / "ru/browser/branding/tb-release"; brand.mkdir(parents=True)
             (brand / "brand.ftl").write_text("-brand-short-name = Браузер Tor\n-brand-full-name = Браузер Tor\n", encoding="utf-8")
             (brand / "brand.properties").write_text("brandShortName=Браузер Tor\nbrandFullName=Браузер Tor\n", encoding="utf-8")
+            preferences = l10n / "ru/browser/browser/preferences/preferences.ftl"
+            preferences.parent.mkdir(parents=True)
+            preferences.write_text("pane-about-firefox-title = Старое имя\nupdate-application-updates-managed-by-os =\n    .message = OS\n", encoding="utf-8")
+            base = l10n / "ru/toolkit/toolkit/global/base-browser.ftl"
+            base.parent.mkdir(parents=True)
+            base.write_text("pane-profiles-no-account-sync = Profiles\n", encoding="utf-8")
             branding.apply(source, l10n, ASSETS)
             self.assertIn("Браузер AltNet", (brand / "brand.ftl").read_text(encoding="utf-8"))
+            self.assertIn("О браузере AltNet", preferences.read_text(encoding="utf-8"))
+            self.assertIn("обновления AltNet пока не подключены", preferences.read_text(encoding="utf-8"))
+            self.assertIn("Профили", base.read_text(encoding="utf-8"))
             self.assertTrue((asset_dir.parent / "firefox.ico").read_bytes().startswith(b"\0\0\1\0"))
             self.assertTrue((asset_dir / "about-logo.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
             branding.apply(source, l10n, ASSETS)

@@ -83,6 +83,66 @@ def rewrite_product_text(text, locale):
     return "".join(lines)
 
 
+def rewrite_russian_preferences(text):
+    """Correct product names without changing Tor network settings or unrelated text."""
+    replacements = {
+        "pane-about-firefox-title": {"value": "О браузере AltNet", ".title": "О браузере AltNet"},
+        "help-button-label2": {"value": "Поддержка AltNet", ".title": "Поддержка AltNet"},
+        "about-firefox-header": {".heading": "О браузере AltNet"},
+        "support-application-heading": {
+            ".label": "Поддержка AltNet",
+            ".description": "Поддержка AltNet пока не подключена. На странице AltNet можно узнать состояние проекта.",
+        },
+    }
+    current = None
+    output = []
+    for line in text.splitlines(keepends=True):
+        top = re.match(r"^([\w-]+)([ \t]*=[ \t]*)([^\r\n]*)(\r?\n)?$", line)
+        if top:
+            current = top.group(1)
+            value = replacements.get(current, {}).get("value")
+            if value is not None:
+                line = f"{current}{top.group(2)}{value}{top.group(4) or ''}"
+        elif current in replacements:
+            attribute = re.match(r"^([ \t]+)(\.[\w-]+)([ \t]*=[ \t]*)([^\r\n]*)(\r?\n)?$", line)
+            value = replacements[current].get(attribute.group(2)) if attribute else None
+            if value is not None:
+                line = f"{attribute.group(1)}{attribute.group(2)}{attribute.group(3)}{value}{attribute.group(5) or ''}"
+        output.append(line)
+    return "".join(output)
+
+
+def rewrite_russian_base(text):
+    return re.sub(r"(?m)^pane-profiles-no-account-sync[ \t]*=[ \t]*Profiles[ \t]*$",
+                  "pane-profiles-no-account-sync = Профили", text)
+
+
+def rewrite_update_preferences(text, locale):
+    # A build without an updater is not necessarily managed by the OS.
+    message = ("Автоматические обновления AltNet пока не подключены."
+               if locale == "ru" else "Automatic AltNet updates are not available yet.")
+    heading = "Обновления AltNet" if locale == "ru" else "AltNet updates"
+    description = ("Канал обновлений AltNet пока не подключён."
+                   if locale == "ru" else "The AltNet update channel is not available yet.")
+    replacements = {
+        "update-application-heading": {".label": heading, ".description": description},
+        "update-application-updates-managed-by-os": {".message": message},
+    }
+    current = None
+    output = []
+    for line in text.splitlines(keepends=True):
+        top = re.match(r"^([\w-]+)[ \t]*=", line)
+        if top:
+            current = top.group(1)
+        else:
+            attr = re.match(r"^([ \t]+)(\.[\w-]+)([ \t]*=[ \t]*)([^\r\n]*)(\r?\n)?$", line)
+            value = replacements.get(current, {}).get(attr.group(2)) if attr else None
+            if value is not None:
+                line = f"{attr.group(1)}{attr.group(2)}{attr.group(3)}{value}{attr.group(5) or ''}"
+        output.append(line)
+    return "".join(output)
+
+
 def write_changed(path, transform):
     original = path.read_text(encoding="utf-8")
     changed = transform(original)
@@ -123,6 +183,9 @@ def apply(source, l10n, archive):
     en_ftl = source / "toolkit/locales/en-US/toolkit/global/tor-browser.ftl"
     if en_ftl.is_file():
         write_changed(en_ftl, lambda value: rewrite_product_text(value, "en-US"))
+    en_preferences = source / "browser/locales/en-US/browser/preferences/preferences.ftl"
+    if en_preferences.is_file():
+        write_changed(en_preferences, lambda value: rewrite_update_preferences(value, "en-US"))
     if l10n.is_dir():
         for locale_dir in l10n.iterdir():
             if not locale_dir.is_dir():
@@ -136,6 +199,15 @@ def apply(source, l10n, archive):
             path = locale_dir / "toolkit/toolkit/global/tor-browser.ftl"
             if path.is_file():
                 write_changed(path, lambda value: rewrite_product_text(value, locale))
+            preferences = locale_dir / "browser/browser/preferences/preferences.ftl"
+            if preferences.is_file():
+                write_changed(preferences, lambda value: rewrite_update_preferences(value, locale))
+                if locale == "ru":
+                    write_changed(preferences, rewrite_russian_preferences)
+            if locale == "ru":
+                base = locale_dir / "toolkit/toolkit/global/base-browser.ftl"
+                if base.is_file():
+                    write_changed(base, rewrite_russian_base)
     print("AltNet product names and chosen icons applied; Tor network and attribution retained")
 
 
