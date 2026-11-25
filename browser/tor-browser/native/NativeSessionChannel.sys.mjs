@@ -6,7 +6,7 @@ import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const PROTOCOL = "altnet-native-v1";
 const PHASES = new Set(["starting", "paused", "waiting", "ready", "recovering", "checking"]);
-const INTERNET = new Set(["unchecked", "verified", "https", "unreachable"]);
+const INTERNET = new Set(["unchecked", "checking", "verified", "https", "unreachable"]);
 
 async function readLine(stream, limit = 1024) {
   let line = "";

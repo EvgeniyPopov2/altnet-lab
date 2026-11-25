@@ -62,7 +62,7 @@ def wait_for(callback, label, timeout=15):
     raise AssertionError(f"Timed out: {label}")
 
 
-def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None):
+def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None):
     root = Path(tempfile.mkdtemp(prefix="altnet-native-ui-", dir=artifact_root))
     profile = root / "profile"
     for folder in (profile, root / "appdata", root / "localappdata"):
@@ -167,7 +167,7 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                 if native_channel:
                     channel_script = """let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs');
 let p=arguments[0]; return (async()=>{
-  let denied=false,called=false,blocked=0,badReady=false,badStatus=false,hung=false;
+  let denied=false,called=false,blocked=0,badReady=false,badStatus=false,hung=false,checking=false;
   try { await m.openNativeSession({command:p.command,args:p.args,verifyExecutable:async()=>false}); } catch { denied=true; }
   for (const option of ['--port=123','--native-http-proof','--native-http-pr']) {
     try { await m.openNativeSession({command:p.command,args:[...p.args,option],verifyExecutable:async()=>{called=true;return true;}}); } catch { blocked++; }
@@ -175,16 +175,41 @@ let p=arguments[0]; return (async()=>{
   if (p.badReadyArgs) try { await m.openNativeSession({command:p.command,args:p.badReadyArgs,verifyExecutable:async()=>true,timeoutMs:2000}); } catch { badReady=true; }
   if (p.badStatusArgs) try { let s=await m.openNativeSession({command:p.command,args:p.badStatusArgs,verifyExecutable:async()=>true,timeoutMs:2000}); await s.getStatus(); await s.close(); } catch { badStatus=true; }
   if (p.hangArgs) try { await m.openNativeSession({command:p.command,args:p.hangArgs,verifyExecutable:async()=>true,timeoutMs:400}); } catch { hung=true; }
+  if (p.checkingArgs) { let s=await m.openNativeSession({command:p.command,args:p.checkingArgs,verifyExecutable:async()=>true,timeoutMs:2000}); try { let v=await s.getStatus(); checking=v.internet==='checking' && v.torConnected && v.fastAvailable===false; } finally { await s.close(); } }
   let session=await m.openNativeSession({command:p.command,args:p.args,verifyExecutable:async(command,args)=>command===p.command && JSON.stringify(args)===JSON.stringify(p.args),timeoutMs:15000});
-  try { let first=session.getStatus();let concurrent=await session.getStatus().then(()=>false,()=>true);let status=await first;await session.close();let closed=false;try{await session.getStatus();}catch{closed=true;}return {denied,blocked,called,badReady,badStatus,hung,concurrent,status,closed}; }
+  try { let first=session.getStatus();let concurrent=await session.getStatus().then(()=>false,()=>true);let status=await first;await session.close();let closed=false;try{await session.getStatus();}catch{closed=true;}return {denied,blocked,called,badReady,badStatus,hung,checking,concurrent,status,closed}; }
   finally { await session.close(); }
 })();"""
                     channel = client.call("WebDriver:ExecuteScript", {"script": channel_script, "args": [native_channel]})["value"]
                     assert channel["denied"] and channel["blocked"] == 3 and not channel["called"] and channel["concurrent"] and channel["closed"], channel
                     if native_channel.get("badReadyArgs"):
-                        assert channel["badReady"] and channel["badStatus"] and channel["hung"], channel
+                        assert channel["badReady"] and channel["badStatus"] and channel["hung"] and channel["checking"], channel
                     assert channel["status"]["torConnected"] is False and channel["status"]["fastAvailable"] is False, channel
                     print("PASS: Gecko starts a verified-test child, reads bounded status over pipes and closes it")
+                if native_tor:
+                    create_script = """let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs');
+let p=arguments[0],w=Services.wm.getMostRecentWindow('navigator:browser');return (async()=>{
+w.__altnetNativeTestSession=await m.openNativeSession({command:p.command,args:p.args,verifyExecutable:async(command,args)=>command===p.command && JSON.stringify(args)===JSON.stringify(p.args),timeoutMs:15000});
+return w.__altnetNativeTestSession.getStatus();})();"""
+                    status = client.call("WebDriver:ExecuteScript", {"script": create_script, "args": [native_tor]})["value"]
+                    try:
+                        deadline = time.monotonic() + min(max(int(native_tor.get("timeout", 420)), 1), 420)
+                        last = None
+                        while time.monotonic() < deadline:
+                            safe = (status["phase"], status["progress"], status["torConnected"], status["internet"], status["fastAvailable"])
+                            if safe != last:
+                                print("Temporary native session:", safe, flush=True)
+                                last = safe
+                            assert status["fastAvailable"] is False
+                            if status["torConnected"] and status["internet"] in ("verified", "https"):
+                                print("PASS: Gecko-owned client connected through Tor and verified HTTPS; fast route remained unavailable", flush=True)
+                                break
+                            time.sleep(3)
+                            status = client.call("WebDriver:ExecuteScript", {"script": "return Services.wm.getMostRecentWindow('navigator:browser').__altnetNativeTestSession.getStatus();", "args": []})["value"]
+                        else:
+                            raise TimeoutError("Временный дочерний клиент не подтвердил соединение Tor вовремя")
+                    finally:
+                        client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser');let s=w.__altnetNativeTestSession;delete w.__altnetNativeTestSession;return s.close();", "args": []})
                 result = client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('navigator:browser'); let d = w.document; let bg = d.querySelector('#urlbar > .urlbar-background'); let tab = d.querySelector('#TabsToolbar .tab-background'); let ext = Services.prefs.getBoolPref('network.protocol-handler.external-default'); let brand = Services.strings.createBundle('chrome://branding/locale/brand.properties').GetStringFromName('brandShortName'); return {loaded: !!d.querySelector('link[href*=\\\"altnet-chrome.css\\\"]'), radius: bg && w.getComputedStyle(bg).borderTopLeftRadius, tabRadius: tab && w.getComputedStyle(tab).borderTopLeftRadius, brand, externalDefault: ext, externalAlt: Services.prefs.getBoolPref('network.protocol-handler.external.alt', ext), externalIpfs: Services.prefs.getBoolPref('network.protocol-handler.external.ipfs', ext)};", "args": []})["value"]
                 assert result["loaded"] and result["radius"] == "10px" and result["tabRadius"] == "10px", result
                 assert "AltNet" in result["brand"] and "Tor" not in result["brand"], result
@@ -253,11 +278,13 @@ if __name__ == "__main__":
     parser.add_argument("--test-native-proof-module", action="store_true")
     parser.add_argument("--native-proof-live-from-stdin", action="store_true", help="Только тест: получить параметры временного дочернего клиента через stdin")
     parser.add_argument("--native-channel-from-stdin", action="store_true", help="Только тест: получить конфигурацию дочернего клиента через stdin")
+    parser.add_argument("--native-tor-live-from-stdin", action="store_true", help="Только тест: запустить изолированный дочерний Tor-клиент")
     args = parser.parse_args()
     if args.native_proof_live_from_stdin and not args.test_native_proof_module:
         parser.error("Для живой проверки нужен --test-native-proof-module")
-    if args.native_proof_live_from_stdin and args.native_channel_from_stdin:
-        parser.error("Нельзя совместить два тестовых режима stdin")
+    if sum((args.native_proof_live_from_stdin, args.native_channel_from_stdin, args.native_tor_live_from_stdin)) > 1:
+        parser.error("Нельзя совместить тестовые режимы stdin")
     native_live = json.loads(sys.stdin.readline(512)) if args.native_proof_live_from_stdin else None
     native_channel = json.loads(sys.stdin.readline(16384)) if args.native_channel_from_stdin else None
-    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel)
+    native_tor = json.loads(sys.stdin.readline(16384)) if args.native_tor_live_from_stdin else None
+    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor)

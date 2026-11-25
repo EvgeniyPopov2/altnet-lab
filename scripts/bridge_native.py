@@ -77,7 +77,7 @@ def public_route_status(manager):
     progress = status.get("progress")
     connected = status.get("connected")
     if (phase not in {"starting", "paused", "waiting", "ready", "recovering", "checking"}
-            or internet not in {"unchecked", "verified", "https", "unreachable"}
+            or internet not in {"unchecked", "checking", "verified", "https", "unreachable"}
             or type(progress) is not int or not 0 <= progress <= 100
             or type(connected) is not bool):
         raise ValueError("Некорректное состояние маршрута")

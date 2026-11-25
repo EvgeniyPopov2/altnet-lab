@@ -130,6 +130,8 @@ class NativeSessionTests(unittest.TestCase):
         self.assertTrue(response["status"]["torConnected"])
         self.assertFalse(response["status"]["fastAvailable"])
         self.assertNotIn("bridge-string", output.getvalue())
+        status["internet"] = "checking"
+        self.assertEqual(bridge_native.public_route_status(manager)["internet"], "checking")
         status["internet"] = "unexpected"
         output = io.StringIO()
         serve_native_parent(io.BytesIO(b'{"id":8,"method":"status"}\n'), output, server, manager)
@@ -336,6 +338,7 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
                 "bad-ready": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\ntime.sleep(60)\n",
                 "bad-status": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\nsys.stdin.buffer.readline()\nprint('{\"id\":1,\"ok\":true,\"status\":{\"phase\":\"ready\",\"progress\":100,\"torConnected\":true,\"internet\":\"verified\",\"fastAvailable\":true}}',flush=True)\ntime.sleep(60)\n",
                 "hung": fake_header + "time.sleep(60)\n",
+                "checking": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\nsys.stdin.buffer.readline()\nprint('{\"id\":1,\"ok\":true,\"status\":{\"phase\":\"ready\",\"progress\":100,\"torConnected\":true,\"internet\":\"checking\",\"fastAvailable\":false}}',flush=True)\nsys.stdin.buffer.read()\n",
             }
             fake_args = {}
             for name, source in fixtures.items():
@@ -344,7 +347,7 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
             command = [sys.executable, "-B", str(ROOT / "tests/tor-native-ui.py"), "--browser", str(browser_path),
                        "--theme", "dark", "--expect-no-updater", "--native-channel-from-stdin"]
             config = {"command": sys.executable, "args": args, "badReadyArgs": fake_args["bad-ready"],
-                      "badStatusArgs": fake_args["bad-status"], "hangArgs": fake_args["hung"]}
+                      "badStatusArgs": fake_args["bad-status"], "hangArgs": fake_args["hung"], "checkingArgs": fake_args["checking"]}
             result = subprocess.run(command, input=json.dumps(config),
                                     text=True, capture_output=True, timeout=90)
             self.assertEqual(result.returncode, 0, result.stderr)

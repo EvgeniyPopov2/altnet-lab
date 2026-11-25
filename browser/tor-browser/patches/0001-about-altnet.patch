@@ -333,7 +333,7 @@ index 0000000..47cfd0b
 +}
 diff --git a/browser/components/abouttor/NativeSessionChannel.sys.mjs b/browser/components/abouttor/NativeSessionChannel.sys.mjs
 new file mode 100644
-index 0000000..9eaf860
+index 0000000..a3bfecb
 --- /dev/null
 +++ b/browser/components/abouttor/NativeSessionChannel.sys.mjs
 @@ -0,0 +1,126 @@
@@ -345,7 +345,7 @@ index 0000000..9eaf860
 +
 +const PROTOCOL = "altnet-native-v1";
 +const PHASES = new Set(["starting", "paused", "waiting", "ready", "recovering", "checking"]);
-+const INTERNET = new Set(["unchecked", "verified", "https", "unreachable"]);
++const INTERNET = new Set(["unchecked", "checking", "verified", "https", "unreachable"]);
 +
 +async function readLine(stream, limit = 1024) {
 +  let line = "";
