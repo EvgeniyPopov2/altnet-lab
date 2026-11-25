@@ -42,7 +42,27 @@ def rewrite_brand(text, locale, is_ftl):
     required = {"-brand-short-name", "-brand-full-name"} if is_ftl else {"brandShortName", "brandFullName"}
     if not required <= seen:
         raise ValueError("Required upstream branding keys missing")
-    return "".join(output)
+    result = "".join(output)
+    if is_ftl:
+        messages = (
+            'altnet-about-project = Браузер AltNet основан на Tor Browser от <label data-l10n-name="project-link">Tor Project</label> и Mozilla Firefox.\n'
+            'altnet-about-support = Поддержка и автоматические обновления AltNet пока не подключены.\n'
+            'altnet-about-window-title =\n    .title = О браузере AltNet\n'
+            'altnet-menu-about =\n    .label = О браузере AltNet\n    .accesskey = О\n'
+            'altnet-appmenu-about =\n    .label = О браузере AltNet\n    .accesskey = О\n'
+            if locale == "ru" else
+            'altnet-about-project = AltNet Browser is based on Tor Browser by <label data-l10n-name="project-link">Tor Project</label> and Mozilla Firefox.\n'
+            'altnet-about-support = AltNet support and automatic updates are not available yet.\n'
+            'altnet-about-window-title =\n    .title = About AltNet Browser\n'
+            'altnet-menu-about =\n    .label = About AltNet Browser\n    .accesskey = A\n'
+            'altnet-appmenu-about =\n    .label = About AltNet Browser\n    .accesskey = A\n'
+        )
+        if "altnet-about-project =" in result or "altnet-about-support =" in result:
+            if messages.strip() not in result:
+                raise ValueError("Unexpected existing AltNet about messages")
+        else:
+            result = result.rstrip("\n") + "\n\n" + messages
+    return result
 
 
 def rewrite_product_text(text, locale):

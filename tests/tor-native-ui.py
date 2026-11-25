@@ -117,6 +117,9 @@ def run(browser, artifact_root, theme):
                     other = wait_for(lambda: next((h for h in client.call("WebDriver:GetWindowHandles") if h != original), None), pane)
                     client.call("WebDriver:SwitchToWindow", {"handle": other})
                     url = wait_for(lambda: (url if (url := client.call("WebDriver:GetCurrentURL")["value"]).startswith("about:preferences") else None), pane)
+                    if pane == "general":
+                        placeholders = client.call("WebDriver:ExecuteScript", {"script": "return document.querySelectorAll('[support-page=preferences]').length;", "args": []})["value"]
+                        assert placeholders > 0, "Preferences support control missing"
                     print(f"PASS: {pane}: {url}")
                     client.call("WebDriver:CloseWindow")
                     client.call("WebDriver:SwitchToWindow", {"handle": original})
@@ -131,6 +134,8 @@ def run(browser, artifact_root, theme):
                 client.call("WebDriver:Navigate", {"url": "about:altnet"})
                 logo = client.call("WebDriver:ExecuteScript", {"script": "let img = document.querySelector('.mark img'); return {source: img?.getAttribute('src'), loaded: !!img?.naturalWidth};", "args": []})["value"]
                 assert logo == {"source": "chrome://branding/content/about-logo.png", "loaded": True}, logo
+                support_notice = client.call("WebDriver:ExecuteScript", {"script": "return document.querySelector('.notice')?.textContent;", "args": []})["value"]
+                assert "Поддержка AltNet" in support_notice and "ещё не подключены" in support_notice, support_notice
                 effective_theme = client.call("WebDriver:ExecuteScript", {"script": "return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';", "args": []})["value"]
                 assert effective_theme == theme, (theme, effective_theme)
                 for width in (500, 1200):
@@ -149,6 +154,35 @@ def run(browser, artifact_root, theme):
                 assert not any(result[key] for key in ("externalDefault", "externalAlt", "externalIpfs")), "Alt/IPFS must not be passed to external apps by default"
                 notification = client.call("WebDriver:ExecuteScript", {"script": "let d = Services.wm.getMostRecentWindow('navigator:browser').document; return d.l10n.formatValue('language-notification-label-system', {language: 'Русский'});", "args": []})["value"]
                 assert "AltNet" in notification and "Tor" not in notification, notification
+                routes = client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('navigator:browser'); return {menu: w.getHelpLinkURL('firefox-help'), support: Services.prefs.getStringPref('browser.base-browser-support-url'), feedback: Services.prefs.getStringPref('app.feedback.baseURL'), feedbackHidden: w.document.getElementById('feedbackPage').hidden, aboutMenu: w.document.getElementById('aboutName').getAttribute('label'), releaseNotes: Services.prefs.getStringPref('app.releaseNotesURL.aboutDialog')};", "args": []})["value"]
+                assert all(routes[key] == "about:altnet" for key in ("menu", "support", "feedback")), routes
+                assert routes["feedbackHidden"] and routes["releaseNotes"] == "about:blank", routes
+                assert "AltNet" in routes["aboutMenu"] and "Tor" not in routes["aboutMenu"], routes
+                if routes["aboutMenu"].startswith("О "):
+                    assert routes["aboutMenu"] == "О браузере AltNet", routes
+                client.call("WebDriver:ExecuteScript", {"script": "Services.wm.getMostRecentWindow('navigator:browser').openHelpLink('firefox-help');", "args": []})
+                client.call("Marionette:SetContext", {"value": "content"})
+                support_tab = wait_for(lambda: next((h for h in client.call("WebDriver:GetWindowHandles") if h != original), None), "support tab")
+                client.call("WebDriver:SwitchToWindow", {"handle": support_tab})
+                assert wait_for(lambda: client.call("WebDriver:GetCurrentURL")["value"] == "about:altnet", "local support page")
+                client.call("WebDriver:CloseWindow")
+                client.call("WebDriver:SwitchToWindow", {"handle": original})
+                client.call("Marionette:SetContext", {"value": "chrome"})
+                chrome_windows = set(client.call("WebDriver:GetWindowHandles"))
+                client.call("WebDriver:ExecuteScript", {"script": "Services.wm.getMostRecentWindow('navigator:browser').openAboutDialog();", "args": []})
+                def about_text():
+                    return client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('Browser:About'); let d = w?.document; let project = d?.getElementById('projectDesc')?.textContent; let help = d?.getElementById('helpDesc')?.textContent; return project && help ? {title: d.title, project, help, releaseHidden: d.getElementById('release')?.hidden, feedbackHidden: d.getElementById('submit-feedback')?.hidden ?? true, notesHidden: d.getElementById('releasenotes')?.hidden, links: Array.from(d.querySelectorAll('[href]'), x => x.getAttribute('href'))} : null;", "args": []})["value"]
+                about = wait_for(about_text, "localized about dialog")
+                assert "AltNet" in about["title"] and "AltNet" in about["project"] and "Tor Project" in about["project"], about
+                assert "AltNet" in about["help"] and "support.torproject.org/tor-browser" not in about["links"], about
+                assert about["releaseHidden"] and about["feedbackHidden"] and about["notesHidden"], about
+                assert "about:license" in about["links"], about
+                print("PASS: AltNet support routes and accurate about-dialog attribution")
+                dialog = wait_for(lambda: next(iter(set(client.call("WebDriver:GetWindowHandles")) - chrome_windows), None), "about window")
+                client.call("WebDriver:SwitchToWindow", {"handle": dialog})
+                screenshot = client.call("WebDriver:TakeScreenshot", {})["value"]
+                (root / "about-dialog.png").write_bytes(base64.b64decode(screenshot))
+                client.call("WebDriver:SwitchToWindow", {"handle": next(iter(chrome_windows))})
                 screenshot = client.call("WebDriver:TakeScreenshot", {})["value"]
                 (root / "browser-chrome.png").write_bytes(base64.b64decode(screenshot))
                 print("PASS: native chrome stylesheet and untrusted click isolation")

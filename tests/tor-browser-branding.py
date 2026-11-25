@@ -23,6 +23,9 @@ class BrandingTests(unittest.TestCase):
         self.assertIn("-brand-full-name = Браузер AltNet\n", changed)
         self.assertIn("-vendor-short-name = Tor Project\n", changed)
         self.assertIn("trademarkInfo = Tor is a trademark\n", changed)
+        self.assertIn("Браузер AltNet основан на Tor Browser", changed)
+        self.assertIn("Поддержка и автоматические обновления AltNet пока не подключены", changed)
+        self.assertIn(".label = О браузере AltNet", changed)
         self.assertEqual(changed, branding.rewrite_brand(changed, "ru", True))
         self.assertIn("AltNet Browser", branding.rewrite_brand(original, "fr", True))
 

@@ -1,3 +1,104 @@
+diff --git a/browser/app/profile/000-tor-browser.js b/browser/app/profile/000-tor-browser.js
+index eefac5a..1da54b8 100644
+--- a/browser/app/profile/000-tor-browser.js
++++ b/browser/app/profile/000-tor-browser.js
+@@ -61,9 +61,9 @@ pref("extensions.torbutton.use_nontor_proxy", false);
+ pref("browser.startup.homepage", "about:tor");
+
+ // tor-browser#43864, tor-browser#40899: general browser support url.
+-pref("browser.base-browser-support-url", "https://support.torproject.org/tor-browser");
++pref("browser.base-browser-support-url", "about:altnet");
+ // Point to our feedback url rather than Mozilla's
+-pref("app.feedback.baseURL", "about:manual#get-in-touch__bug-or-feedback");
++pref("app.feedback.baseURL", "about:altnet");
+
+ // tor-browser#40701: add our custom download warning.
+ pref("browser.download.showTorWarning", true);
+diff --git a/browser/base/content/aboutDialog.js b/browser/base/content/aboutDialog.js
+index 817bfce..6483440 100644
+--- a/browser/base/content/aboutDialog.js
++++ b/browser/base/content/aboutDialog.js
+@@ -98,10 +98,6 @@ function init() {
+     }
+   }
+
+-  if (AppConstants.IS_ESR) {
+-    document.getElementById("release").hidden = false;
+-  }
+-
+   document
+     .getElementById("aboutDialogEscapeKey")
+     .addEventListener("command", () => {
+diff --git a/browser/base/content/aboutDialog.xhtml b/browser/base/content/aboutDialog.xhtml
+index 332fbde..079bbcd 100644
+--- a/browser/base/content/aboutDialog.xhtml
++++ b/browser/base/content/aboutDialog.xhtml
+@@ -11,7 +11,7 @@
+         id="aboutDialog"
+         windowtype="Browser:About"
+ #ifndef XP_MACOSX
+-        data-l10n-id="aboutDialog-title"
++        data-l10n-id="altnet-about-window-title"
+ #endif
+         role="dialog"
+         aria-describedby="version distribution distributionId projectDesc helpDesc trademark"
+@@ -110,7 +110,7 @@
+                    - See tor-browerr#42720. -->
+                 <label id="releasenotes" is="text-link" hidden="true" data-l10n-id="releaseNotes-link"/>
+                 <label id="aboutDialogHelpLink" is="text-link" data-l10n-id="aboutdialog-help-user"/>
+-                <label id="submit-feedback" is="text-link" data-l10n-id="aboutdialog-submit-feedback"/>
++                <label id="submit-feedback" is="text-link" hidden="true" data-l10n-id="aboutdialog-submit-feedback"/>
+               </description>
+             </vbox>
+ #endif
+@@ -138,13 +138,10 @@
+             <label is="text-link" href="https://foundation.mozilla.org/?form=firefox-about" data-l10n-name="helpus-donateLink"/>
+             <label is="text-link" href="https://www.mozilla.org/contribute/?utm_source=firefox-browser&#38;utm_medium=firefox-desktop&#38;utm_campaign=about-dialog" data-l10n-name="helpus-getInvolvedLink"/>
+           </description>
+-          <description class="text-blurb" id="projectDesc" data-l10n-id="about-dialog-tor-project">
++          <description class="text-blurb" id="projectDesc" data-l10n-id="altnet-about-project">
+             <label is="text-link" href="https://www.torproject.org/" data-l10n-name="project-link"></label>
+           </description>
+-          <description class="text-blurb" id="helpDesc" data-l10n-id="about-dialog-help-out">
+-            <label is="text-link" href="https://donate.torproject.org/" data-l10n-name="donate-link"></label>
+-            <label is="text-link" href="https://community.torproject.org/" data-l10n-name="community-link"></label>
+-          </description>
++          <description class="text-blurb" id="helpDesc" data-l10n-id="altnet-about-support"></description>
+         </vbox>
+       </vbox>
+     </hbox>
+@@ -153,8 +150,6 @@
+         <label is="text-link" class="bottom-link" useoriginprincipal="true" href="about:license" data-l10n-id="bottomLinks-license"/>
+         <label is="text-link" class="bottom-link" href="https://www.mozilla.org/about/legal/terms/firefox/" data-l10n-id="bottom-links-terms"/>
+         <label is="text-link" class="bottom-link" href="https://www.mozilla.org/privacy/firefox/?utm_source=firefox-browser&#38;utm_medium=firefox-desktop&#38;utm_campaign=about-dialog" data-l10n-id="bottom-links-privacy"/>
+-        <label is="text-link" class="bottom-link visible-bottom-link" href="https://support.torproject.org/tor-browser" data-l10n-id="about-dialog-questions-link"></label>
+-        <label is="text-link" class="bottom-link visible-bottom-link" href="https://community.torproject.org/relay/" data-l10n-id="about-dialog-grow-tor-network-link"></label>
+         <label is="text-link" class="bottom-link visible-bottom-link" useoriginprincipal="true" href="about:license" data-l10n-id="about-dialog-browser-license-link"></label>
+
+       </hbox>
+diff --git a/browser/base/content/browser-menubar.inc.xhtml b/browser/base/content/browser-menubar.inc.xhtml
+index 058b586..cc291f1 100644
+--- a/browser/base/content/browser-menubar.inc.xhtml
++++ b/browser/base/content/browser-menubar.inc.xhtml
+@@ -474,6 +474,7 @@
+                           hidden="true"
+                           appmenu-data-l10n-id="appmenuitem-report-broken-site"/>
+                 <menuitem id="feedbackPage"
++                          hidden="true"
+                           data-l10n-id="menu-help-share-ideas"
+                           appmenu-data-l10n-id="appmenu-help-share-ideas"/>
+                 <menuitem id="helpSafeMode"
+@@ -499,8 +500,8 @@
+                           appmenu-data-l10n-id="appmenu-help-switch-device"/>
+                 <menuseparator id="aboutSeparator"/>
+                 <menuitem id="aboutName"
+-                          data-l10n-id="menu-about"
+-                          appmenu-data-l10n-id="appmenu-about"/>
++                          data-l10n-id="altnet-menu-about"
++                          appmenu-data-l10n-id="altnet-appmenu-about"/>
+                 <menuseparator id="helpPolicySeparator"
+                           hidden="true"/>
+                 <menuitem id="helpPolicySupport"
 diff --git a/browser/base/content/browser.xhtml b/browser/base/content/browser.xhtml
 index f7ed578..8b90200 100644
 --- a/browser/base/content/browser.xhtml
@@ -10,6 +111,19 @@ index f7ed578..8b90200 100644
 
    <link rel="stylesheet" href="chrome://browser/skin/controlcenter/panel.css" />
    <link
+diff --git a/browser/base/content/utilityOverlay.js b/browser/base/content/utilityOverlay.js
+index f978ed2..1ba2c67 100644
+--- a/browser/base/content/utilityOverlay.js
++++ b/browser/base/content/utilityOverlay.js
+@@ -537,7 +537,7 @@ function makeURLAbsolute(aBase, aUrl) {
+
+ function getHelpLinkURL(aHelpTopic) {
+   if (aHelpTopic === "firefox-help" || aHelpTopic === "firefox-osxkey") {
+-    return "about:manual";
++    return "about:altnet";
+   }
+   var url = Services.urlFormatter.formatURLPref("app.support.baseURL");
+   return url + aHelpTopic;
 diff --git a/browser/branding/tb-release/configure.sh b/browser/branding/tb-release/configure.sh
 index 2430914..76a8560 100644
 --- a/browser/branding/tb-release/configure.sh
@@ -21,10 +135,10 @@ index 2430914..76a8560 100644
 -MOZ_APP_DISPLAYNAME="Tor Browser"
 +MOZ_APP_DISPLAYNAME="AltNet Browser"
 diff --git a/browser/branding/tb-release/locales/en-US/brand.ftl b/browser/branding/tb-release/locales/en-US/brand.ftl
-index ca295f4..6981495 100644
+index ca295f4..81646f2 100644
 --- a/browser/branding/tb-release/locales/en-US/brand.ftl
 +++ b/browser/branding/tb-release/locales/en-US/brand.ftl
-@@ -3,14 +3,14 @@
+@@ -3,16 +3,26 @@
  # that Mozilla includes in the Firefox language packs.
 
  # The shortened application name for Tor Browser. Shared between versions.
@@ -42,7 +156,19 @@ index ca295f4..6981495 100644
 +-brand-product-name = AltNet Browser
  # The name of the Tor Project organisation.
  -vendor-short-name = Tor Project
++altnet-about-project = AltNet Browser is based on Tor Browser by <label data-l10n-name="project-link">Tor Project</label> and Mozilla Firefox.
++altnet-about-support = AltNet support and automatic updates are not available yet.
++altnet-about-window-title =
++    .title = About AltNet Browser
++altnet-menu-about =
++    .label = About AltNet Browser
++    .accesskey = A
++altnet-appmenu-about =
++    .label = About AltNet Browser
++    .accesskey = A
  # "Tor" is a trademark names, so should not be translated (not including the quote marks, which can be localized).
+ # "The Tor Project, Inc." is an organisation name.
+ trademarkInfo = “Tor” and the Tor logo are registered trademarks of The Tor Project, Inc.
 diff --git a/browser/branding/tb-release/locales/en-US/brand.properties b/browser/branding/tb-release/locales/en-US/brand.properties
 index e27df0b..3657f48 100644
 --- a/browser/branding/tb-release/locales/en-US/brand.properties
@@ -59,6 +185,25 @@ index e27df0b..3657f48 100644
  # The full application name for the stable release.
 -brandFullName=Tor Browser
 +brandFullName=AltNet Browser
+diff --git a/browser/branding/tb-release/pref/firefox-branding.js b/browser/branding/tb-release/pref/firefox-branding.js
+index 520ba32..c16c016 100644
+--- a/browser/branding/tb-release/pref/firefox-branding.js
++++ b/browser/branding/tb-release/pref/firefox-branding.js
+@@ -9,11 +9,11 @@
+ // each update manifest should contain attributes similar to:
+ //   actions="showURL"
+ //   openURL="https://blog.torproject.org/tor-browser-55a2-released"
+-pref("startup.homepage_override_url", "https://blog.torproject.org/category/applications");
++pref("startup.homepage_override_url", "about:blank");
+ pref("app.update.url.details", "https://www.torproject.org/download/");
+ pref("app.update.url.manual", "https://www.torproject.org/download/");
+-pref("app.releaseNotesURL", "https://blog.torproject.org/new-release-tor-browser-%BB_VERSION_FOR_URLS%/");
+-pref("app.releaseNotesURL.aboutDialog", "https://blog.torproject.org/new-release-tor-browser-%BB_VERSION_FOR_URLS%/");
++pref("app.releaseNotesURL", "about:blank");
++pref("app.releaseNotesURL.aboutDialog", "about:blank");
+
+ // Interval: Time between checks for a new version (in seconds)
+ pref("app.update.interval", 43200); // 12 hours
 diff --git a/browser/components/DesktopActorRegistry.sys.mjs b/browser/components/DesktopActorRegistry.sys.mjs
 index b37054a..e0019ec 100644
 --- a/browser/components/DesktopActorRegistry.sys.mjs
@@ -249,7 +394,7 @@ index 0000000..e0cec8b
 +}
 diff --git a/browser/components/abouttor/content/aboutAltNet.html b/browser/components/abouttor/content/aboutAltNet.html
 new file mode 100644
-index 0000000..d2efa6f
+index 0000000..b375bbf
 --- /dev/null
 +++ b/browser/components/abouttor/content/aboutAltNet.html
 @@ -0,0 +1,33 @@
@@ -282,7 +427,7 @@ index 0000000..d2efa6f
 +        <button class="tile" type="button" data-altnet-setting="search"><span class="icon" aria-hidden="true">⌕</span><strong>Поиск</strong><span>Поисковая система и подсказки</span><b aria-hidden="true">↗</b></button>
 +      </div>
 +    </section>
-+    <aside class="notice"><span aria-hidden="true">ⓘ</span><p><strong>В разработке.</strong> Нативные адреса Alt и IPFS ещё не подключены. Проверка подлинности локального клиента и сетевые проверки безопасности не завершены.</p></aside>
++    <aside class="notice"><span aria-hidden="true">ⓘ</span><p><strong>Поддержка AltNet пока готовится.</strong> Канал обращений и автоматические обновления ещё не подключены. Нативные адреса Alt и IPFS, проверка подлинности локального клиента и сетевые проверки безопасности не завершены.</p></aside>
 +  </main>
 +</body>
 +</html>
