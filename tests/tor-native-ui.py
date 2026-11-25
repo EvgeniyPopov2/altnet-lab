@@ -59,7 +59,7 @@ def wait_for(callback, label, timeout=15):
     raise AssertionError(f"Timed out: {label}")
 
 
-def run(browser, artifact_root, theme):
+def run(browser, artifact_root, theme, expect_no_updater=False):
     root = Path(tempfile.mkdtemp(prefix="altnet-native-ui-", dir=artifact_root))
     profile = root / "profile"
     for folder in (profile, root / "appdata", root / "localappdata"):
@@ -152,6 +152,11 @@ def run(browser, artifact_root, theme):
                 assert result["loaded"] and result["radius"] == "10px" and result["tabRadius"] == "10px", result
                 assert "AltNet" in result["brand"] and "Tor" not in result["brand"], result
                 assert not any(result[key] for key in ("externalDefault", "externalAlt", "externalIpfs")), "Alt/IPFS must not be passed to external apps by default"
+                if expect_no_updater:
+                    flags = client.call("WebDriver:ExecuteScript", {"script": "let {AppConstants} = ChromeUtils.importESModule('resource://gre/modules/AppConstants.sys.mjs'); return {updater: !!AppConstants.MOZ_UPDATER, translations: Services.prefs.getBoolPref('browser.translations.enable', false)};", "args": []})["value"]
+                    assert not flags["updater"], "The experimental fork must not silently install Tor Browser updates"
+                    assert not flags["translations"], "Translation must remain disabled until its engine and model delivery are verified"
+                    print("PASS: updater absent and unverified translation disabled")
                 notification = client.call("WebDriver:ExecuteScript", {"script": "let d = Services.wm.getMostRecentWindow('navigator:browser').document; return d.l10n.formatValue('language-notification-label-system', {language: 'Русский'});", "args": []})["value"]
                 settings_labels = client.call("WebDriver:ExecuteScript", {"script": "let Localization = Services.wm.getMostRecentWindow('navigator:browser').Localization; let l = new Localization(['browser/preferences/preferences.ftl', 'toolkit/global/base-browser.ftl'], true); return l.formatMessages([{id:'pane-about-firefox-title'},{id:'help-button-label2'},{id:'update-application-updates-managed-by-os'},{id:'pane-profiles-no-account-sync'}]);", "args": []})["value"]
                 assert settings_labels[0]["value"] == "О браузере AltNet", settings_labels
@@ -207,5 +212,6 @@ if __name__ == "__main__":
     parser.add_argument("--browser", type=Path, required=True)
     parser.add_argument("--artifacts", type=Path, default=Path(os.environ.get("TEMP", tempfile.gettempdir())))
     parser.add_argument("--theme", choices=("light", "dark"), default="dark")
+    parser.add_argument("--expect-no-updater", action="store_true")
     args = parser.parse_args()
-    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme)
+    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater)
