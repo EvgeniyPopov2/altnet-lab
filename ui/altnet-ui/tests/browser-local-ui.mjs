@@ -34,6 +34,16 @@ try {
     });
     if (width < 768) await page.getByRole("button", { name: "Ещё", exact: true }).click();
     await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
+    const profileNotice = page.locator(".browser-profile-notice");
+    await profileNotice.getByText("Профиль AltNet: анонимный", { exact: false }).waitFor();
+    await profileNotice.locator("summary").click();
+    assert.equal(await profileNotice.getByText("Выбор профиля пока не управляет маршрутом этого браузера.", { exact: false }).isVisible(), true);
+    await page.evaluate(() => {
+      localStorage.setItem("altnet.profile.v1", "fast");
+      window.dispatchEvent(new CustomEvent("altnet:profile", { detail: { profile: "fast" } }));
+    });
+    await profileNotice.getByText("Профиль AltNet: приватный быстрый", { exact: false }).waitFor();
+    await profileNotice.locator("summary").click();
     assert.equal(await page.locator(".browser-toolbar").evaluate(element => element.scrollWidth <= element.clientWidth), true, `toolbar overflow at ${width}px`);
     const address = page.getByRole("textbox", { name: "Адрес сайта" });
     await address.fill("alpha");

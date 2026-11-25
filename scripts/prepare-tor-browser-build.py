@@ -14,6 +14,13 @@ ICONS_NAME = "altnet-icons.tar"
 LOCALIZATION = b"[% INCLUDE 'browser-localization' %]\n"
 BRANDING_COMMAND = (LOCALIZATION + b'python3 "$rootdir/altnet-branding.py" "$PWD" '
                     b'"$HOME/.mozbuild/l10n-central" "$rootdir/altnet-icons.tar"\n')
+UPDATER_CONFIG = b'''[% IF c("var/windows") && !c("var/updater_enabled") -%]
+  # Upstream's Windows mozconfig disables zucchini, but that option only exists
+  # when the updater is enabled. Keep the updater disabled without passing it.
+  grep -qx 'ac_add_options --disable-zucchini' "mozconfig-[% c('var/osname') %]"
+  sed -i '/^ac_add_options --disable-zucchini$/d' "mozconfig-[% c('var/osname') %]"
+[% END -%]
+'''
 PDB_BEFORE = b"  find . -path ./_tests -prune -o -name '*.pdb' -exec cp -l {} $distdir/Debug/Browser/ \\;\n"
 PDB_AFTER = b'''  # Keep the original flat symbol layout, but do not discard different PDBs
   # with the same basename. Preserve their source paths under duplicates/.
@@ -71,8 +78,12 @@ def prepare(root):
             if original.count(LOCALIZATION) != 1:
                 raise ValueError("Неожиданный этап локализации браузера.")
             old_with_pdb = old_prepared.replace(PDB_BEFORE, PDB_AFTER, 1)
-            prepared = prepared.replace(PDB_BEFORE, PDB_AFTER, 1).replace(LOCALIZATION, BRANDING_COMMAND, 1)
-            accepted = (original, old_prepared, old_with_pdb, prepared)
+            previous = prepared.replace(PDB_BEFORE, PDB_AFTER, 1).replace(LOCALIZATION, BRANDING_COMMAND, 1)
+            anchor = b'cp $rootdir/mozconfig ./\n'
+            if previous.count(anchor) != 1:
+                raise ValueError("Неожиданный этап настройки браузера.")
+            prepared = previous.replace(anchor, UPDATER_CONFIG + anchor, 1)
+            accepted = (original, old_prepared, old_with_pdb, previous, prepared)
         current = path.read_bytes()
         if current not in accepted:
             raise ValueError(f"Файл содержит другие изменения: {relative}")

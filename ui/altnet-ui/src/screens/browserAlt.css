@@ -74,6 +74,11 @@
 .browser-create-button:hover { background: #7964fa; }
 .browser-chrome button:focus-visible { outline: 2px solid #b4a8ff; outline-offset: -2px; }
 
+.browser-profile-notice { min-width: 0; padding: 9px 12px; border: 1px solid #49456a; border-radius: 10px; background: #211f34; color: #e3dff8; font-size: 12px; line-height: 1.5; }
+.browser-profile-notice summary { cursor: pointer; font-weight: 600; }
+.browser-profile-notice summary:focus-visible { outline: 2px solid #b4a8ff; outline-offset: 3px; border-radius: 3px; }
+.browser-profile-notice p { max-width: 75ch; margin: 8px 0 1px; color: #c5c5d9; }
+
 @media (max-width: 700px) {
   .browser-tab { flex-basis: 155px; }
   .browser-toolbar { display: grid; grid-template-columns: 1fr auto; gap: 5px; }

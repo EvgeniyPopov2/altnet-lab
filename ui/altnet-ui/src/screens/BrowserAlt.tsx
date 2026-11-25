@@ -6,6 +6,7 @@ import { BOOKMARKS_KEY, readBookmarks, toggleBookmark, type BrowserBookmark } fr
 import { browserTabTitle, createBrowserTab, parseBrowserAddress, type BrowserTab } from "../core/sites/browserNavigation";
 import type { VerifiedSite } from "../core/sites/ipfsSitePackage";
 import { encodeSitePath } from "../core/sites/sitePath";
+import { usePrivacyProfile } from "../core/settings/profile";
 import {
   deletePublishedSite,
   getPublishedSite,
@@ -59,6 +60,7 @@ export default function BrowserAlt({
   activeId: string;
   setActiveId: Dispatch<SetStateAction<string>>;
 }) {
+  const [privacyProfile] = usePrivacyProfile();
   const addressRef = useRef<HTMLInputElement>(null);
   const [addressValue, setAddressValue] = useState<string>(() => tabs[0].url);
   const [navigationError, setNavigationError] = useState("");
@@ -765,6 +767,11 @@ export default function BrowserAlt({
         </div>
       </div>
       </div>
+
+      <details className="browser-profile-notice">
+        <summary>Профиль AltNet: {privacyProfile === "anon" ? "анонимный" : "приватный быстрый"} · подключение браузера ещё не настроено</summary>
+        <p>Выбор профиля пока не управляет маршрутом этого браузера. Закладки и локальные данные не разделены между профилями. Получение сайта с указанного onion-адреса использует управляемый Tor; при недоступности Tor прямое подключение не выполняется.</p>
+      </details>
 
       {navigationError && <p id="browser-address-error" role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 px-3 py-2 text-sm text-amber-100">{navigationError}</p>}
       {bookmarksOpen && <section id="browser-bookmarks" aria-label="Закладки" className="rounded-xl border border-white/10 bg-white/5 p-4">

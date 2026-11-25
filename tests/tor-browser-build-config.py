@@ -52,6 +52,8 @@ class BuildOverlayTests(unittest.TestCase):
         self.assertIn(b"filename: altnet-icons.tar", config)
         self.assertIn(b'patch -p1 --batch --forward < "$rootdir/altnet-about-page.patch"', build)
         self.assertIn(module.BRANDING_COMMAND, build)
+        self.assertIn(module.UPDATER_CONFIG, build)
+        self.assertIn(b'c("var/windows") && !c("var/updater_enabled")', module.UPDATER_CONFIG)
         self.assertIn(module.PDB_AFTER, build)
         self.run_prepare()
         self.assertEqual((self.root / "projects/firefox/config").read_bytes(), config)
@@ -78,7 +80,15 @@ class BuildOverlayTests(unittest.TestCase):
         self.run_prepare()
         build = self.root / "projects/firefox/build"
         expected = build.read_bytes()
-        build.write_bytes(expected.replace(module.BRANDING_COMMAND, module.LOCALIZATION).replace(module.PDB_AFTER, module.PDB_BEFORE))
+        build.write_bytes(expected.replace(module.UPDATER_CONFIG, b'').replace(module.BRANDING_COMMAND, module.LOCALIZATION).replace(module.PDB_AFTER, module.PDB_BEFORE))
+        self.run_prepare()
+        self.assertEqual(build.read_bytes(), expected)
+
+    def test_upgrades_previous_overlay_for_disabled_updater(self):
+        self.run_prepare()
+        build = self.root / "projects/firefox/build"
+        expected = build.read_bytes()
+        build.write_bytes(expected.replace(module.UPDATER_CONFIG, b''))
         self.run_prepare()
         self.assertEqual(build.read_bytes(), expected)
 
