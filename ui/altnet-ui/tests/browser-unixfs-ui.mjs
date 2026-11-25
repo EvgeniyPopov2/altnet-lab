@@ -53,6 +53,45 @@ try {
   try { await frame.getByText("Проверенный UnixFS").waitFor({ timeout: 12000 }); }
   catch (error) { console.error("Page state:", await page.locator("body").innerText()); throw error; }
   assert.equal(await frame.locator("body").getAttribute("data-attack"), null);
+  const [siteTab] = await Promise.all([context.waitForEvent("page"), page.getByRole("link", { name: "Открыть во вкладке браузера" }).click()]);
+  const tabFrame = siteTab.frameLocator('iframe[title="index.html"]');
+  await tabFrame.getByText("Проверенный UnixFS").waitFor();
+  assert.equal(await siteTab.evaluate(() => window.opener), null);
+  assert.equal(await siteTab.locator("iframe").getAttribute("sandbox"), "allow-scripts");
+  assert.equal(await tabFrame.locator("body").getAttribute("data-attack"), null);
+  await tabFrame.getByText("О сайте").click();
+  await siteTab.frameLocator('iframe[title="Каталог сайта/index.html"]').getByText("Вторая страница").waitFor();
+  await siteTab.goBack();
+  await tabFrame.getByText("Проверенный UnixFS").waitFor();
+  const originalHash = new URL(siteTab.url()).hash;
+  await siteTab.evaluate(() => window.postMessage({ type: "altnet.local-page", path: "Каталог сайта/index.html" }, "*"));
+  await siteTab.waitForTimeout(100);
+  assert.equal(new URL(siteTab.url()).hash, originalHash, "Сообщение из чужого окна не должно менять страницу");
+  await siteTab.close();
+  const otherProfile = await context.newPage();
+  await otherProfile.goto(values.url + originalHash.replace("profile=anon", "profile=fast"));
+  await otherProfile.getByRole("alert").filter({ hasText: "не найдена" }).waitFor();
+  assert.equal(await otherProfile.locator("iframe").count(), 0);
+  await otherProfile.close();
+  await page.evaluate(async canonical => {
+    const db = await new Promise((resolve, reject) => { const request = indexedDB.open("altnet-ipfs-site-cache"); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    const key = `profile:anon:${canonical}`;
+    const original = await new Promise((resolve, reject) => { const request = db.transaction("cars").objectStore("cars").get(key); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    window.__syntheticCar = original.slice(0);
+    new Uint8Array(original)[0] ^= 255;
+    await new Promise((resolve, reject) => { const tx = db.transaction("cars", "readwrite"); tx.objectStore("cars").put(original, key); tx.oncomplete = resolve; tx.onabort = reject; });
+    db.close();
+  }, root.toV1().toString());
+  const [corrupted] = await Promise.all([context.waitForEvent("page"), page.getByRole("link", { name: "Открыть во вкладке браузера" }).click()]);
+  await corrupted.getByRole("alert").filter({ hasText: "Не удалось прочитать и проверить сайт" }).waitFor();
+  assert.equal(await corrupted.locator("iframe").count(), 0);
+  await corrupted.close();
+  await page.evaluate(async canonical => {
+    const db = await new Promise((resolve, reject) => { const request = indexedDB.open("altnet-ipfs-site-cache"); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    await new Promise((resolve, reject) => { const tx = db.transaction("cars", "readwrite"); tx.objectStore("cars").put(window.__syntheticCar, `profile:anon:${canonical}`); tx.oncomplete = resolve; tx.onabort = reject; });
+    delete window.__syntheticCar;
+    db.close();
+  }, root.toV1().toString());
   assert.equal(await frame.locator("h1").evaluate(e => getComputedStyle(e).color), "rgb(12, 34, 56)");
   assert.match(await frame.locator("h1").evaluate(e => getComputedStyle(e).backgroundImage), /data:image\/png;base64/);
   assert.match(await frame.locator("#local").getAttribute("src"), /^data:image\/png;base64,/);

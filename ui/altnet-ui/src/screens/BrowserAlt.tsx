@@ -7,6 +7,7 @@ import type { PrivacyProfile } from "../core/policy/types";
 import { browserTabTitle, createBrowserTab, parseBrowserAddress, type BrowserTab } from "../core/sites/browserNavigation";
 import type { VerifiedSite } from "../core/sites/ipfsSitePackage";
 import { encodeSitePath } from "../core/sites/sitePath";
+import { siteTabHash } from "../core/sites/siteTabAddress";
 import {
   deletePublishedSite,
   getPublishedSite,
@@ -620,12 +621,13 @@ export default function BrowserAlt({
 
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-        <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between gap-3">
+        <div className="px-4 py-3 border-b border-white/10 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-white/90 font-semibold truncate">{page.title}</div>
             <div className="text-white/50 text-xs truncate">{url}</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <a href={siteTabHash(url, privacyProfile)} target="_blank" rel="noopener noreferrer" className="px-2 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white/80 text-xs">Открыть во вкладке браузера</a>
             <button
               type="button"
               onClick={() => copyText(url)}
@@ -682,9 +684,9 @@ export default function BrowserAlt({
     const page = state.site.pages.find(item => item.path === address.path);
     if (!page) return <div role="alert" className="p-6 text-amber-100">Страница отсутствует в проверенном пакете. <button type="button" className="underline" onClick={() => setActiveUrl(`ipfs://${address.root}`)}>На главную сайта</button></div>;
     return <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
         <div className="min-w-0"><div className="truncate font-semibold text-white/90">{page.title}</div><div className="truncate text-xs text-white/50">{address.url}</div></div>
-        <div className="flex gap-2"><button type="button" onClick={() => copyText(address.url)} className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80" title="Скопировать адрес">Копировать</button>
+        <div className="flex flex-wrap gap-2"><a href={siteTabHash(address.url, privacyProfile)} target="_blank" rel="noopener noreferrer" className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80">Открыть во вкладке браузера</a><button type="button" onClick={() => copyText(address.url)} className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80" title="Скопировать адрес">Копировать</button>
           <button type="button" onClick={() => void deleteIpfsCopy(address.root)} className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80">Удалить копию IPFS</button></div>
       </div>
       <p className="px-3 py-2 text-xs text-[#c9d0e9]">Локальная копия проверена по CID. Авторство не подтверждено; скрипты и внешние ресурсы отключены. Часть форматов и ресурсов CSS пока не поддерживается.</p>

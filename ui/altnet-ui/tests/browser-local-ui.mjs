@@ -66,6 +66,13 @@ try {
     const alpha = page.frameLocator('iframe[title="Сайт Альфа"]');
     await alpha.getByText("Альфа содержимое").waitFor();
     assert.equal(await alpha.locator("body").getAttribute("data-attack"), null);
+    const [siteTab] = await Promise.all([context.waitForEvent("page"), page.getByRole("link", { name: "Открыть во вкладке браузера" }).click()]);
+    await siteTab.frameLocator('iframe[title="Сайт Альфа"]').getByText("Альфа содержимое").waitFor();
+    assert.equal(await siteTab.evaluate(() => window.opener), null);
+    assert.equal(await siteTab.locator("iframe").getAttribute("sandbox"), "allow-scripts");
+    assert.equal(await siteTab.frameLocator('iframe[title="Сайт Альфа"]').locator("body").getAttribute("data-attack"), null);
+    assert.equal(await siteTab.locator("main").evaluate(element => element.scrollWidth <= element.clientWidth), true, `site tab overflow at ${width}px`);
+    await siteTab.close();
     assert.equal(await address.inputValue(), "alt://site/alpha");
     await page.getByRole("button", { name: "Домашняя страница", exact: true }).click();
     await page.getByText("Домашняя .alt").waitFor();

@@ -63,7 +63,7 @@ def wait_for(callback, label, timeout=15):
     raise AssertionError(f"Timed out: {label}")
 
 
-def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None, native_workspace=None, migration_url=None):
+def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None, native_workspace=None, migration_url=None, site_tab_url=None):
     root = Path(tempfile.mkdtemp(prefix="altnet-native-ui-", dir=artifact_root))
     profile = root / "profile"
     for folder in (profile, root / "appdata", root / "localappdata"):
@@ -81,7 +81,7 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
         'user_pref("media.peerconnection.enabled", false);',
         'user_pref("browser.startup.homepage_override.mstone", "ignore");',
         f'user_pref("layout.css.prefers-color-scheme.content-override", {0 if theme == "dark" else 1});',
-        *(['user_pref("privacy.spoof_english", 2);'] if native_workspace or migration_url else []),
+        *(['user_pref("privacy.spoof_english", 2);'] if native_workspace or migration_url or site_tab_url else []),
     ]), encoding="utf-8")
     env = {**os.environ, "TEMP": str(artifact_root), "TMP": str(artifact_root),
            "APPDATA": str(root / "appdata"), "LOCALAPPDATA": str(root / "localappdata"),
@@ -141,6 +141,22 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                     module = "NativeSessionChannel" if native_channel else "NativeWorkspaceShell"
                     denied = client.call("WebDriver:ExecuteScript", {"script": "let u='moz-src:///browser/components/abouttor/'+arguments[0]+'.sys.mjs'; return Promise.all([import(u).then(()=>false,()=>true),fetch(u).then(()=>false,()=>true)]);", "args": [module]})["value"]
                     assert denied == [True, True], "Обычная страница получила доступ к каналу клиента"
+                if site_tab_url:
+                    client.call("WebDriver:Navigate", {"url": site_tab_url})
+                    client.call("WebDriver:ExecuteScript", {"script": """localStorage.setItem('altnet.sites.published.index.v1',JSON.stringify([{slug:'synthetic',title:'Synthetic site',createdAt:1,updatedAt:1}]));localStorage.setItem('altnet.sites.published.site.v1:synthetic','<h1>Native synthetic site</h1><script>document.body.dataset.attack="yes"</script><img src="https://example.invalid/tracker">');""", "args": []})
+                    client.call("WebDriver:Navigate", {"url": "data:text/html,blank"})
+                    client.call("WebDriver:Navigate", {"url": site_tab_url + "#altnet-view?address=alt%3A%2F%2Fsite%2Fsynthetic&profile=anon"})
+                    def get_frame():
+                        try: return client.call("WebDriver:FindElement", {"using": "css selector", "value": "iframe[title='Synthetic site']"})["value"]
+                        except RuntimeError: return None
+                    viewer = wait_for(get_frame, "isolated Alt site in browser tab", timeout=30)
+                    sandbox = client.call("WebDriver:ExecuteScript", {"script": "return document.querySelector('iframe').getAttribute('sandbox');", "args": []})["value"]
+                    assert sandbox == "allow-scripts", sandbox
+                    client.call("WebDriver:SwitchToFrame", {"id": viewer})
+                    page = client.call("WebDriver:ExecuteScript", {"script": "return {text:document.body.innerText,attack:document.body.dataset.attack||null};", "args": []})["value"]
+                    assert "Native synthetic site" in page["text"] and page["attack"] is None, page
+                    client.call("WebDriver:SwitchToFrame", {"id": None})
+                    print("PASS: isolated AltNet Gecko displays a synthetic Alt site in a sandboxed browser tab")
                 if migration_url:
                     client.call("WebDriver:Navigate", {"url": migration_url + "tests/migration-blank.html"})
                     migration = client.call("WebDriver:ExecuteScript", {"script": """return (async()=>{
@@ -393,6 +409,7 @@ if __name__ == "__main__":
     parser.add_argument("--native-tor-live-from-stdin", action="store_true", help="Только тест: запустить изолированный дочерний Tor-клиент")
     parser.add_argument("--native-workspace-from-stdin", action="store_true", help="Только тест: локальная тестовая копия интерфейса рядом с вкладкой")
     parser.add_argument("--test-migration-url", help="Только тест: Vite на loopback с изолированными синтетическими данными")
+    parser.add_argument("--test-site-tab-url", help="Только тест: интерфейс клиента на loopback с синтетическим профилем")
     args = parser.parse_args()
     if args.native_proof_live_from_stdin and not args.test_native_proof_module:
         parser.error("Для живой проверки нужен --test-native-proof-module")
@@ -406,4 +423,8 @@ if __name__ == "__main__":
         match = re.fullmatch(r"http://127\.0\.0\.1:([1-9][0-9]{0,4})/", args.test_migration_url)
         if not match or int(match.group(1)) > 65535:
             parser.error("Нужен точный тестовый адрес loopback")
-    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor, native_workspace, args.test_migration_url)
+    if args.test_site_tab_url:
+        match = re.fullmatch(r"http://127\.0\.0\.1:([1-9][0-9]{0,4})/", args.test_site_tab_url)
+        if not match or int(match.group(1)) > 65535:
+            parser.error("Нужен точный тестовый адрес loopback")
+    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor, native_workspace, args.test_migration_url, args.test_site_tab_url)

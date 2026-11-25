@@ -9,8 +9,9 @@ type Props = {
   frameRef: RefObject<HTMLIFrameElement | null>;
   resources?: { path: string; mime: string; data: string }[];
   pagePath?: string;
+  className?: string;
 };
-export default function LocalSiteFrame({ html, paths, fragment, title, frameRef, resources, pagePath }: Props) {
+export default function LocalSiteFrame({ html, paths, fragment, title, frameRef, resources, pagePath, className }: Props) {
   const [src, setSrc] = useState("");
   const [error, setError] = useState(false);
   const pathKey = JSON.stringify(paths);
@@ -31,7 +32,7 @@ export default function LocalSiteFrame({ html, paths, fragment, title, frameRef,
   }, [html, pathKey, fragment, resources, pagePath]);
   if (error) return <p role="alert">Не удалось открыть локальную страницу.</p>;
   return src ? (
-    <iframe ref={frameRef} title={title} sandbox="allow-scripts" srcDoc={src} className="w-full h-[70vh] bg-white" />
+    <iframe ref={frameRef} title={title} sandbox="allow-scripts" srcDoc={src} className={className ?? "w-full h-[70vh] bg-white"} />
   ) : (
     <p role="status">Открываем страницу…</p>
   );
