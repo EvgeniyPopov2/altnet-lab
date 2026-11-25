@@ -27,9 +27,19 @@ try {
     await page.frameLocator(`iframe[title="${title}"]`).getByText(expected).waitFor({ timeout: 150000 });
     assert.equal(requests, 1);
     assert.equal(await page.locator(`iframe[title="${title}"]`).getAttribute("sandbox"), "allow-scripts");
+    // Повторное открытие после перезапуска UI должно использовать проверяемую
+    // локальную копию, даже если запрос к onion-источнику больше недоступен.
+    await page.route("**/api/sites/onion-car", route => route.abort());
+    await page.reload();
+    if (viewport.width < 768) await page.getByRole("button", { name: "Ещё", exact: true }).click();
+    await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
+    await page.getByLabel("Адрес сайта").fill(`ipfs://${cid}`);
+    await page.getByLabel("Адрес сайта").press("Enter");
+    await page.frameLocator(`iframe[title="${title}"]`).getByText(expected).waitFor({ timeout: 30000 });
+    assert.equal(requests, 1, "Повторное открытие не должно загружать CAR из сети");
     await context.close();
   }
-  console.log("PASS: ссылка Alt открыла проверенный сайт через реальный Tor в двух размерах экрана.");
+  console.log("PASS: ссылка Alt открыла сайт через Tor; IPFS-копия повторно открылась без сети на двух размерах экрана.");
 } finally {
   await browser.close();
 }
