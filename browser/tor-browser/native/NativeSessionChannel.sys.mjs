@@ -11,6 +11,8 @@ const ASSET_PATH = /^(?:index\.html|altnet-logo\.png|vite\.svg|assets\/[A-Za-z0-
 const ASSET_CHUNK = 8192;
 const ASSET_LIMIT = 10 * 1024 * 1024;
 const ASSET_QUEUE_LIMIT = 16;
+const SITE_LIMIT = 72 * 1024 * 1024;
+const SITE_CHUNK = 49152;
 
 async function readLine(stream, limit = 1024) {
   let line = "";
@@ -86,10 +88,10 @@ function validStatus(value, id) {
     typeof s.torConnected === "boolean" && s.fastAvailable === false;
 }
 
-export async function openNativeSession({ command, args, verifyExecutable, timeoutMs = 10000 } = {}) {
+export async function openNativeSession({ command, args, verifyExecutable, privacyProfile = "anon", timeoutMs = 10000 } = {}) {
   if (typeof command !== "string" || !command || command.length > 2048 || command.includes("\0") || !Array.isArray(args) || args.length > 64 ||
       args.some(value => typeof value !== "string" || value.length > 4096 || value.includes("\0") || /^--(?:port|socks-port)(?:=|$)|^--native-/.test(value)) ||
-      typeof verifyExecutable !== "function" || !Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30000) throw new Error("Некорректные параметры локального клиента");
+      privacyProfile !== "anon" || typeof verifyExecutable !== "function" || !Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30000) throw new Error("Некорректные параметры локального клиента");
   const fixedArgs = Object.freeze([...args]);
   // Проверку целостности поставки обязан реализовать вызывающий доверенный код.
   if (await verifyExecutable(command, fixedArgs) !== true) throw new Error("Подлинность локального клиента не подтверждена");
@@ -124,6 +126,77 @@ export async function openNativeSession({ command, args, verifyExecutable, timeo
     throw error;
   }
   return Object.freeze({
+    // Возвращает непроверенный CAR. Вызывающий код обязан проверить блоки и CID до показа.
+    async getOnionCar(onion, cid, profile) {
+      if (profile !== privacyProfile || typeof onion !== "string" || /^[a-z2-7]{56}\.onion$/.exec(onion)?.[0] !== onion ||
+          typeof cid !== "string" || /^b[a-z2-7]{58}$/.exec(cid)?.[0] !== cid) throw new Error("Некорректный адрес сайта или профиль");
+      await acquireAsset();
+      let unavailable = false, bytes;
+      try {
+        if (nextId > 2147483647) throw new Error("Сеанс исчерпан");
+        let id = nextId++;
+        await bounded(proc.stdin.write(JSON.stringify({ id, method: "site_open", onion, cid, profile }) + "\n"), proc, timeoutMs);
+        let response = parseLine(await bounded(readLine(proc.stdout), proc, 135000));
+        if (response && Object.keys(response).length === 3 && response.id === id && response.ok === false && response.error === "site_unavailable") {
+          unavailable = true;
+        } else {
+          if (!response || Object.keys(response).length !== 4 || response.id !== id || response.ok !== true ||
+              !Number.isInteger(response.total) || response.total < 1 || response.total > SITE_LIMIT ||
+              typeof response.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(response.sha256)) throw new Error("Некорректный ответ клиента");
+          const expected = response.sha256;
+          bytes = new Uint8Array(response.total);
+          for (let offset = 0; offset < bytes.length;) {
+            if (nextId > 2147483647) throw new Error("Сеанс исчерпан");
+            id = nextId++;
+            await bounded(proc.stdin.write(JSON.stringify({ id, method: "site_read", offset }) + "\n"), proc, timeoutMs);
+            response = parseLine(await bounded(readLine(proc.stdout, 66000), proc, timeoutMs));
+            if (!response || Object.keys(response).length !== 4 || response.id !== id || response.ok !== true || response.offset !== offset || typeof response.data !== "string") throw new Error("Некорректная часть сайта");
+            let decoded;
+            try { decoded = atob(response.data); } catch { throw new Error("Некорректная часть сайта"); }
+            if (btoa(decoded) !== response.data || decoded.length !== Math.min(SITE_CHUNK, bytes.length - offset)) throw new Error("Некорректная часть сайта");
+            for (let i = 0; i < decoded.length; i++) bytes[offset + i] = decoded.charCodeAt(i);
+            offset += decoded.length;
+          }
+          const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), value => value.toString(16).padStart(2, "0")).join("");
+          if (hash !== expected) throw new Error("Пакет сайта изменился при передаче");
+          if (nextId > 2147483647) throw new Error("Сеанс исчерпан");
+          id = nextId++;
+          await bounded(proc.stdin.write(JSON.stringify({ id, method: "site_close" }) + "\n"), proc, timeoutMs);
+          response = parseLine(await bounded(readLine(proc.stdout), proc, timeoutMs));
+          if (!response || Object.keys(response).length !== 2 || response.id !== id || response.ok !== true) throw new Error("Не удалось закрыть передачу");
+        }
+      } catch (error) {
+        closed = true;
+        await kill(proc);
+        throw error;
+      } finally { release(); }
+      if (unavailable) throw new Error("Не удалось получить сайт через Tor");
+      return bytes;
+    },
+    async bridgeAction(action, lines) {
+      if (closed || busy || nextId > 2147483647 || !["refresh", "switch", "pause", "resume", "manual"].includes(action) ||
+          (action === "manual" ? typeof lines !== "string" || !lines.length || lines.length > 16384 : lines !== undefined)) {
+        throw new Error("Некорректная команда локального клиента");
+      }
+      const id = nextId++;
+      const command = action === "manual" ? { id, method: action, lines } : { id, method: action };
+      const encoded = JSON.stringify(command) + "\n";
+      if (new TextEncoder().encode(encoded).byteLength > 32768) throw new Error("Команда слишком длинная");
+      busy = true;
+      let rejected = false;
+      try {
+        await bounded(proc.stdin.write(encoded), proc, timeoutMs);
+        const response = parseLine(await bounded(readLine(proc.stdout), proc, timeoutMs));
+        if (response && Object.keys(response).length === 2 && response.id === id && response.ok === true) return;
+        if (response && Object.keys(response).length === 3 && response.id === id && response.ok === false && response.error === "action_rejected") rejected = true;
+        else throw new Error("Некорректный ответ клиента");
+      } catch (error) {
+        closed = true;
+        await kill(proc);
+        throw error;
+      } finally { release(); }
+      if (rejected) throw new Error("Команда отклонена. Проверьте состояние подключения и формат мостов.");
+    },
     async getStatus() {
       if (closed || busy || nextId > 2147483647) throw new Error("Локальный сеанс недоступен");
       busy = true;

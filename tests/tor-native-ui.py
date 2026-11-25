@@ -205,8 +205,9 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                 if native_channel:
                     channel_script = """let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs');
 let p=arguments[0]; return (async()=>{
-  let denied=false,called=false,blocked=0,badReady=false,badStatus=false,hung=false,checking=false,badAsset=false,closedQueue=false;
+  let denied=false,called=false,blocked=0,badReady=false,badStatus=false,hung=false,checking=false,badAsset=false,closedQueue=false,fastSessionBlocked=false;
   try { await m.openNativeSession({command:p.command,args:p.args,verifyExecutable:async()=>false}); } catch { denied=true; }
+  try { await m.openNativeSession({command:p.command,args:p.args,privacyProfile:'fast',verifyExecutable:async()=>{called=true;return true;}}); } catch { fastSessionBlocked=true; }
   for (const option of ['--port=123','--native-http-proof','--native-http-pr']) {
     try { await m.openNativeSession({command:p.command,args:[...p.args,option],verifyExecutable:async()=>{called=true;return true;}}); } catch { blocked++; }
   }
@@ -216,26 +217,49 @@ let p=arguments[0]; return (async()=>{
   if (p.checkingArgs) { let s=await m.openNativeSession({command:p.command,args:p.checkingArgs,verifyExecutable:async()=>true,timeoutMs:2000}); try { let v=await s.getStatus(); checking=v.internet==='checking' && v.torConnected && v.fastAvailable===false; } finally { await s.close(); } }
   if (p.badAssetArgs) try { let s=await m.openNativeSession({command:p.command,args:p.badAssetArgs,verifyExecutable:async()=>true,timeoutMs:2000}); await s.getAsset('index.html'); await s.close(); } catch { badAsset=true; }
   if (p.hungAssetArgs) { let s=await m.openNativeSession({command:p.command,args:p.hungAssetArgs,verifyExecutable:async()=>true,timeoutMs:3000}); let a=s.getAsset('index.html').then(()=>false,()=>true),b=s.getAsset('index.html').then(()=>false,()=>true); let c=s.close(); closedQueue=(await a)&&(await b);await c; }
+  let siteOk=false,siteFastBlocked=false,siteCorruptBlocked=false,siteInvalidBlocked=false;
+  if (p.siteArgs) {
+    let s=await m.openNativeSession({command:p.command,args:p.siteArgs,verifyExecutable:async()=>true,timeoutMs:15000});
+    try {
+      siteFastBlocked=await s.getOnionCar(p.siteOnion,p.siteCid,'fast').then(()=>false,()=>true);
+      siteInvalidBlocked=await s.getOnionCar(p.siteOnion+String.fromCharCode(10),p.siteCid,'anon').then(()=>false,()=>true);
+      let car=await s.getOnionCar(p.siteOnion,p.siteCid,'anon');
+      let hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',car)),b=>b.toString(16).padStart(2,'0')).join('');
+      siteOk=hash===p.siteSha256;
+    } finally { await s.close(); }
+    let bad=await m.openNativeSession({command:p.command,args:p.badSiteArgs,verifyExecutable:async()=>true,timeoutMs:15000});
+    try { siteCorruptBlocked=await bad.getOnionCar(p.siteOnion,p.siteCid,'anon').then(()=>false,()=>true); }
+    finally { await bad.close(); }
+  }
   let session=await m.openNativeSession({command:p.command,args:p.args,verifyExecutable:async(command,args)=>command===p.command && JSON.stringify(args)===JSON.stringify(p.args),timeoutMs:15000});
   try { let first=session.getStatus();let concurrent=await session.getStatus().then(()=>false,()=>true);let status=await first;
+    await session.bridgeAction('pause');let paused=(await session.getStatus()).phase==='paused';
+    let rejected=await session.bridgeAction('manual','synthetic-private-bridge').then(()=>false,()=>true);
+    let invalidAction=await session.bridgeAction('delete').then(()=>false,()=>true);
+    await session.bridgeAction('resume');let resumed=(await session.getStatus()).phase!=='paused';
     let asset=await session.getAsset('assets/app-test.js');
     let hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',asset)),b=>b.toString(16).padStart(2,'0')).join('');
     let index=new TextDecoder().decode(await session.getAsset('index.html'));
     let checked=0; await Promise.all((p.assetChecks || []).map(async item=>{ let data=await session.getAsset(item.path); let actual=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),b=>b.toString(16).padStart(2,'0')).join(''); if (actual!==item.sha256) throw Error('Built asset differs'); checked++; }));
     let many=await Promise.allSettled(Array.from({length:18},()=>session.getAsset('index.html')));let queueBound=many.filter(x=>x.status==='fulfilled').length===17 && many.filter(x=>x.status==='rejected').length===1;
     let invalid=0; for (const path of ['../secret.js','assets/../secret.js','assets/app-test.js?x','assets/app-test.js'+String.fromCharCode(10)]) try { await session.getAsset(path); } catch { invalid++; }
-    await session.close();let closed=false;try{await session.getStatus();}catch{closed=true;}return {denied,blocked,called,badReady,badStatus,hung,checking,badAsset,closedQueue,queueBound,concurrent,status,closed,hash,index,invalid,checked}; }
+    await session.close();let closed=false;try{await session.getStatus();}catch{closed=true;}return {denied,blocked,called,badReady,badStatus,hung,checking,badAsset,closedQueue,queueBound,concurrent,status,closed,hash,index,invalid,checked,paused,rejected,invalidAction,resumed,siteOk,siteFastBlocked,siteCorruptBlocked,siteInvalidBlocked,fastSessionBlocked}; }
   finally { await session.close(); }
 })();"""
                     channel = client.call("WebDriver:ExecuteScript", {"script": channel_script, "args": [native_channel]})["value"]
-                    assert channel["denied"] and channel["blocked"] == 3 and not channel["called"] and channel["concurrent"] and channel["closed"], channel
+                    assert channel["denied"] and channel["blocked"] == 3 and channel["fastSessionBlocked"] and not channel["called"] and channel["concurrent"] and channel["closed"], channel
                     if native_channel.get("badReadyArgs"):
                         assert channel["badReady"] and channel["badStatus"] and channel["hung"] and channel["checking"] and channel["badAsset"] and channel["closedQueue"], channel
                     assert channel["status"]["torConnected"] is False and channel["status"]["fastAvailable"] is False, channel
                     assert channel["hash"] == native_channel["assetSha256"] and channel["index"] == "<html><head></head></html>" and channel["invalid"] == 4, channel
                     assert channel["checked"] == len(native_channel["assetChecks"]), channel
                     assert channel["queueBound"], channel
+                    assert channel["paused"] and channel["rejected"] and channel["invalidAction"] and channel["resumed"], channel
+                    if native_channel.get("siteArgs"):
+                        assert channel["siteOk"] and channel["siteFastBlocked"] and channel["siteCorruptBlocked"] and channel["siteInvalidBlocked"], channel
+                        print("PASS: Gecko streams a synthetic CAR over the private pipe, rejects corruption and fast fallback")
                     print("PASS: Gecko starts a verified-test child, reads bounded status over pipes and closes it")
+                    print("PASS: Gecko controls the test client's Tor manager and keeps rejected commands private")
                     print("PASS: Gecko reads and verifies multi-chunk client assets over the child pipe")
                 if native_tor:
                     create_script = """let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs');

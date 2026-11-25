@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Run the AltNet UI and bridge recovery for one local installation."""
 import argparse
+import base64
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from http.client import HTTPException
 import hmac
@@ -221,7 +223,8 @@ class SOCKS(socketserver.ThreadingTCPServer):
 
 
 def serve_native_parent(stream, output, server, manager):
-    # Только состояние и ограниченные статические ресурсы приложения, без HTTP-токена.
+    # Состояние, ресурсы и явно разрешённые команды мостов, без HTTP-токена.
+    site = None
     try:
         while True:
             try:
@@ -233,13 +236,39 @@ def serve_native_parent(stream, output, server, manager):
             try:
                 if command["method"] == "status":
                     result = {"id": command["id"], "ok": True, "status": bridge_native.public_route_status(manager)}
-                else:
+                elif command["method"] == "asset":
                     total, data, fingerprint = bridge_native.read_asset(server.dist, command["path"], command["offset"])
                     result = {"id": command["id"], "ok": True, "offset": command["offset"],
                               "total": total, "data": data, "sha256": fingerprint}
+                elif command["method"] == "site_open":
+                    if site is not None or not server.site_fetch.acquire(blocking=False):
+                        raise ValueError("Загрузка занята")
+                    try:
+                        def ready():
+                            with manager.lock:
+                                return bool(manager.active_port and not manager.paused and not manager.stop.is_set())
+                        site = fetch_car(server.socks_port, command["onion"], command["cid"], ready)
+                        if not isinstance(site, bytes) or not 0 < len(site) <= MAX_CAR:
+                            site = None
+                            raise ValueError("Некорректный пакет сайта")
+                    finally:
+                        server.site_fetch.release()
+                    result = {"id": command["id"], "ok": True, "total": len(site), "sha256": hashlib.sha256(site).hexdigest()}
+                elif command["method"] == "site_read":
+                    offset = command["offset"]
+                    if site is None or offset >= len(site):
+                        raise ValueError("Пакет недоступен")
+                    chunk = site[offset:offset + bridge_native.SITE_CHUNK]
+                    result = {"id": command["id"], "ok": True, "offset": offset, "data": base64.b64encode(chunk).decode("ascii")}
+                elif command["method"] == "site_close":
+                    site = None
+                    result = {"id": command["id"], "ok": True}
+                else:
+                    manager.request(command["method"], command.get("lines"))
+                    result = {"id": command["id"], "ok": True}
             except Exception:
-                result = {"id": command["id"], "ok": False,
-                          "error": "status_unavailable" if command["method"] == "status" else "asset_unavailable"}
+                error = {"status": "status_unavailable", "asset": "asset_unavailable", "site_open": "site_unavailable", "site_read": "site_unavailable", "site_close": "site_unavailable"}.get(command["method"], "action_rejected")
+                result = {"id": command["id"], "ok": False, "error": error}
             output.write(json.dumps(result, separators=(",", ":")) + "\n")
             output.flush()
     except (OSError, ValueError):

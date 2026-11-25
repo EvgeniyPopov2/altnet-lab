@@ -17,6 +17,7 @@ import tempfile
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -174,6 +175,56 @@ class NativeSessionTests(unittest.TestCase):
         output = io.StringIO()
         serve_native_parent(io.BytesIO(b'{"id":8,"method":"status"}\n'), output, server, manager)
         self.assertEqual(json.loads(output.getvalue()), {"id": 8, "ok": False, "error": "status_unavailable"})
+
+    def test_parent_pipe_bridge_actions_are_allowlisted_and_hide_manual_values(self):
+        secret_line = "obfs4 synthetic-private-bridge"
+        calls = []
+        class Manager:
+            def request(self, action, lines=None):
+                calls.append((action, lines))
+                if action == "manual":
+                    raise ValueError("synthetic-private-bridge")
+        server = type("Server", (), {"shutdown": lambda self: None})()
+        for index, action in enumerate(("refresh", "switch", "pause", "resume", "manual"), 1):
+            command = {"id": index, "method": action}
+            if action == "manual": command["lines"] = secret_line
+            output = io.StringIO()
+            serve_native_parent(io.BytesIO(json.dumps(command).encode() + b"\n"), output, server, Manager())
+            self.assertEqual(json.loads(output.getvalue()), {"id": index, "ok": True} if action != "manual" else {"id": index, "ok": False, "error": "action_rejected"})
+            self.assertNotIn(secret_line, output.getvalue())
+        self.assertEqual(calls[-1], ("manual", secret_line))
+        for command in ({"id": 1, "method": "delete"}, {"id": 1, "method": "pause", "lines": "x"},
+                        {"id": 1, "method": "manual", "lines": []}, {"id": 1, "method": "manual", "lines": ""},
+                        {"id": 1, "method": "manual", "lines": "x" * 16385}, {"id": 1, "method": "manual", "lines": "x" * 32769}):
+            with self.subTest(method=command["method"]), self.assertRaises(ValueError):
+                bridge_native.read_command(io.BytesIO(json.dumps(command).encode() + b"\n"))
+
+    def test_parent_pipe_streams_bounded_tor_car_without_direct_or_fast_fallback(self):
+        car = bytes(range(256)) * 300
+        host, cid = "a" * 56 + ".onion", "b" + "a" * 58
+        manager = type("Manager", (), {"lock": threading.RLock(), "active_port": 1, "paused": False, "stop": threading.Event()})()
+        server = type("Server", (), {"shutdown": lambda self: None, "site_fetch": threading.BoundedSemaphore(1), "socks_port": 1234})()
+        commands = [{"id": 1, "method": "site_open", "onion": host, "cid": cid, "profile": "anon"},
+                    {"id": 2, "method": "site_read", "offset": 0},
+                    {"id": 3, "method": "site_read", "offset": bridge_native.SITE_CHUNK},
+                    {"id": 4, "method": "site_open", "onion": host, "cid": cid, "profile": "anon"},
+                    {"id": 5, "method": "site_close"}, {"id": 6, "method": "site_read", "offset": 0}]
+        raw = b"".join(json.dumps(item).encode() + b"\n" for item in commands)
+        output = io.StringIO()
+        with patch("bridge_client.fetch_car", return_value=car) as fetch:
+            serve_native_parent(io.BytesIO(raw), output, server, manager)
+            self.assertEqual(fetch.call_count, 1)
+            self.assertEqual(fetch.call_args.args[:3], (1234, host, cid))
+            self.assertTrue(fetch.call_args.args[3]())
+        responses = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(responses[0], {"id": 1, "ok": True, "total": len(car), "sha256": hashlib.sha256(car).hexdigest()})
+        self.assertEqual(base64.b64decode(responses[1]["data"]) + base64.b64decode(responses[2]["data"]), car)
+        self.assertEqual(responses[3], {"id": 4, "ok": False, "error": "site_unavailable"})
+        self.assertEqual(responses[4], {"id": 5, "ok": True})
+        self.assertEqual(responses[5], {"id": 6, "ok": False, "error": "site_unavailable"})
+        for command in ({**commands[0], "profile": "fast"}, {**commands[0], "onion": "example.com"},
+                        {"id": 1, "method": "site_read", "offset": True}, {"id": 1, "method": "site_close", "extra": 1}):
+            with self.assertRaises(ValueError): bridge_native.read_command(io.BytesIO(json.dumps(command).encode() + b"\n"))
 
     def test_entrypoint_rejects_invalid_bootstrap_before_writing_or_binding(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get("TEMP")) as tmp:
@@ -394,17 +445,23 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
             for name, source in fixtures.items():
                 script = root / (name + ".py"); script.write_text(source, encoding="utf-8")
                 fake_args[name] = [str(script), str(root / (name + ".pid"))]
+            site_fixture = root / "site-fixture.py"
+            site_fixture.write_text('''import base64,hashlib,json,sys\ncar=bytes(range(256))*300\nsys.stdin.buffer.readline()\nprint(json.dumps({"protocol":"altnet-native-v1","authority":"127.0.0.1:1"},separators=(",",":")),flush=True)\nfor raw in sys.stdin.buffer:\n q=json.loads(raw);m=q["method"];i=q["id"]\n if m=="site_open": r={"id":i,"ok":True,"total":len(car),"sha256":"0"*64 if sys.argv[1]=="bad" else hashlib.sha256(car).hexdigest()}\n elif m=="site_read":\n  n=q["offset"];r={"id":i,"ok":True,"offset":n,"data":base64.b64encode(car[n:n+49152]).decode("ascii")}\n elif m=="site_close": r={"id":i,"ok":True}\n else: break\n print(json.dumps(r,separators=(",",":")),flush=True)\n''', encoding="utf-8")
             command = [sys.executable, "-B", str(ROOT / "tests/tor-native-ui.py"), "--browser", str(browser_path),
                        "--theme", "dark", "--expect-no-updater", "--native-channel-from-stdin"]
             config = {"command": sys.executable, "args": args, "badReadyArgs": fake_args["bad-ready"],
                       "badStatusArgs": fake_args["bad-status"], "hangArgs": fake_args["hung"], "checkingArgs": fake_args["checking"],
                       "badAssetArgs": fake_args["bad-asset"], "hungAssetArgs": fake_args["hung-asset"],
-                      "assetSha256": hashlib.sha256(content).hexdigest(), "assetChecks": asset_checks}
+                      "assetSha256": hashlib.sha256(content).hexdigest(), "assetChecks": asset_checks,
+                      "siteArgs": [str(site_fixture), "good"], "badSiteArgs": [str(site_fixture), "bad"],
+                      "siteOnion": "a" * 56 + ".onion", "siteCid": "b" + "a" * 58,
+                      "siteSha256": hashlib.sha256(bytes(range(256)) * 300).hexdigest()}
             result = subprocess.run(command, input=json.dumps(config),
                                     text=True, capture_output=True, timeout=90)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("PASS: Gecko starts a verified-test child, reads bounded status over pipes and closes it", result.stdout)
             self.assertIn("PASS: Gecko reads and verifies multi-chunk client assets over the child pipe", result.stdout)
+            self.assertIn("PASS: Gecko streams a synthetic CAR over the private pipe, rejects corruption and fast fallback", result.stdout)
             if os.name == "nt":
                 import ctypes
                 kernel = ctypes.WinDLL("kernel32", use_last_error=True)

@@ -18,6 +18,7 @@ _AUTHORITY = re.compile(r"127\.0\.0\.1:([1-9][0-9]{0,4})\Z")
 _ASSET = re.compile(r"(?:index\.html|altnet-logo\.png|vite\.svg|assets/[A-Za-z0-9_.-]{1,200}\.(?:js|css|jpg|jpeg|png|webp|svg|woff2?|ico)|icons/aura/[A-Za-z0-9_-]{1,200}\.svg|fonts/manrope/(?:Manrope-Regular\.ttf|OFL\.txt))\Z")
 ASSET_CHUNK = 8192
 ASSET_LIMIT = 10 * 1024 * 1024
+SITE_CHUNK = 49152
 
 
 def _unique_pairs(pairs):
@@ -57,10 +58,10 @@ def read_bootstrap(stream):
 
 def read_command(stream):
     """Прочитать строго ограниченную команду из приватного канала родителя."""
-    raw = stream.readline(1025)
+    raw = stream.readline(32769)
     if not raw:
         return None
-    if len(raw) > 1024 or not raw.endswith(b"\n"):
+    if len(raw) > 32768 or not raw.endswith(b"\n"):
         raise ValueError("Некорректный запрос локального сеанса")
     try:
         message = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_pairs)
@@ -69,11 +70,27 @@ def read_command(stream):
     if (not isinstance(message, dict) or type(message.get("id")) is not int
             or not 1 <= message["id"] <= 2147483647):
         raise ValueError("Некорректный запрос локального сеанса")
+    if len(raw) > 1024 and message.get("method") != "manual":
+        raise ValueError("Некорректный запрос локального сеанса")
     if message.get("method") == "status" and set(message) == {"id", "method"}:
         return message
     if (message.get("method") == "asset" and set(message) == {"id", "method", "path", "offset"}
             and isinstance(message["path"], str) and _ASSET.fullmatch(message["path"])
             and type(message["offset"]) is int and 0 <= message["offset"] <= ASSET_LIMIT):
+        return message
+    if message.get("method") in ("refresh", "switch", "pause", "resume") and set(message) == {"id", "method"}:
+        return message
+    if (message.get("method") == "manual" and set(message) == {"id", "method", "lines"}
+            and isinstance(message["lines"], str) and 0 < len(message["lines"]) <= 16384):
+        return message
+    if (message.get("method") == "site_open" and set(message) == {"id", "method", "onion", "cid", "profile"}
+            and message["profile"] == "anon" and isinstance(message["onion"], str) and len(message["onion"]) == 62
+            and isinstance(message["cid"], str) and len(message["cid"]) == 59):
+        return message
+    if (message.get("method") == "site_read" and set(message) == {"id", "method", "offset"}
+            and type(message["offset"]) is int and 0 <= message["offset"] <= 72 * 1024 * 1024):
+        return message
+    if message.get("method") == "site_close" and set(message) == {"id", "method"}:
         return message
     raise ValueError("Некорректный запрос локального сеанса")
 

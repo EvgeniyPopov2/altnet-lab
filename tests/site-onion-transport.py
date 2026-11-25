@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import http.client
+import io
 import json
 import socket
 import socketserver
@@ -15,7 +16,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import site_onion
-from bridge_client import LocalUI
+from bridge_client import LocalUI, serve_native_parent
 from bridge_route import read_exact
 from http.server import ThreadingHTTPServer
 
@@ -88,6 +89,21 @@ class TransportTest(unittest.TestCase):
 
     def fetch(self, host=None, cid=CID, ready=lambda: True):
         return site_onion.fetch_car(self.server.server_address[1], host or onion(), cid, ready)
+
+    def test_native_channel_uses_socks_and_streams_received_car(self):
+        manager = SimpleNamespace(lock=threading.RLock(), active_port=1, paused=False, stop=threading.Event())
+        server = SimpleNamespace(socks_port=self.server.server_address[1], site_fetch=threading.BoundedSemaphore(1), shutdown=lambda: None)
+        commands = [{"id": 1, "method": "site_open", "onion": onion(), "cid": CID, "profile": "anon"},
+                    {"id": 2, "method": "site_read", "offset": 0}, {"id": 3, "method": "site_close"}]
+        output = io.StringIO()
+        serve_native_parent(io.BytesIO(b"".join(json.dumps(c).encode() + b"\n" for c in commands)), output, server, manager)
+        result = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(result[0]["total"], 4)
+        self.assertEqual(base64.b64decode(result[1]["data"]), b"car!")
+        self.assertTrue(result[2]["ok"])
+        self.assertEqual(self.server.destination[1], onion().encode("ascii"))
+        self.assertEqual(self.server.destination[2], b"\x00\x50")
+        self.assertEqual(len(self.server.credentials), 1)
 
     def test_socks_domain_only_and_ipfs_path(self):
         self.assertEqual(self.fetch(), b"car!")
