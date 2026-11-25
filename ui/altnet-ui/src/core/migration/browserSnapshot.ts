@@ -10,8 +10,13 @@ const DATABASES = new Map([
 const MAX_SIZE = 128 * 1024 * 1024;
 const MAX_RECORDS = 10000;
 
-type Value = { kind: "json"; value: unknown } | { kind: "bytes"; value: string };
-type Snapshot = { version: 1; local: [string, string][]; databases: { name: string; records: [string, Value][] }[] };
+export type SnapshotValue = { kind: "json"; value: unknown } | { kind: "bytes"; value: string };
+export type BrowserSnapshot = { version: 1; local: [string, string][]; databases: { name: string; records: [string, SnapshotValue][] }[] };
+export function storeForDatabase(name: string): string {
+  const store = DATABASES.get(name);
+  if (!store) throw new Error("Неизвестное хранилище.");
+  return store;
+}
 
 function isBuffer(value: unknown): value is ArrayBuffer {
   try { Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength")!.get!.call(value); return true; }
@@ -31,7 +36,7 @@ function plain(value: unknown, seen = new WeakSet<object>(), depth = 0): boolean
   return ok;
 }
 
-function encodeValue(value: unknown): Value {
+export function encodeValue(value: unknown): SnapshotValue {
   if (isBuffer(value)) {
     if (value.byteLength > MAX_SIZE) throw new Error("Запись слишком велика для переноса.");
     const bytes = new Uint8Array(value);
@@ -43,7 +48,7 @@ function encodeValue(value: unknown): Value {
   return { kind: "json", value };
 }
 
-async function readDatabase(name: string, store: string, charge: (size: number) => void): Promise<{ name: string; records: [string, Value][] }> {
+export async function readDatabase(name: string, store: string, charge: (size: number) => void): Promise<{ name: string; records: [string, SnapshotValue][] }> {
   const db = await new Promise<IDBDatabase>((resolve, reject) => {
     let settled = false;
     const request = indexedDB.open(name);
@@ -57,15 +62,17 @@ async function readDatabase(name: string, store: string, charge: (size: number) 
   try {
     if (db.version !== 1 || db.objectStoreNames.length !== 1 || !db.objectStoreNames.contains(store)) throw new Error("Неизвестная структура хранилища; перенос остановлен.");
     return await new Promise((resolve, reject) => {
-      const records: [string, Value][] = [];
+      const records: [string, SnapshotValue][] = [];
       const tx = db.transaction(store, "readonly");
+      const objectStore = tx.objectStore(store);
+      if (objectStore.keyPath !== null || objectStore.autoIncrement || objectStore.indexNames.length) { tx.abort(); reject(new Error("Неизвестная структура хранилища.")); return; }
       let settled = false;
       const timer = setTimeout(() => { try { tx.abort(); } catch { /* уже завершена */ } finish(new Error("Чтение заняло слишком много времени.")); }, 30000);
       function finish(error?: Error) { if (settled) return; settled = true; clearTimeout(timer); if (error) reject(error); else resolve({ name, records }); }
       tx.onerror = () => finish(new Error("Не удалось прочитать записи."));
       tx.onabort = () => finish(new Error("Чтение хранилища прервано."));
       tx.oncomplete = () => finish();
-      const request = tx.objectStore(store).openCursor();
+      const request = objectStore.openCursor();
       request.onsuccess = () => {
         const cursor = request.result;
         if (!cursor) return;
@@ -100,9 +107,9 @@ async function capture(): Promise<Uint8Array<ArrayBuffer>> {
   const found = await indexedDB.databases();
   const names = found.map(item => item.name).filter((name): name is string => !!name && name.toLowerCase().startsWith("altnet"));
   if (names.some(name => !DATABASES.has(name)) || new Set(names).size !== names.length) throw new Error("Найдены неизвестные базы AltNet; перенос остановлен.");
-  const databases: Snapshot["databases"] = [];
+  const databases: BrowserSnapshot["databases"] = [];
   for (const name of names.sort()) databases.push(await readDatabase(name, DATABASES.get(name)!, charge));
-  const result = new TextEncoder().encode(JSON.stringify({ version: 1, local, databases } satisfies Snapshot));
+  const result = new TextEncoder().encode(JSON.stringify({ version: 1, local, databases } satisfies BrowserSnapshot));
   if (!result.length || result.length > MAX_SIZE) throw new Error("Данные слишком велики для этого способа переноса.");
   return result;
 }
@@ -121,7 +128,7 @@ export async function encryptStableBrowserSnapshot(key: Uint8Array): Promise<str
 }
 
 /** Только проверка снимка в памяти. Запись в хранилища здесь не выполняется. */
-export function validateBrowserSnapshot(bytes: Uint8Array): Snapshot {
+export function validateBrowserSnapshot(bytes: Uint8Array): BrowserSnapshot {
   try {
     if (!ArrayBuffer.isView(bytes) || Object.prototype.toString.call(bytes) !== "[object Uint8Array]" || !bytes.length || bytes.length > MAX_SIZE) throw new Error();
     const data: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
@@ -148,7 +155,7 @@ export function validateBrowserSnapshot(bytes: Uint8Array): Snapshot {
         } else throw new Error();
       }
     }
-    return data as Snapshot;
+    return data as BrowserSnapshot;
   } catch {
     throw new Error("Снимок повреждён или содержит неподдерживаемые данные; хранилище не изменено.");
   }

@@ -142,7 +142,7 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                     denied = client.call("WebDriver:ExecuteScript", {"script": "let u='moz-src:///browser/components/abouttor/'+arguments[0]+'.sys.mjs'; return Promise.all([import(u).then(()=>false,()=>true),fetch(u).then(()=>false,()=>true)]);", "args": [module]})["value"]
                     assert denied == [True, True], "Обычная страница получила доступ к каналу клиента"
                 if migration_url:
-                    client.call("WebDriver:Navigate", {"url": migration_url})
+                    client.call("WebDriver:Navigate", {"url": migration_url + "tests/migration-blank.html"})
                     migration = client.call("WebDriver:ExecuteScript", {"script": """return (async()=>{
                       const s=await import('/src/core/migration/browserSnapshot.ts');
                       const e=await import('/src/core/migration/encryptedTransfer.ts');
@@ -154,10 +154,25 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                       let data=s.validateBrowserSnapshot(await t.readStagedSnapshot(id,key));
                       return {found:data.local.some(([k,v])=>k==='altnet.migration.synthetic'&&v==='synthetic-only'),
                               binary:data.databases.some(d=>d.name==='altnet-ipfs-site-cache'&&d.records.some(([k,v])=>k==='profile:anon:synthetic'&&v.kind==='bytes'&&v.value==='AAEC+v8=')),
-                              original:localStorage.getItem('altnet.migration.synthetic'), encrypted:!jwe.includes('synthetic-only')};
+                              original:localStorage.getItem('altnet.migration.synthetic'), encrypted:!jwe.includes('synthetic-only'), envelope:jwe, key:Array.from(key)};
                     })();""", "args": []})["value"]
+                    envelope, key = migration.pop("envelope"), migration.pop("key")
                     assert migration == {"found": True, "binary": True, "original": "synthetic-only", "encrypted": True}, migration
-                    print("PASS: isolated AltNet Gecko encrypts and stages synthetic client data without replacing it")
+                    client.call("WebDriver:Navigate", {"url": migration_url.replace("127.0.0.1", "localhost") + "tests/migration-blank.html"})
+                    restored = client.call("WebDriver:ExecuteScript", {"script": """return (async()=>{
+                      const t=await import('/src/core/migration/stagedTransfer.ts');
+                      const r=await import('/src/core/migration/restoreSnapshot.ts');
+                      let id=await t.stageEncryptedSnapshot(arguments[0],Uint8Array.from(arguments[1]));
+                      await r.restoreStagedSnapshotForIsolatedOrigin(id,Uint8Array.from(arguments[1]));
+                      let db=await new Promise((resolve,reject)=>{let q=indexedDB.open('altnet-ipfs-site-cache');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+                      let value=await new Promise((resolve,reject)=>{let q=db.transaction('cars').objectStore('cars').get('profile:anon:synthetic');q.onsuccess=()=>resolve(Array.from(new Uint8Array(q.result)));q.onerror=()=>reject(q.error);});db.close();
+                      return {local:localStorage.getItem('altnet.migration.synthetic'),binary:value,state:(await t.restoreMarker()).state};
+                    })();""", "args": [envelope, key]})["value"]
+                    assert restored == {"local": "synthetic-only", "binary": [0, 1, 2, 250, 255], "state": "complete"}, restored
+                    client.call("WebDriver:Navigate", {"url": migration_url + "tests/migration-blank.html"})
+                    source_value = client.call("WebDriver:ExecuteScript", {"script": "return localStorage.getItem('altnet.migration.synthetic');", "args": []})["value"]
+                    assert source_value == "synthetic-only", source_value
+                    print("PASS: isolated AltNet Gecko restores synthetic data to another origin and preserves the source")
                 client.call("WebDriver:Navigate", {"url": "about:altnet"})
                 logo = client.call("WebDriver:ExecuteScript", {"script": "let img = document.querySelector('.mark img'); return {source: img?.getAttribute('src'), loaded: !!img?.naturalWidth};", "args": []})["value"]
                 assert logo == {"source": "chrome://branding/content/about-logo.png", "loaded": True}, logo

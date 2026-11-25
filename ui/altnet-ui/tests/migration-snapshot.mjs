@@ -147,7 +147,90 @@ for (const [name, engine, options] of launches) {
       assert.equal(staged.original, "синтетика");
       assert.equal(staged.target, null, "Подготовка не должна восстанавливать записи приложения");
     }
-    console.log(`${name} PASS: зашифрованный снимок не изменяет хранилище`);
+    for (const scenario of ["success", "conflict", "interrupted", "resume-conflict", "different-snapshot", "lock"]) {
+      const destination = await browser.newContext();
+      try {
+        await destination.route("**/__migration_test__", route => route.fulfill({ contentType: "text/html", body: "<!doctype html><title>Тест восстановления</title>" }));
+        const target = await destination.newPage();
+        await target.goto(url);
+        const checked = await target.evaluate(async ({ envelope, keyBytes, scenario }) => {
+          const { stageEncryptedSnapshot, restoreMarker } = await import("/src/core/migration/stagedTransfer.ts");
+          const { restoreStagedSnapshotForIsolatedOrigin } = await import("/src/core/migration/restoreSnapshot.ts");
+          const key = Uint8Array.from(keyBytes);
+          const id = await stageEncryptedSnapshot(envelope, key);
+          if (!navigator.locks?.request) {
+            try { await restoreStagedSnapshotForIsolatedOrigin(id, key); return { unsupported: true, rejected: false }; }
+            catch { return { unsupported: true, rejected: true }; }
+          }
+          localStorage.setItem("unrelated", "preserved");
+          if (scenario === "conflict") localStorage.setItem("altnet.profile.v1", "existing");
+          let release;
+          let holding;
+          if (scenario === "lock") {
+            let acquired;
+            const ready = new Promise(resolve => { acquired = resolve; });
+            const untilReleased = new Promise(resolve => { release = resolve; });
+            holding = navigator.locks.request("altnet.data-migration.v1", async () => { acquired(); await untilReleased; });
+            await ready;
+          }
+          const original = Storage.prototype.setItem;
+          let writes = 0;
+          if (["interrupted", "resume-conflict", "different-snapshot"].includes(scenario)) Storage.prototype.setItem = function(name, value) {
+            if (name.startsWith("altnet.") && ++writes === 2) throw new DOMException("synthetic quota", "QuotaExceededError");
+            return original.call(this, name, value);
+          };
+          let rejected = false;
+          try { await restoreStagedSnapshotForIsolatedOrigin(id, key); } catch { rejected = true; }
+          finally { Storage.prototype.setItem = original; if (release) { release(); await holding; } }
+          const markerAfterFirst = await restoreMarker();
+          const namesAfterFirst = (await indexedDB.databases()).map(item => item.name);
+          if (scenario === "interrupted") await restoreStagedSnapshotForIsolatedOrigin(id, key);
+          let secondRejected = false;
+          if (scenario === "resume-conflict") {
+            localStorage.setItem("altnet.dm.synthetic.journal.v1", "changed externally");
+            try { await restoreStagedSnapshotForIsolatedOrigin(id, key); } catch { secondRejected = true; }
+          }
+          if (scenario === "different-snapshot") {
+            const otherId = await stageEncryptedSnapshot(envelope, key);
+            try { await restoreStagedSnapshotForIsolatedOrigin(otherId, key); } catch { secondRejected = true; }
+          }
+          const marker = await restoreMarker();
+          const local = [localStorage.getItem("altnet.profile.v1"), localStorage.getItem("altnet.dm.synthetic.journal.v1")];
+          const records = {};
+          if (scenario === "success" || scenario === "interrupted") {
+            for (const [name, store] of [["altnet-ipfs-site-cache", "cars"], ["altnet-published-sites", "records"], ["altnet-sitebuilder-drafts", "drafts"]]) {
+              const db = await new Promise((resolve, reject) => { const request = indexedDB.open(name); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+              records[name] = await new Promise((resolve, reject) => { const tx = db.transaction(store); const request = tx.objectStore(store).getAll(); request.onsuccess = () => resolve(request.result.map(value => value instanceof ArrayBuffer ? Array.from(new Uint8Array(value)) : value)); request.onerror = () => reject(request.error); });
+              db.close();
+            }
+            await restoreStagedSnapshotForIsolatedOrigin(id, key);
+          }
+          return { rejected, secondRejected, markerAfterFirst, namesAfterFirst, marker, local, records, unrelated: localStorage.getItem("unrelated") };
+        }, { envelope: encrypted, keyBytes: key, scenario });
+        assert.notEqual(checked.unsupported, true, `${name}: Web Locks недоступен, восстановление должно оставаться отключено`);
+        assert.equal(checked.unrelated, "preserved");
+        if (scenario === "success" || scenario === "interrupted") {
+          assert.equal(checked.rejected, scenario === "interrupted");
+          assert.equal(checked.marker.state, "complete");
+          assert.deepEqual(checked.local, ["fast", "Синтетическое сообщение"]);
+          assert.deepEqual(checked.records["altnet-ipfs-site-cache"], [[0, 1, 2, 250, 255]]);
+          assert.equal(checked.records["altnet-published-sites"].length, 2);
+          assert.deepEqual(checked.records["altnet-sitebuilder-drafts"], ['{"draft":"Синтетика"}']);
+          if (scenario === "interrupted") assert.equal(checked.markerAfterFirst.state, "applying");
+        } else if (["resume-conflict", "different-snapshot"].includes(scenario)) {
+          assert.equal(checked.rejected, true);
+          assert.equal(checked.secondRejected, true);
+          assert.equal(checked.marker.state, "applying");
+          if (scenario === "resume-conflict") assert.equal(checked.local[1], "changed externally");
+        } else {
+          assert.equal(checked.rejected, true);
+          assert.equal(checked.marker, null);
+          assert.equal(checked.namesAfterFirst.filter(name => name !== "altnet-migration-staging").length, 0);
+          if (scenario === "conflict") assert.equal(checked.local[0], "existing");
+        }
+      } finally { await destination.close(); }
+    }
+    console.log(`${name} PASS: снимок, конфликты и возобновляемое восстановление`);
   } finally {
     await context.close();
     await browser.close();

@@ -6,6 +6,8 @@ import { validateBrowserSnapshot } from "./browserSnapshot";
 const DATABASE = "altnet-migration-staging";
 const STORE = "encrypted";
 const ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const MARKER = "restore:active";
+export type RestoreMarker = { version: 1; id: string; state: "applying" | "complete" };
 
 async function openStage(): Promise<IDBDatabase> {
   return await new Promise((resolve, reject) => {
@@ -64,4 +66,33 @@ export async function readStagedSnapshot(id: string, key: Uint8Array): Promise<U
   const plaintext = await decryptTransfer(entry.envelope, key);
   try { validateBrowserSnapshot(plaintext); return plaintext; }
   catch (error) { plaintext.fill(0); throw error; }
+}
+
+export async function restoreMarker(): Promise<RestoreMarker | null> {
+  const value = await stageTransaction<unknown>("readonly", (store, result) => {
+    const request = store.get(MARKER); request.onsuccess = () => result(request.result);
+  });
+  if (value === undefined) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 3 ||
+      !("version" in value) || value.version !== 1 || !("id" in value) || typeof value.id !== "string" || ID.exec(value.id)?.[0] !== value.id ||
+      !("state" in value) || (value.state !== "applying" && value.state !== "complete")) throw new Error("Повреждён журнал переноса.");
+  return value as RestoreMarker;
+}
+
+/** Запись журнала допускается только для одного снимка. */
+export async function setRestoreMarker(id: string, complete: boolean): Promise<void> {
+  if (ID.exec(id)?.[0] !== id) throw new Error("Некорректный идентификатор переноса.");
+  await stageTransaction<void>("readwrite", store => {
+    const request = store.get(MARKER);
+    request.onsuccess = () => {
+      const current: unknown = request.result;
+      if (current !== undefined && (!current || typeof current !== "object" || !("id" in current) || current.id !== id ||
+          !("version" in current) || current.version !== 1 || !("state" in current) || (current.state !== "applying" && current.state !== "complete"))) {
+        store.transaction.abort(); return;
+      }
+      if (current === undefined && complete) { store.transaction.abort(); return; }
+      const value: RestoreMarker = { version: 1, id, state: complete ? "complete" : "applying" };
+      if (current === undefined) store.add(value, MARKER); else store.put(value, MARKER);
+    };
+  });
 }
