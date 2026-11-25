@@ -1,5 +1,41 @@
+diff --git a/browser/base/content/browser.xhtml b/browser/base/content/browser.xhtml
+index f7ed578..8b90200 100644
+--- a/browser/base/content/browser.xhtml
++++ b/browser/base/content/browser.xhtml
+@@ -39,6 +39,7 @@
+     href="chrome://browser/content/usercontext/usercontext.css"
+   />
+   <link rel="stylesheet" href="chrome://browser/skin/" />
++  <link rel="stylesheet" href="chrome://browser/content/abouttor/altnet-chrome.css" />
+
+   <link rel="stylesheet" href="chrome://browser/skin/controlcenter/panel.css" />
+   <link
+diff --git a/browser/components/DesktopActorRegistry.sys.mjs b/browser/components/DesktopActorRegistry.sys.mjs
+index b37054a..e0019ec 100644
+--- a/browser/components/DesktopActorRegistry.sys.mjs
++++ b/browser/components/DesktopActorRegistry.sys.mjs
+@@ -223,6 +223,19 @@ let JSWINDOWACTORS = {
+     remoteTypes: ["parent"],
+   },
+
++  AboutAltNet: {
++    parent: {
++      esModuleURI:
++        "moz-src:///browser/components/abouttor/AboutAltNetParent.sys.mjs",
++    },
++    child: {
++      esModuleURI:
++        "moz-src:///browser/components/abouttor/AboutAltNetChild.sys.mjs",
++      events: { click: { capture: true } },
++    },
++    matches: ["about:altnet"],
++  },
++
+   AboutTor: {
+     parent: {
+       esModuleURI:
 diff --git a/browser/components/about/AboutRedirector.cpp b/browser/components/about/AboutRedirector.cpp
-index 4c91fff5d1..a5f38eff02 100644
+index 4c91fff..a5f38ef 100644
 --- a/browser/components/about/AboutRedirector.cpp
 +++ b/browser/components/about/AboutRedirector.cpp
 @@ -67,6 +67,9 @@ static const uint32_t BASE_BROWSER_HOME_PAGE_FLAGS =
@@ -13,11 +49,11 @@ index 4c91fff5d1..a5f38eff02 100644
       nsIAboutModule::URI_SAFE_FOR_UNTRUSTED_CONTENT |
           nsIAboutModule::URI_CAN_LOAD_IN_PRIVILEGEDABOUT_PROCESS |
 diff --git a/browser/components/about/components.conf b/browser/components/about/components.conf
-index d82f0e00cf..08a59ddea3 100644
+index d82f0e0..08a59dd 100644
 --- a/browser/components/about/components.conf
 +++ b/browser/components/about/components.conf
 @@ -4,6 +4,7 @@
- 
+
  pages = [
      'aichatcontent',
 +    'altnet',
@@ -26,7 +62,7 @@ index d82f0e00cf..08a59ddea3 100644
      'certerror',
 diff --git a/browser/components/about/test/unit/test_about_altnet.js b/browser/components/about/test/unit/test_about_altnet.js
 new file mode 100644
-index 0000000000..059fb664a1
+index 0000000..059fb66
 --- /dev/null
 +++ b/browser/components/about/test/unit/test_about_altnet.js
 @@ -0,0 +1,9 @@
@@ -40,39 +76,133 @@ index 0000000000..059fb664a1
 +  ok(!(flags & Ci.nsIAboutModule.ALLOW_SCRIPT));
 +}
 diff --git a/browser/components/about/test/unit/xpcshell.toml b/browser/components/about/test/unit/xpcshell.toml
-index 8ffcd58f03..6a0b2d4674 100644
+index 8ffcd58..6a0b2d4 100644
 --- a/browser/components/about/test/unit/xpcshell.toml
 +++ b/browser/components/about/test/unit/xpcshell.toml
 @@ -7,3 +7,5 @@ head =  ''
  firefox-appdir = "browser"
- 
+
  ["test_getURIFlags.js"]
 +
 +["test_about_altnet.js"]
+diff --git a/browser/components/abouttor/AboutAltNetChild.sys.mjs b/browser/components/abouttor/AboutAltNetChild.sys.mjs
+new file mode 100644
+index 0000000..ccf6909
+--- /dev/null
++++ b/browser/components/abouttor/AboutAltNetChild.sys.mjs
+@@ -0,0 +1,21 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
++ * You can obtain one at http://mozilla.org/MPL/2.0/. */
++
++const ALLOWED_PANES = new Set(["general", "privacy", "search"]);
++
++export class AboutAltNetChild extends JSWindowActorChild {
++  handleEvent(event) {
++    if (!event.isTrusted || event.defaultPrevented || event.button !== 0) {
++      return;
++    }
++    const button = event.target.closest?.("button[data-altnet-setting]");
++    const pane = button?.dataset.altnetSetting;
++    if (
++      button?.ownerDocument.documentURI === "about:altnet" &&
++      ALLOWED_PANES.has(pane)
++    ) {
++      this.sendAsyncMessage("AboutAltNet:OpenPreferences", pane);
++    }
++  }
++}
+diff --git a/browser/components/abouttor/AboutAltNetParent.sys.mjs b/browser/components/abouttor/AboutAltNetParent.sys.mjs
+new file mode 100644
+index 0000000..47cfd0b
+--- /dev/null
++++ b/browser/components/abouttor/AboutAltNetParent.sys.mjs
+@@ -0,0 +1,19 @@
++/* This Source Code Form is subject to the terms of the Mozilla Public
++ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
++ * You can obtain one at http://mozilla.org/MPL/2.0/. */
++
++const ALLOWED_PANES = new Set(["general", "privacy", "search"]);
++
++export class AboutAltNetParent extends JSWindowActorParent {
++  receiveMessage(message) {
++    if (
++      message.name !== "AboutAltNet:OpenPreferences" ||
++      !ALLOWED_PANES.has(message.data) ||
++      this.browsingContext !== this.browsingContext.top ||
++      this.manager.documentURI?.spec !== "about:altnet"
++    ) {
++      return;
++    }
++    this.browsingContext.embedderElement?.documentGlobal.openPreferences(message.data);
++  }
++}
 diff --git a/browser/components/abouttor/content/aboutAltNet.css b/browser/components/abouttor/content/aboutAltNet.css
 new file mode 100644
-index 0000000000..52988665ca
+index 0000000..8e7fb4e
 --- /dev/null
 +++ b/browser/components/abouttor/content/aboutAltNet.css
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,54 @@
 +* { box-sizing: border-box; }
 +:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-+body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f3f4fb; color: #1a2036; }
-+main { width: min(100%, 560px); padding: clamp(28px, 6vw, 52px); border: 1px solid #e0e2ef; border-radius: 22px; background: #fff; box-shadow: 0 18px 60px #23204714; }
-+.brand { color: #6b50eb; font-size: 14px; font-weight: 750; letter-spacing: .04em; }
-+h1 { font-size: clamp(26px, 5vw, 38px); line-height: 1.15; margin: 22px 0 14px; }
-+p { line-height: 1.6; color: #596078; }
-+.primary { display: inline-block; margin-top: 18px; padding: 12px 18px; border-radius: 10px; background: #6b50eb; color: #fff; font-weight: 650; text-decoration: none; }
-+.primary:hover { background: #5a40d6; }
-+.primary:focus-visible { outline: 3px solid #aa9bff; outline-offset: 3px; }
-+.hint { margin: 22px 0 0; font-size: 13px; }
-+@media (prefers-color-scheme: dark) { body { background: #101629; color: #f4f4ff; } main { background: #192139; border-color: #303a56; box-shadow: 0 18px 60px #0004; } p { color: #b6bfd5; } .brand { color: #af9aff; } }
++body { margin: 0; min-height: 100vh; color: #1c2340; background: #f5f6fc; }
++main { width: min(100% - 64px, 1050px); margin: 0 auto; padding: 32px 0 52px; }
++.topline, .brand, .section-heading, .actions { display: flex; align-items: center; }
++.topline, .section-heading { justify-content: space-between; gap: 16px; }
++.brand { gap: 10px; font-weight: 750; font-size: 17px; letter-spacing: -.02em; }
++.brand small { display: block; margin-top: 1px; color: #777e96; font-size: 9px; letter-spacing: .14em; }
++.mark { display: grid; place-items: center; width: 37px; height: 37px; border-radius: 12px; color: #fff; background: linear-gradient(145deg,#9680ff,#5d3ddd); font-size: 21px; box-shadow: 0 6px 18px #7255ea3b; }
++.badge { padding: 7px 11px; border: 1px solid #dfe2f0; border-radius: 999px; color: #6a718a; font-size: 11px; }
++.hero { margin-top: clamp(58px, 10vh, 112px); max-width: 760px; }
++.eyebrow { color: #725be1; font-size: 11px; font-weight: 750; letter-spacing: .13em; }
++h1 { margin: 15px 0 18px; font-size: clamp(31px, 5.4vw, 53px); letter-spacing: -.047em; line-height: 1.13; }
++h1 span { color: #7559ec; }
++.intro { max-width: 610px; color: #687089; font-size: 15px; line-height: 1.75; }
++.actions { flex-wrap: wrap; gap: 10px; margin-top: 27px; }
++button { color: inherit; font: inherit; cursor: pointer; }
++.primary, .secondary { display: inline-flex; justify-content: center; gap: 18px; padding: 12px 16px; border-radius: 11px; font-size: 13px; font-weight: 650; }
++.primary { border: 0; color: white; background: #7051e8; box-shadow: 0 7px 18px #6a4be534; }
++.primary:hover { background: #6040d5; }
++.secondary { border: 1px solid #dce0ed; background: #fff; }
++.secondary:hover, .tile:hover { border-color: #a696ed; }
++button:focus-visible { outline: 3px solid #a38cff; outline-offset: 3px; }
++.tools { margin-top: clamp(58px, 10vh, 100px); }
++.section-heading h2 { margin: 0; font-size: 15px; letter-spacing: -.01em; }
++.section-heading > span { color: #8990a5; font-size: 11px; }
++.grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-top: 15px; }
++.tile { text-align: left; position: relative; display: flex; flex-direction: column; gap: 7px; min-height: 138px; padding: 18px; border: 1px solid #e1e4ef; border-radius: 15px; background: #fff; box-shadow: 0 6px 25px #242d5210; }
++.tile .icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 10px; color: #7255e6; background: #f0ecff; font-size: 19px; }
++.tile strong { margin-top: 3px; font-size: 13px; }
++.tile > span:not(.icon) { color: #7b8299; font-size: 12px; line-height: 1.45; }
++.tile b { position: absolute; top: 17px; right: 18px; color: #9b9fb4; font-size: 13px; }
++.notice { display: flex; align-items: flex-start; gap: 10px; margin-top: 24px; padding: 13px 15px; border: 1px solid #e5e1f3; border-radius: 12px; color: #747188; background: #faf9ff; font-size: 11px; line-height: 1.55; }
++.notice p { margin: 0; }
++@media (prefers-color-scheme: dark) {
++ body { color: #f1f1ff; background: #101629; }
++ .brand small,.badge { color: #a2abc5; }
++ .badge { border-color: #34405f; }
++ .intro { color: #aab3ca; }
++ .secondary,.tile { background: #1a233b; border-color: #303b57; }
++ .secondary:hover,.tile:hover { border-color: #8d78ef; }
++ .tile { box-shadow: 0 6px 25px #0002; }
++ .tile .icon { color: #c3b7ff; background: #302954; }
++ .tile > span:not(.icon),.section-heading > span { color: #a1abc3; }
++ .notice { color: #b2bbd1; background: #191e34; border-color: #343a56; }
++}
++@media (max-width: 620px) {
++ main { width: min(100% - 36px, 1050px); padding-top: 20px; }
++ .badge { font-size: 10px; }
++ .hero { margin-top: 55px; }
++ .grid { grid-template-columns: 1fr; }
++ .tile { min-height: 112px; }
++ .section-heading > span { display: none; }
++}
 diff --git a/browser/components/abouttor/content/aboutAltNet.html b/browser/components/abouttor/content/aboutAltNet.html
 new file mode 100644
-index 0000000000..bbb855ea95
+index 0000000..7d735b7
 --- /dev/null
 +++ b/browser/components/abouttor/content/aboutAltNet.html
-@@ -0,0 +1,19 @@
+@@ -0,0 +1,33 @@
 +<!doctype html>
 +<html lang="ru">
 +<head>
@@ -80,26 +210,79 @@ index 0000000000..bbb855ea95
 +  <meta name="viewport" content="width=device-width, initial-scale=1">
 +  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src chrome:; base-uri 'none'; form-action 'none'">
 +  <link rel="stylesheet" href="chrome://browser/content/abouttor/aboutAltNet.css">
-+  <title>AltNet</title>
++  <title>AltNet — начальная страница</title>
 +</head>
 +<body>
 +  <main>
-+    <div class="brand">AltNet</div>
-+    <h1>Ваше пространство AltNet</h1>
-+    <p>Открывайте сайты Alt, создавайте страницы и переходите к другим возможностям платформы.</p>
-+    <a class="primary" href="http://127.0.0.1:17860/">Открыть AltNet</a>
-+    <p class="hint">Для работы этой страницы запустите клиент AltNet на своём устройстве.</p>
++    <header class="topline">
++      <div class="brand"><span class="mark" aria-hidden="true"><svg viewBox="0 0 32 32" width="23" height="23"><path fill="#fff" d="M4 14.7 27 5c1-.4 1.7.3 1.4 1.3l-7 21.2c-.3.9-1.4 1.1-2 .4l-5.1-7-5.4-2.1c-.9-.4-.9-1.8.1-2.2L25 7.7 11.8 19.1l3.7-.5z"/></svg></span><span>AltNet <small>БРАУЗЕР</small></span></div>
++      <span class="badge">Экспериментальная версия</span>
++    </header>
++    <section class="hero" aria-labelledby="welcome">
++      <p class="eyebrow">ВАШ БРАУЗЕР · ВАШЕ ПРОСТРАНСТВО</p>
++      <h1 id="welcome">Интернет и AltNet<br><span>в одном пространстве.</span></h1>
++      <p class="intro">Здесь появится безопасный доступ к сайтам Alt и IPFS. Настройки Tor Browser доступны уже сейчас.</p>
++      <div class="actions"><button class="primary" type="button" data-altnet-setting="general">Настройки браузера <span aria-hidden="true">↗</span></button><button class="secondary" type="button" data-altnet-setting="privacy">Приватность</button></div>
++    </section>
++    <section class="tools" aria-labelledby="tools-title">
++      <div class="section-heading"><h2 id="tools-title">Быстрые настройки</h2><span>Откроются настройки браузера</span></div>
++      <div class="grid">
++        <button class="tile" type="button" data-altnet-setting="general"><span class="icon" aria-hidden="true">◈</span><strong>Внешний вид</strong><span>Тема и параметры интерфейса</span><b aria-hidden="true">↗</b></button>
++        <button class="tile" type="button" data-altnet-setting="privacy"><span class="icon" aria-hidden="true">◇</span><strong>Приватность</strong><span>Защита и разрешения сайтов</span><b aria-hidden="true">↗</b></button>
++        <button class="tile" type="button" data-altnet-setting="search"><span class="icon" aria-hidden="true">⌕</span><strong>Поиск</strong><span>Поисковая система и подсказки</span><b aria-hidden="true">↗</b></button>
++      </div>
++    </section>
++    <aside class="notice"><span aria-hidden="true">ⓘ</span><p><strong>В разработке.</strong> Нативные адреса Alt и IPFS ещё не подключены. Проверка подлинности локального клиента и сетевые проверки безопасности не завершены.</p></aside>
 +  </main>
 +</body>
 +</html>
+diff --git a/browser/components/abouttor/content/altnet-chrome.css b/browser/components/abouttor/content/altnet-chrome.css
+new file mode 100644
+index 0000000..70b212d
+--- /dev/null
++++ b/browser/components/abouttor/content/altnet-chrome.css
+@@ -0,0 +1,19 @@
++/* The native browser chrome only: never alter content, security state or routing. */
++@media not (forced-colors: active) {
++  #navigator-toolbox {
++    border-bottom: 1px solid light-dark(rgb(32 39 67 / 12%), rgb(229 231 255 / 12%));
++  }
++
++  #TabsToolbar .tab-background {
++    border-radius: 10px 10px 5px 5px !important;
++  }
++
++  #urlbar > .urlbar-background {
++    border-radius: 10px !important;
++  }
++
++  #nav-bar .toolbarbutton-1 > .toolbarbutton-icon,
++  #nav-bar .toolbarbutton-1 > .toolbarbutton-badge-stack {
++    border-radius: 8px;
++  }
++}
 diff --git a/browser/components/abouttor/jar.mn b/browser/components/abouttor/jar.mn
-index 5f773753be..d39a8c9351 100644
+index 5f77375..da771ee 100644
 --- a/browser/components/abouttor/jar.mn
 +++ b/browser/components/abouttor/jar.mn
-@@ -1,4 +1,6 @@
+@@ -1,4 +1,7 @@
  browser.jar:
 +  content/browser/abouttor/aboutAltNet.html      (content/aboutAltNet.html)
 +  content/browser/abouttor/aboutAltNet.css       (content/aboutAltNet.css)
++  content/browser/abouttor/altnet-chrome.css     (content/altnet-chrome.css)
    content/browser/abouttor/aboutTor.css           (content/aboutTor.css)
    content/browser/abouttor/aboutTor.js            (content/aboutTor.js)
    content/browser/abouttor/aboutTor.html          (content/aboutTor.html)
+diff --git a/browser/components/abouttor/moz.build b/browser/components/abouttor/moz.build
+index b42546e..6be7d89 100644
+--- a/browser/components/abouttor/moz.build
++++ b/browser/components/abouttor/moz.build
+@@ -1,6 +1,8 @@
+ JAR_MANIFESTS += ["jar.mn"]
+
+ MOZ_SRC_FILES += [
++    "AboutAltNetChild.sys.mjs",
++    "AboutAltNetParent.sys.mjs",
+     "AboutTorChild.sys.mjs",
+     "AboutTorMessage.sys.mjs",
+     "AboutTorParent.sys.mjs",
