@@ -48,6 +48,7 @@ export async function verifyUnixfsSite(car: Uint8Array, expectedRoot: string): P
   async function readFile(cid: CID) {
     const entry = await exporter(cid, store, { offline: true });
     if (entry.type !== "file" && entry.type !== "raw") throw new Error("Страница UnixFS не является файлом.");
+    if (entry.type === "file" && !["file", "raw"].includes(entry.unixfs.type)) throw new Error("Символические ссылки и метаданные UnixFS не поддерживаются.");
     if (entry.size > BigInt(SITE_MAX_PAGE_BYTES)) throw new Error("Страница IPFS слишком велика.");
     const parts: Uint8Array[] = [];
     let size = 0;

@@ -3,6 +3,9 @@ import { CarWriter } from "@ipld/car";
 import { importer } from "ipfs-unixfs-importer";
 import { exporter } from "ipfs-unixfs-exporter";
 import { CID } from "multiformats/cid";
+import { sha256 } from "multiformats/hashes/sha2";
+import * as dagPb from "@ipld/dag-pb";
+import { UnixFS } from "ipfs-unixfs";
 import { parseBrowserAddress } from "./browserNavigation";
 import { verifyUnixfsSite } from "./unixfsSite";
 
@@ -69,5 +72,12 @@ describe("проверка стандартного сайта UnixFS", () => {
       const f = await fixture(false, false, extra);
       await expect(verifyUnixfsSite(await f.car(), f.root.toString())).rejects.toThrow(/путь|содержимое каталога/);
     }
+  });
+  it("не открывает символическую ссылку как страницу", async () => {
+    const f = await fixture();
+    const symlink = new UnixFS({ type: "symlink", data: new TextEncoder().encode("../secret") });
+    const bytes = dagPb.encode({ Data: symlink.marshal(), Links: [] });
+    const cid = CID.createV1(dagPb.code, await sha256.digest(bytes));
+    await expect(verifyUnixfsSite(await f.car([{ cid, bytes }], cid), cid.toString())).rejects.toThrow(/Символические ссылки/);
   });
 });
