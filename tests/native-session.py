@@ -223,7 +223,7 @@ for (const [a,c,r] of [[p.authority+'0',p.challenge,p.response],[p.authority,cre
 
     def test_next_browser_overlay_contains_the_tested_modules(self):
         patch = (ROOT / "browser/tor-browser/patches/0001-about-altnet.patch").read_text(encoding="utf-8")
-        for filename in ("NativeSessionProof.sys.mjs", "NativeSessionChannel.sys.mjs"):
+        for filename in ("NativeSessionProof.sys.mjs", "NativeSessionChannel.sys.mjs", "NativeWorkspaceShell.sys.mjs"):
             name = "browser/components/abouttor/" + filename
             header = f"diff --git a/{name} b/{name}\n"
             self.assertEqual(patch.count(header), 1)

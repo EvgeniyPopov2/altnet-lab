@@ -17,7 +17,7 @@ const { AboutAltNetChild } = await load("AboutAltNetChild");
 
 test("experimental process channel is not exposed to web content", () => {
   for (const name of ["AboutAltNetParent", "AboutAltNetChild"]) {
-    assert.doesNotMatch(addedFile(`browser/components/abouttor/${name}.sys.mjs`), /NativeSessionChannel|AboutAltNet:StartClient|AboutAltNet:GetStatus/);
+    assert.doesNotMatch(addedFile(`browser/components/abouttor/${name}.sys.mjs`), /NativeSessionChannel|NativeWorkspaceShell|AboutAltNet:StartClient|AboutAltNet:GetStatus/);
   }
 });
 

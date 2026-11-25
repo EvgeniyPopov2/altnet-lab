@@ -99,7 +99,7 @@ body {
 
   .altnet-desktop-back { display: none; }
   .altnet-header { flex-wrap: wrap; gap: 8px; }
-  .altnet-header-actions { width: 100%; overflow-x: auto; padding-bottom: 2px; }
+  .altnet-header-actions { width: 100%; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; scrollbar-color: #626b80 transparent; }
   .altnet-header-actions > * { flex-shrink: 0; }
   .altnet-main { overflow-y: auto; padding: 12px; }
 }

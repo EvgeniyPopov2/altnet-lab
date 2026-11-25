@@ -62,7 +62,7 @@ def wait_for(callback, label, timeout=15):
     raise AssertionError(f"Timed out: {label}")
 
 
-def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None):
+def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None, native_workspace=None):
     root = Path(tempfile.mkdtemp(prefix="altnet-native-ui-", dir=artifact_root))
     profile = root / "profile"
     for folder in (profile, root / "appdata", root / "localappdata"):
@@ -80,6 +80,7 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
         'user_pref("media.peerconnection.enabled", false);',
         'user_pref("browser.startup.homepage_override.mstone", "ignore");',
         f'user_pref("layout.css.prefers-color-scheme.content-override", {0 if theme == "dark" else 1});',
+        *(['user_pref("privacy.spoof_english", 2);'] if native_workspace else []),
     ]), encoding="utf-8")
     env = {**os.environ, "TEMP": str(artifact_root), "TMP": str(artifact_root),
            "APPDATA": str(root / "appdata"), "LOCALAPPDATA": str(root / "localappdata"),
@@ -135,8 +136,9 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                 client.call("WebDriver:ElementClick", {"id": hostile})
                 time.sleep(0.3)
                 assert client.call("WebDriver:GetWindowHandles") == [original], "A web page opened privileged settings"
-                if native_channel:
-                    denied = client.call("WebDriver:ExecuteScript", {"script": "let u='moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs'; return Promise.all([import(u).then(()=>false,()=>true),fetch(u).then(()=>false,()=>true)]);", "args": []})["value"]
+                if native_channel or native_workspace:
+                    module = "NativeSessionChannel" if native_channel else "NativeWorkspaceShell"
+                    denied = client.call("WebDriver:ExecuteScript", {"script": "let u='moz-src:///browser/components/abouttor/'+arguments[0]+'.sys.mjs'; return Promise.all([import(u).then(()=>false,()=>true),fetch(u).then(()=>false,()=>true)]);", "args": [module]})["value"]
                     assert denied == [True, True], "Обычная страница получила доступ к каналу клиента"
                 client.call("WebDriver:Navigate", {"url": "about:altnet"})
                 logo = client.call("WebDriver:ExecuteScript", {"script": "let img = document.querySelector('.mark img'); return {source: img?.getAttribute('src'), loaded: !!img?.naturalWidth};", "args": []})["value"]
@@ -223,6 +225,43 @@ return w.__altnetNativeTestSession.getStatus();})();"""
                             raise TimeoutError("Временный дочерний клиент не подтвердил соединение Tor вовремя")
                     finally:
                         client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser');let s=w.__altnetNativeTestSession;delete w.__altnetNativeTestSession;return s.close();", "args": []})
+                if native_workspace:
+                    setup = """let w=Services.wm.getMostRecentWindow('navigator:browser');
+let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeWorkspaceShell.sys.mjs');
+w.__workspace=m.createWorkspaceShell(w);w.__workspace.client.setAttribute('src',arguments[0]);
+return {remote:w.__workspace.client.getAttribute('remote'),type:w.__workspace.client.getAttribute('type')};"""
+                    result = client.call("WebDriver:ExecuteScript", {"script": setup, "args": [native_workspace["url"]]})["value"]
+                    assert result == {"remote": "true", "type": "content"}, result
+                    def workspace_state():
+                        return client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser'),d=w.document,b=w.__workspace.client,p=d.getElementById('altnet-workspace'),t=d.getElementById('tabbrowser-tabbox'),button=d.getElementById('altnet-workspace-toggle'); return {url:b.currentURI?.spec,title:b.contentTitle,system:b.contentPrincipal?.isSystemPrincipal,remote:b.isRemoteBrowser,panel:p.getBoundingClientRect().width,hidden:p.hidden,tabs:t.getBoundingClientRect().width,position:w.getComputedStyle(p).position,expanded:button.getAttribute('aria-expanded'),toggleWidth:button.getBoundingClientRect().width};", "args": []})["value"]
+                    state = wait_for(lambda: (s if (s := workspace_state())["title"] == "AltNet" else None), "AltNet UI in native panel", timeout=30)
+                    assert state["url"] == native_workspace["url"] and state["remote"] and state["system"] is False, state
+                    # HTML title alone does not prove that the React app has mounted.
+                    time.sleep(5)
+                    for width in (1440, 950, 700, 500):
+                        client.call("WebDriver:SetWindowRect", {"width": width, "height": 900})
+                        time.sleep(.4)
+                        state = workspace_state()
+                        assert state["tabs"] > 200 and not state["hidden"] and state["panel"] >= 280, state
+                        assert state["toggleWidth"] >= 20, state
+                        assert (state["position"] == "absolute") == (width < 800), state
+                        screenshot = client.call("WebDriver:TakeScreenshot", {})["value"]
+                        (root / f"workspace-{width}.png").write_bytes(base64.b64decode(screenshot))
+                        if width < 800:
+                            toggle = client.call("WebDriver:FindElement", {"using": "css selector", "value": "#altnet-workspace-toggle"})["value"][ELEMENT]
+                            client.call("WebDriver:ElementClick", {"id": toggle})
+                            assert workspace_state()["hidden"] is True
+                            client.call("WebDriver:ElementClick", {"id": toggle})
+                            assert workspace_state()["hidden"] is False
+                    client.call("WebDriver:SetWindowRect", {"width": 1440, "height": 900})
+                    time.sleep(.4)
+                    toggle = client.call("WebDriver:FindElement", {"using": "css selector", "value": "#altnet-workspace-toggle"})["value"][ELEMENT]
+                    client.call("WebDriver:ElementClick", {"id": toggle})
+                    assert workspace_state()["hidden"] is True
+                    client.call("WebDriver:ElementClick", {"id": toggle})
+                    assert workspace_state()["hidden"] is False
+                    client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser');w.__workspace.destroy();delete w.__workspace;", "args": []})
+                    print("PASS: real client UI and Gecko tabs share a responsive native window (isolated test backend)")
                 result = client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('navigator:browser'); let d = w.document; let bg = d.querySelector('#urlbar > .urlbar-background'); let tab = d.querySelector('#TabsToolbar .tab-background'); let ext = Services.prefs.getBoolPref('network.protocol-handler.external-default'); let brand = Services.strings.createBundle('chrome://branding/locale/brand.properties').GetStringFromName('brandShortName'); return {loaded: !!d.querySelector('link[href*=\\\"altnet-chrome.css\\\"]'), radius: bg && w.getComputedStyle(bg).borderTopLeftRadius, tabRadius: tab && w.getComputedStyle(tab).borderTopLeftRadius, brand, externalDefault: ext, externalAlt: Services.prefs.getBoolPref('network.protocol-handler.external.alt', ext), externalIpfs: Services.prefs.getBoolPref('network.protocol-handler.external.ipfs', ext)};", "args": []})["value"]
                 assert result["loaded"] and result["radius"] == "10px" and result["tabRadius"] == "10px", result
                 assert "AltNet" in result["brand"] and "Tor" not in result["brand"], result
@@ -292,12 +331,14 @@ if __name__ == "__main__":
     parser.add_argument("--native-proof-live-from-stdin", action="store_true", help="Только тест: получить параметры временного дочернего клиента через stdin")
     parser.add_argument("--native-channel-from-stdin", action="store_true", help="Только тест: получить конфигурацию дочернего клиента через stdin")
     parser.add_argument("--native-tor-live-from-stdin", action="store_true", help="Только тест: запустить изолированный дочерний Tor-клиент")
+    parser.add_argument("--native-workspace-from-stdin", action="store_true", help="Только тест: локальная тестовая копия интерфейса рядом с вкладкой")
     args = parser.parse_args()
     if args.native_proof_live_from_stdin and not args.test_native_proof_module:
         parser.error("Для живой проверки нужен --test-native-proof-module")
-    if sum((args.native_proof_live_from_stdin, args.native_channel_from_stdin, args.native_tor_live_from_stdin)) > 1:
+    if sum((args.native_proof_live_from_stdin, args.native_channel_from_stdin, args.native_tor_live_from_stdin, args.native_workspace_from_stdin)) > 1:
         parser.error("Нельзя совместить тестовые режимы stdin")
     native_live = json.loads(sys.stdin.readline(512)) if args.native_proof_live_from_stdin else None
     native_channel = json.loads(sys.stdin.readline(16384)) if args.native_channel_from_stdin else None
     native_tor = json.loads(sys.stdin.readline(16384)) if args.native_tor_live_from_stdin else None
-    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor)
+    native_workspace = json.loads(sys.stdin.readline(1024)) if args.native_workspace_from_stdin else None
+    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor, native_workspace)
