@@ -2,6 +2,8 @@
 """Checks that the pinned-source build overlay never overwrites other changes."""
 import importlib.util
 import os
+import shutil
+import subprocess
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,7 +15,7 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 CONFIG = b"input_files:\n  - project: container-image\n"
-BUILD = b'cd /var/tmp/build/[% project %]-[% c("version") %]\ncp $rootdir/mozconfig ./\n'
+BUILD = b'cd /var/tmp/build/[% project %]-[% c("version") %]\ncp $rootdir/mozconfig ./\n' + module.PDB_BEFORE
 
 
 class BuildOverlayTests(unittest.TestCase):
@@ -47,6 +49,7 @@ class BuildOverlayTests(unittest.TestCase):
         build = (self.root / "projects/firefox/build").read_bytes()
         self.assertIn(b"filename: altnet-about-page.patch", config)
         self.assertIn(b'patch -p1 --batch --forward < "$rootdir/altnet-about-page.patch"', build)
+        self.assertIn(module.PDB_AFTER, build)
         self.run_prepare()
         self.assertEqual((self.root / "projects/firefox/config").read_bytes(), config)
         self.assertEqual((self.root / "projects/firefox/build").read_bytes(), build)
@@ -68,11 +71,39 @@ class BuildOverlayTests(unittest.TestCase):
         self.assertEqual(destination.read_bytes(), b"other patch")
         self.assertEqual((self.root / "projects/firefox/config").read_bytes(), CONFIG)
 
+    def test_upgrades_the_previous_prepared_build_without_discarding_changes(self):
+        self.run_prepare()
+        build = self.root / "projects/firefox/build"
+        expected = build.read_bytes()
+        build.write_bytes(expected.replace(module.PDB_AFTER, module.PDB_BEFORE))
+        self.run_prepare()
+        self.assertEqual(build.read_bytes(), expected)
+
+    def test_refuses_unexpected_pdb_packaging_without_writing(self):
+        self.source_patch.write_bytes(b"patch content")
+        with patch.object(module, "git", side_effect=lambda root, *args: BUILD.replace(module.PDB_BEFORE, b"") if args == ("show", "HEAD:projects/firefox/build") else self.fake_git(root, *args)), patch.object(module, "PATCH", self.source_patch):
+            with self.assertRaises(ValueError):
+                module.prepare(self.root)
+        self.assertEqual((self.root / "projects/firefox/config").read_bytes(), CONFIG)
+
     def test_refuses_other_upstream_commit(self):
         with patch.object(module, "git", return_value=b"different commit"), patch.object(module, "PATCH", self.source_patch):
             with self.assertRaises(ValueError):
                 module.prepare(self.root)
         self.assertEqual((self.root / "projects/firefox/config").read_bytes(), CONFIG)
+
+    @unittest.skipIf(os.name == "nt" or not shutil.which("bash"), "Requires a POSIX bash")
+    def test_preserves_different_pdbs_with_the_same_name(self):
+        source = self.root / "objects"
+        for folder, data in (("single", b"first"), ("versioned", b"second")):
+            (source / folder).mkdir(parents=True)
+            (source / folder / "InstallationDirLayout.pdb").write_bytes(data)
+        output = self.root / "dist"
+        (output / "Debug/Browser").mkdir(parents=True)
+        subprocess.run(["bash", "-euo", "pipefail", "-c", module.PDB_AFTER.decode()], cwd=source,
+                       env={**os.environ, "distdir": str(output)}, check=True)
+        self.assertEqual((output / "Debug/Browser/InstallationDirLayout.pdb").read_bytes(), b"first")
+        self.assertEqual((output / "Debug/Browser/duplicates/versioned/InstallationDirLayout.pdb").read_bytes(), b"second")
 
 
 if __name__ == "__main__":
