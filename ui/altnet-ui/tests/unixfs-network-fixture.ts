@@ -15,7 +15,8 @@ if (action === "create") {
     blocks.set(cid.toString(), { cid, bytes: Buffer.concat(parts) }); return cid;
   } };
   let root: CID | undefined;
-  for await (const entry of importer([{ path: "index.html", content: new TextEncoder().encode("<h1>Проверка UnixFS через Tor</h1>") }], store, { wrapWithDirectory: true })) root = entry.cid;
+  const hostileHtml = '<h1>Проверка UnixFS через Tor</h1><script>document.body.dataset.attack="executed";fetch("https://example.invalid/attack")</script><img src="https://example.invalid/pixel">';
+  for await (const entry of importer([{ path: "index.html", content: new TextEncoder().encode(hostileHtml) }], store, { wrapWithDirectory: true })) root = entry.cid;
   if (!root) throw new Error("Нет корня UnixFS");
   const { writer, out } = CarWriter.create([root]);
   const output = (async () => { const parts: Uint8Array[] = []; for await (const part of out) parts.push(part); return Buffer.concat(parts); })();

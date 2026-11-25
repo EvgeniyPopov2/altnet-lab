@@ -13,7 +13,11 @@ try {
     await context.route("**/*", route => /^https?:/.test(route.request().url()) && !route.request().url().startsWith(base) ? route.abort() : route.continue());
     const page = await context.newPage();
     let requests = 0;
-    page.on("request", request => { if (request.url().endsWith("/api/sites/onion-car")) requests++; });
+    let hostileRequests = 0;
+    page.on("request", request => {
+      if (request.url().endsWith("/api/sites/onion-car")) requests++;
+      if (request.url().startsWith("https://example.invalid/")) hostileRequests++;
+    });
     await page.goto(base);
     if (viewport.width < 768) await page.getByRole("button", { name: "Ещё", exact: true }).click();
     await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
@@ -25,6 +29,8 @@ try {
     const title = mode === "unixfs" ? "index.html" : "Главная";
     const expected = mode === "unixfs" ? "Проверка UnixFS через Tor" : "Привет из AltNet";
     await page.frameLocator(`iframe[title="${title}"]`).getByText(expected).waitFor({ timeout: 150000 });
+    assert.equal(await page.frameLocator(`iframe[title="${title}"]`).locator("body").getAttribute("data-attack"), null);
+    assert.equal(hostileRequests, 0, "Код и внешние ресурсы сайта не должны выполняться или загружаться");
     assert.equal(requests, 1);
     assert.equal(await page.locator(`iframe[title="${title}"]`).getAttribute("sandbox"), "allow-scripts");
     // Повторное открытие после перезапуска UI должно использовать проверяемую
@@ -37,6 +43,8 @@ try {
     await page.getByLabel("Адрес сайта").press("Enter");
     await page.frameLocator(`iframe[title="${title}"]`).getByText(expected).waitFor({ timeout: 30000 });
     assert.equal(requests, 1, "Повторное открытие не должно загружать CAR из сети");
+    assert.equal(await page.frameLocator(`iframe[title="${title}"]`).locator("body").getAttribute("data-attack"), null);
+    assert.equal(hostileRequests, 0);
     await context.close();
   }
   console.log("PASS: ссылка Alt открыла сайт через Tor; IPFS-копия повторно открылась без сети на двух размерах экрана.");
