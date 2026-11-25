@@ -141,8 +141,9 @@ def run(browser, artifact_root, theme):
                 # Read the chrome stylesheet in this isolated test process; no browser
                 # preferences or permissions are changed by this check.
                 client.call("Marionette:SetContext", {"value": "chrome"})
-                result = client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('navigator:browser'); let d = w.document; let bg = d.querySelector('#urlbar > .urlbar-background'); return {loaded: !!d.querySelector('link[href*=\\\"altnet-chrome.css\\\"]'), radius: bg && w.getComputedStyle(bg).borderTopLeftRadius};", "args": []})["value"]
+                result = client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('navigator:browser'); let d = w.document; let bg = d.querySelector('#urlbar > .urlbar-background'); let ext = Services.prefs.getBoolPref('network.protocol-handler.external-default'); return {loaded: !!d.querySelector('link[href*=\\\"altnet-chrome.css\\\"]'), radius: bg && w.getComputedStyle(bg).borderTopLeftRadius, externalDefault: ext, externalAlt: Services.prefs.getBoolPref('network.protocol-handler.external.alt', ext), externalIpfs: Services.prefs.getBoolPref('network.protocol-handler.external.ipfs', ext)};", "args": []})["value"]
                 assert result["loaded"] and result["radius"] == "10px", result
+                assert not any(result[key] for key in ("externalDefault", "externalAlt", "externalIpfs")), "Alt/IPFS must not be passed to external apps by default"
                 screenshot = client.call("WebDriver:TakeScreenshot", {})["value"]
                 (root / "browser-chrome.png").write_bytes(base64.b64decode(screenshot))
                 print("PASS: native chrome stylesheet and untrusted click isolation")
