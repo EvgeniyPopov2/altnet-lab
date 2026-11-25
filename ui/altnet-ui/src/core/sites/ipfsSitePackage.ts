@@ -30,7 +30,7 @@ type SiteManifest = {
 };
 type Block = { cid: CID; bytes: Uint8Array };
 export type SitePackage = { root: string; car: Uint8Array };
-export type VerifiedSite = { root: string; title: string; pages: PublishedPage[] };
+export type VerifiedSite = { root: string; title: string; pages: PublishedPage[]; resources?: { path: string; mime: string; data: string }[] };
 
 function assertCid(cid: CID, codec: number) {
   if (cid.version !== 1 || cid.code !== codec || cid.multihash.code !== sha256.code || cid.multihash.size !== 32) {

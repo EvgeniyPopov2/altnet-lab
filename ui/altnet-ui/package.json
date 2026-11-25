@@ -6,6 +6,7 @@
   "scripts": {
     "test:browsers": "node tests/builder-browsers.mjs",
     "test:browser-local": "node tests/browser-local-ui.mjs",
+    "test:browser-unixfs": "node tests/browser-unixfs-ui.mjs",
     "test:ipfs-ui": "node tests/ipfs-car-ui.mjs",
     "test:tor-browser": "node tests/tor-browser-ipfs.mjs",
     "test:onion-ui": "node tests/onion-car-ui.mjs",
@@ -28,6 +29,7 @@
     "@types/dompurify": "^3.2.0",
     "dompurify": "3.5.0",
     "framer-motion": "^12.23.24",
+    "ipfs-unixfs-exporter": "16.2.3",
     "jszip": "^3.10.1",
     "lottie-web": "5.13.0",
     "lucide-react": "^0.562.0",
@@ -47,6 +49,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
+    "ipfs-unixfs-importer": "17.1.1",
     "playwright": "1.65.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",

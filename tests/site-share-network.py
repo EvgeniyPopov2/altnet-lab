@@ -79,6 +79,7 @@ def main():
     for name in ("tor", "transport", "public-cache", "dist", "keyring", "gpgv", "temp"):
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--last-good", type=Path, help="Use only confirmed public bridge fingerprints from a local connection state")
+    parser.add_argument("--unixfs", action="store_true", help="Exchange a standard UnixFS CAR instead of an AltNet CAR")
     parser.add_argument("--ui-browser-test", action="store_true", help="Also open the share link in an isolated browser through the real test client")
     parser.add_argument("--ui-browser", type=Path, help="Optional Chromium executable; otherwise use Playwright's installed browser")
     args = parser.parse_args()
@@ -91,8 +92,9 @@ def main():
     passed = False
     try:
         fixture = directory / "fixture.mjs"
-        build = "require('esbuild').buildSync({entryPoints:['../../tests/ipfs-site-fixture.ts'],bundle:true,platform:'node',format:'esm',outfile:process.argv[1]})"
-        subprocess.run(["node", "-e", build, str(fixture)], cwd=UI, check=True, capture_output=True)
+        entry = "tests/unixfs-network-fixture.ts" if args.unixfs else "../../tests/ipfs-site-fixture.ts"
+        build = "require('esbuild').buildSync({entryPoints:[process.argv[2]],bundle:true,platform:'node',format:'esm',outfile:process.argv[1]})"
+        subprocess.run(["node", "-e", build, str(fixture), entry], cwd=UI, check=True, capture_output=True)
         subprocess.run(["node", str(fixture), "create", str(directory)], check=True, capture_output=True)
         cid = (directory / "root.txt").read_text(encoding="ascii").strip()
         car = (directory / "site.car").read_bytes()

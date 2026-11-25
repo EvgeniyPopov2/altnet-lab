@@ -8,7 +8,7 @@ const engines = { chromium, firefox, webkit };
 if (!Object.hasOwn(engines, values.engine)) throw new Error("Unsupported browser engine");
 const browser = await engines[values.engine].launch(values.engine === "chromium" ? { executablePath: "C:/Program Files/Google/Chrome/Application/chrome.exe" } : {});
 try {
-  for (const width of [390, 768, 1440]) {
+  for (const width of [320, 390, 768, 1440]) {
     const context = await browser.newContext({ viewport: { width, height: 900 } });
     const requests = [];
     await context.route("**/*", route => {
@@ -34,6 +34,7 @@ try {
     });
     if (width < 768) await page.getByRole("button", { name: "Ещё", exact: true }).click();
     await page.getByRole("button", { name: "Браузер .alt", exact: true }).click();
+    assert.equal(await page.locator(".browser-toolbar").evaluate(element => element.scrollWidth <= element.clientWidth), true, `toolbar overflow at ${width}px`);
     const address = page.getByRole("textbox", { name: "Адрес сайта" });
     await address.fill("alpha");
     await address.press("Enter");
@@ -41,6 +42,10 @@ try {
     await alpha.getByText("Альфа содержимое").waitFor();
     assert.equal(await alpha.locator("body").getAttribute("data-attack"), null);
     assert.equal(await address.inputValue(), "alt://site/alpha");
+    await page.getByRole("button", { name: "Домашняя страница", exact: true }).click();
+    await page.getByText("Домашняя .alt").waitFor();
+    await page.getByRole("button", { name: "Назад", exact: true }).click();
+    await alpha.getByText("Альфа содержимое").waitFor();
     await page.getByRole("button", { name: "Добавить страницу в закладки" }).click();
     assert.equal(await page.getByRole("button", { name: "Убрать страницу из закладок" }).getAttribute("aria-pressed"), "true");
     if (values.screenshots) {

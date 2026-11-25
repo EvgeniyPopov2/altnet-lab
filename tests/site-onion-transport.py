@@ -90,6 +90,13 @@ class TransportTest(unittest.TestCase):
         self.assertIn(("GET /ipfs/" + CID + "?format=car HTTP/1.1\r\n").encode(), self.server.request_data)
         self.assertIn(("Host: " + onion() + "\r\n").encode(), self.server.request_data)
 
+    def test_unixfs_cids_use_the_same_tor_only_path(self):
+        for codec in (0x55, 0x70):
+            cid = "b" + base64.b32encode(bytes((1, codec, 0x12, 0x20)) + bytes(range(32))).decode().lower().rstrip("=")
+            with self.subTest(codec=codec):
+                self.assertEqual(self.fetch(cid=cid), b"car!")
+                self.assertIn(("GET /ipfs/" + cid + "?format=car HTTP/1.1\r\n").encode(), self.server.request_data)
+
     def test_each_fetch_uses_a_new_socks_isolation_token(self):
         self.assertEqual(self.fetch(), b"car!")
         self.assertEqual(self.fetch(), b"car!")

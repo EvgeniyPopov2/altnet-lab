@@ -37,7 +37,7 @@ def site_cid(value):
         raw = base64.b32decode((value[1:].upper() + "=" * 7)[:64])
     except (ValueError, TypeError):
         raise ValueError("Некорректный CID сайта") from None
-    if len(raw) != 36 or raw[:4] != b"\x01\x71\x12\x20" or "b" + base64.b32encode(raw).decode().lower().rstrip("=") != value:
+    if len(raw) != 36 or raw[0] != 1 or raw[1] not in (0x55, 0x70, 0x71) or raw[2:4] != b"\x12\x20" or "b" + base64.b32encode(raw).decode().lower().rstrip("=") != value:
         raise ValueError("Неподдерживаемый CID сайта")
     return value
 

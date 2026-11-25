@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { ArrowLeft, ArrowRight, Bookmark, Plus, RotateCw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Globe2, House, Pencil, Plus, RotateCw, Star, X } from "lucide-react";
+import "./browserAlt.css";
 import LocalSiteFrame from "../components/LocalSiteFrame";
 import { BOOKMARKS_KEY, readBookmarks, toggleBookmark, type BrowserBookmark } from "../core/sites/browserBookmarks";
 import { browserTabTitle, createBrowserTab, parseBrowserAddress, type BrowserTab } from "../core/sites/browserNavigation";
@@ -353,8 +354,9 @@ export default function BrowserAlt({
     setCarLoading(true);
     setCarError("");
     try {
-      const {parseSiteRoot,SITE_MAX_CAR_BYTES} = await import("../core/sites/ipfsSitePackage");
-      const root = parseSiteRoot(carCid.trim()).toString();
+      const {SITE_MAX_CAR_BYTES} = await import("../core/sites/ipfsSitePackage");
+      const {parseBrowserRoot} = await import("../core/sites/siteCid");
+      const root = parseBrowserRoot(carCid.trim()).toString();
       let data: Uint8Array;
       if (source === "file") {
         if (!carFile || !carFile.size || carFile.size > SITE_MAX_CAR_BYTES) throw new Error("Некорректный размер файла CAR.");
@@ -365,6 +367,9 @@ export default function BrowserAlt({
       }
       const { cacheVerifiedSite } = await import("../core/sites/ipfsSiteCache");
       const site = await cacheVerifiedSite(data, root);
+      if (parseBrowserRoot(root).code !== 0x71) {
+        setCarFile(null); setCarCid(""); setActiveUrl(`ipfs://${site.root}`); return;
+      }
       const home = site.pages.find(page => page.path === "index.html");
       if (!home) throw new Error("В пакете нет главной страницы.");
       const meta = await upsertPublishedSite({title:site.title || home.title || "Сайт",html:home.html,...(site.pages.length > 1 ? {pages:site.pages} : {})});
@@ -606,8 +611,8 @@ export default function BrowserAlt({
         <div className="flex gap-2"><button type="button" onClick={() => copyText(address.url)} className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80" title="Скопировать адрес">Копировать</button>
           <button type="button" onClick={() => void deleteIpfsCopy(address.root)} className="rounded-md bg-white/10 px-2 py-1 text-xs text-white/80">Удалить копию IPFS</button></div>
       </div>
-      <p className="px-3 py-2 text-xs text-[#c9d0e9]">Локальная копия проверена по CID. Авторство не подтверждено; внешние ресурсы отключены.</p>
-      <LocalSiteFrame key={`${activeTab.id}:${address.url}:${activeTab.reloadToken}`} frameRef={siteFrameRef} title={page.title} html={page.html} paths={state.site.pages.map(item => item.path)} fragment={address.fragment} />
+      <p className="px-3 py-2 text-xs text-[#c9d0e9]">Локальная копия проверена по CID. Авторство не подтверждено; скрипты и внешние ресурсы отключены. Часть форматов и ресурсов CSS пока не поддерживается.</p>
+      <LocalSiteFrame key={`${activeTab.id}:${address.url}:${activeTab.reloadToken}`} frameRef={siteFrameRef} title={page.title} html={page.html} paths={state.site.pages.map(item => item.path)} fragment={address.fragment} resources={state.site.resources} pagePath={page.path} />
     </div>;
   };
 
@@ -645,14 +650,14 @@ export default function BrowserAlt({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="browser-workspace">
       {publishedError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{publishedError} <button type="button" className="underline" onClick={() => setPublishedToken(value => value + 1)}>Повторить</button></div>}
       {bookmarksError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{bookmarksError}</div>}
       {ipfsDeleteError && <div role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 p-3 text-sm text-amber-100">{ipfsDeleteError}</div>}
       {copyStatus && <div role="status" className="rounded-lg border border-white/20 p-2 text-sm text-white/80">{copyStatus} <button type="button" className="underline" onClick={() => setCopyStatus("")}>Закрыть</button></div>}
-      {/* Табы */}
-      <div className="rounded-xl bg-white/5 border border-white/10 px-2 py-1 overflow-x-auto">
-        <div role="tablist" aria-label="Вкладки браузера" className="flex items-center gap-1" onKeyDown={event => {
+      <div className="browser-chrome">
+      <div className="browser-tab-strip">
+        <div role="tablist" aria-label="Вкладки браузера" className="browser-tabs" onKeyDown={event => {
           if (!(event.target instanceof HTMLElement) || event.target.getAttribute("role") !== "tab" || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
           const index = tabs.findIndex(tab => tab.id === activeId);
           const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
@@ -663,14 +668,15 @@ export default function BrowserAlt({
           buttons[next]?.focus();
         }}>
           {tabs.map((t) => (
-            <div key={t.id} className={`group max-w-[240px] flex items-center rounded-lg transition ${t.id === activeId ? "bg-white/20 text-white" : "bg-transparent text-white/80 hover:bg-white/10 hover:text-white"}`}>
-              <button type="button" role="tab" aria-selected={t.id === activeId} tabIndex={t.id === activeId ? 0 : -1} onClick={() => { setActiveId(t.id); setNavigationError(""); }} className="min-w-0 truncate px-3 py-1.5 text-left" title={t.url}>{t.title}</button>
-              <button type="button" disabled={tabs.length === 1} onClick={() => closeTab(t.id)} className="mr-1 rounded p-1 opacity-60 hover:opacity-100 disabled:opacity-30" aria-label={`Закрыть вкладку ${t.title}`} title="Закрыть вкладку"><X size={14} /></button>
+            <div key={t.id} className={`browser-tab ${t.id === activeId ? "browser-tab--active" : ""}`}>
+              <button type="button" role="tab" aria-selected={t.id === activeId} tabIndex={t.id === activeId ? 0 : -1} onClick={() => { setActiveId(t.id); setNavigationError(""); }} className="browser-tab-label" title={t.url}><Globe2 size={15} aria-hidden="true" /><span>{t.title}</span></button>
+              <button type="button" disabled={tabs.length === 1} onClick={() => closeTab(t.id)} className="browser-tab-close" aria-label={`Закрыть вкладку ${t.title}`} title="Закрыть вкладку"><X size={14} /></button>
             </div>
           ))}
           <button
             onClick={() => newTab()}
-            className="ml-1 px-2 py-1 rounded-md bg-white/10 hover:bg-white/20"
+            type="button"
+            className="browser-new-tab"
             title="Новая вкладка (Ctrl+T)"
             aria-label="Новая вкладка"
           >
@@ -679,15 +685,13 @@ export default function BrowserAlt({
         </div>
       </div>
 
-      {/* Панель навигации */}
-      <div className="flex flex-wrap gap-2">
+      <div className="browser-toolbar">
+        <div className="browser-navigation">
         <button
           type="button"
           onClick={goBack}
           disabled={!canGoBack}
-          className={`px-2 py-2 rounded-lg border border-white/10 ${
-            canGoBack ? "bg-white/5 hover:bg-white/10 text-white" : "bg-white/5 text-white/30 cursor-not-allowed"
-          }`}
+          className="browser-icon-button"
           title="Назад (Alt+←)"
           aria-label="Назад"
         >
@@ -697,9 +701,7 @@ export default function BrowserAlt({
           type="button"
           onClick={goForward}
           disabled={!canGoForward}
-          className={`px-2 py-2 rounded-lg border border-white/10 ${
-            canGoForward ? "bg-white/5 hover:bg-white/10 text-white" : "bg-white/5 text-white/30 cursor-not-allowed"
-          }`}
+          className="browser-icon-button"
           title="Вперёд (Alt+→)"
           aria-label="Вперёд"
         >
@@ -708,51 +710,59 @@ export default function BrowserAlt({
         <button
           type="button"
           onClick={refresh}
-          className="px-2 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-white"
+          className="browser-icon-button"
           title="Обновить (Ctrl+R)"
           aria-label="Обновить"
         >
           <RotateCw size={18} />
         </button>
+        <button type="button" onClick={() => setActiveUrl("alt://home")} className="browser-icon-button" title="Домашняя страница" aria-label="Домашняя страница"><House size={18} /></button>
+        </div>
 
         {/* Адресная строка */}
-        <form onSubmit={onSubmit} className="order-first flex min-w-0 basis-full gap-2 sm:order-none sm:basis-auto sm:flex-1">
+        <form onSubmit={onSubmit} className="browser-address">
+          <Globe2 size={16} className="browser-address-icon" aria-hidden="true" />
           <input
             ref={addressRef}
             value={addressValue}
             onChange={(e) => setAddressValue(e.currentTarget.value)}
             onFocus={(e) => e.currentTarget.select()}
-            placeholder="alt://home или alt://site/имя"
+            placeholder="Введите адрес Alt или IPFS"
             aria-label="Адрес сайта"
             aria-invalid={Boolean(navigationError)}
             aria-describedby={navigationError ? "browser-address-error" : undefined}
             autoComplete="off"
             spellCheck={false}
-            className="min-w-0 flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 outline-none text-white/90 placeholder-white/40"
+            className="browser-address-input"
           />
           <button
             type="submit"
-            className="px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20"
+            className="browser-address-submit"
             title="Перейти по адресу (Enter)"
+            aria-label="Перейти"
           >
-            Перейти
+            <ArrowRight size={17} aria-hidden="true" />
           </button>
         </form>
 
+        <div className="browser-actions">
         <button type="button" disabled={!canBookmark || Boolean(bookmarksError)} aria-label={bookmarked ? "Убрать страницу из закладок" : "Добавить страницу в закладки"}
           aria-pressed={bookmarked} title={bookmarked ? "Убрать страницу из закладок" : "Добавить страницу в закладки"}
           onClick={() => activeTab && currentPage && changeBookmark(activeTab.url, currentPage.title)}
-          className="rounded-lg border border-white/10 bg-white/5 px-2 py-2 text-white hover:bg-white/10 disabled:opacity-30"><Bookmark size={18} fill={bookmarked ? "currentColor" : "none"} /></button>
-        <button type="button" aria-expanded={bookmarksOpen} aria-controls="browser-bookmarks" onClick={() => setBookmarksOpen(value => !value)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white hover:bg-white/10">Закладки <span className="text-white/60">{bookmarks.length}</span></button>
+          className="browser-icon-button"><Star size={18} fill={bookmarked ? "currentColor" : "none"} /></button>
+        <button type="button" aria-expanded={bookmarksOpen} aria-controls="browser-bookmarks" onClick={() => setBookmarksOpen(value => !value)} className="browser-bookmarks-button">Закладки <span>{bookmarks.length}</span></button>
 
         <button
           type="button"
           onClick={onOpenBuilder}
-          className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white"
+          className="browser-create-button"
           title="Открыть конструктор сайта"
+          aria-label="Создать сайт"
         >
-          Создать сайт
+          <Pencil size={14} aria-hidden="true" /><span>Создать сайт</span>
         </button>
+        </div>
+      </div>
       </div>
 
       {navigationError && <p id="browser-address-error" role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 px-3 py-2 text-sm text-amber-100">{navigationError}</p>}

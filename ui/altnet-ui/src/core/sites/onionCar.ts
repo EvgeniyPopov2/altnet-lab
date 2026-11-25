@@ -1,8 +1,9 @@
-import { parseSiteRoot, SITE_MAX_CAR_BYTES } from "./ipfsSitePackage";
+import { SITE_MAX_CAR_BYTES } from "./ipfsSitePackage";
+import { parseBrowserRoot } from "./siteCid";
 
 /** Запрос к локальному клиенту; к onion подключается только его Tor-транспорт. */
 export async function fetchOnionCar(onion: string, cid: string): Promise<Uint8Array> {
-  parseSiteRoot(cid);
+  if (parseBrowserRoot(cid).toString() !== cid) throw new Error("Используйте канонический CIDv1.");
   if (!/^[a-z2-7]{56}\.onion$/.test(onion)) throw new Error("Введите полный адрес onion v3 без протокола и пути.");
   const token = document.querySelector<HTMLMetaElement>('meta[name="altnet-session"]')?.content;
   if (!token) throw new Error("Откройте AltNet через локальный клиент.");

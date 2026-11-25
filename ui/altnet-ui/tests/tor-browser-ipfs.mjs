@@ -71,7 +71,7 @@ try {
     child.once("exit", code => { clearTimeout(timer); reject(new Error(`Tor Browser завершился до результата (${code}): ${stderr}`)); });
   });
   assert.equal(outcome?.result, "pass", `Локальная проверка не прошла (${requested.join(", ")}): ${outcome?.detail || stderr}`);
-  console.log("PASS: Tor Browser, локальный CAR, проверка CID, повреждённый кэш и изоляция недоверенного кода");
+  console.log("PASS: Tor Browser, AltNet и UnixFS CAR, проверка CID, повреждённый кэш и изоляция недоверенного кода");
   console.log("Тест без соединения Tor; изолированный профиль:", scratch);
 } finally {
   if (child.exitCode === null) child.kill();

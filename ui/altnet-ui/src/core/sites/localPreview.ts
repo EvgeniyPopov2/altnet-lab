@@ -3,6 +3,7 @@ import { readAnimation, lottieOptions } from "../../screens/SiteBuilder/lottie";
 import { SITE_RUNTIME, SITE_RUNTIME_HASH, SITE_RUNTIME_LEGACY } from "../../builder/siteRuntime";
 import { cleanPreviewCss, dataResource } from "./previewResources";
 import { popupSettings } from "../../screens/SiteBuilder/popup";
+import { resolveSitePath, validSitePath } from "./sitePath";
 
 const localMedia = /^data:(?:image\/(?:png|jpeg|webp|gif)|video\/(?:mp4|webm)|audio\/(?:mpeg|ogg|wav));base64,/i;
 export const LOCAL_NAV_RUNTIME = "(()=>{const m=document.querySelector('meta[name=altnet-local-fragment]');if(m){const t=document.getElementById(m.content);if(t)t.scrollIntoView()}document.addEventListener('click',e=>{const a=e.target instanceof Element?e.target.closest('a'):null;if(!a)return;if(a.dataset.altLocalPage){e.preventDefault();parent.postMessage({type:'altnet.local-page',path:a.dataset.altLocalPage,fragment:a.dataset.altLocalFragment||''},'*');return}const h=a.getAttribute('href');if(!h||!/^#[a-zA-Z0-9_-]{0,128}$/.test(h))return;e.preventDefault();if(h.length>1){const t=document.getElementById(h.slice(1));if(t)t.scrollIntoView()}})})();";
@@ -11,18 +12,47 @@ const policy = `default-src 'none'; script-src 'sha256-${SITE_RUNTIME_HASH}' 'sh
 const escapeText = (value: string) => value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /** Изолирует локально опубликованную страницу до появления профильного транспорта. */
-export async function prepareLocalSite(html: string, pagePaths: readonly string[] = [], fragment = "") {
+export async function prepareLocalSite(html: string, pagePaths: readonly string[] = [], fragment = "", resources: readonly { path: string; mime: string; data: string }[] = [], pagePath = "index.html") {
   const engine = html.includes("data-alt-animation") ? await loadLottieRenderer() : "";
-  return prepareLocalPreviewHtml(html, pagePaths, fragment, engine);
+  return prepareLocalPreviewHtml(html, pagePaths, fragment, engine, resources, pagePath);
 }
 
-export function prepareLocalPreviewHtml(html: string, pagePaths: readonly string[] = [], fragment = "", animationEngine = ""): string {
+export function prepareLocalPreviewHtml(html: string, pagePaths: readonly string[] = [], fragment = "", animationEngine = "", resources: readonly { path: string; mime: string; data: string }[] = [], pagePath = "index.html"): string {
   const guard = `<meta http-equiv="Content-Security-Policy" content="${policy}">`;
-  const localPages = new Set(pagePaths.filter(path => /^[a-z0-9][a-z0-9-]{0,63}\.html$/.test(path)));
+  const localPages = new Set(pagePaths.filter(path => validSitePath(path) && path.endsWith(".html")));
   if (html.length > 64_000_000) throw new Error("Страница превышает допустимый размер.");
   if (typeof document === "undefined") return `<!doctype html>${guard}<pre>${escapeText(html)}</pre>`;
   const template = document.createElement("template");
   template.innerHTML = html;
+  // Только проверенные блоки из того же CAR; произвольные URL не запрашиваются.
+  const resourceMap = new Map(resources.map(resource => [resource.path, resource]));
+  const localResource = (url: string) => { const path = resolveSitePath(pagePath, url); return path ? resourceMap.get(path) : undefined; };
+  template.content.querySelectorAll("link[rel~='stylesheet'][href]").forEach(link => {
+    const cssPath = resolveSitePath(pagePath, link.getAttribute("href") || "");
+    const resource = cssPath ? resourceMap.get(cssPath) : undefined;
+    if (!resource || resource.mime !== "text/css") return;
+    try {
+      const binary = atob(resource.data);
+      const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+      const style = document.createElement("style");
+      let css = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      // Подставляем лишь простой локальный URL известного изображения. Остальные
+      // URL остаются под CSP и не могут вызвать сетевую загрузку.
+      css = css.replace(/url\(\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^\s)"']+))\s*\)/gi, (original, double: string | undefined, single: string | undefined, bare: string | undefined) => {
+        const path = resolveSitePath(cssPath!, double ?? single ?? bare ?? "");
+        const image = path ? resourceMap.get(path) : undefined;
+        return image && /^image\/(?:png|jpeg|webp|gif)$/.test(image.mime) && image.data.length <= 1_400_000 ? `url("data:${image.mime};base64,${image.data}")` : original;
+      });
+      style.textContent = css;
+      link.replaceWith(style);
+    } catch { link.remove(); }
+  });
+  template.content.querySelectorAll("[src],[poster]").forEach(element => {
+    for (const attribute of ["src", "poster"]) {
+      const resource = localResource(element.getAttribute(attribute) || "");
+      if (resource && /^(?:image\/(?:png|jpeg|webp|gif)|video\/(?:mp4|webm)|audio\/(?:mpeg|ogg|wav))$/.test(resource.mime)) element.setAttribute(attribute, `data:${resource.mime};base64,${resource.data}`);
+    }
+  });
   const trustedScript = (source: string, hash: string) => {
     const script = document.createElement("script");
     script.src = dataResource("text/javascript", source);
@@ -134,10 +164,11 @@ export function prepareLocalPreviewHtml(html: string, pagePaths: readonly string
       else if ((name === "href" || name === "xlink:href") && value && !value.startsWith("#")) {
         element.removeAttribute(attribute.name);
         if (element.tagName.toLowerCase() === "a") {
-          const match = /^\.\/([a-z0-9][a-z0-9-]{0,63}\.html)(?:#([a-zA-Z0-9_-]{1,128}))?$/.exec(value);
-          if (name === "href" && match && localPages.has(match[1])) {
-            element.setAttribute("href", "#"); element.setAttribute("data-alt-local-page", match[1]);
-            if (match[2]) element.setAttribute("data-alt-local-fragment", match[2]);
+          const match = /^([^#]+)(?:#([a-zA-Z0-9_-]{1,128}))?$/.exec(value);
+          const path = match ? resolveSitePath(pagePath, match[1]) : null;
+          if (name === "href" && path && localPages.has(path)) {
+            element.setAttribute("href", "#"); element.setAttribute("data-alt-local-page", path);
+            if (match?.[2]) element.setAttribute("data-alt-local-fragment", match[2]);
           } else {
             element.setAttribute("aria-disabled", "true"); element.setAttribute("title", "Ссылка недоступна в локальном просмотре");
           }

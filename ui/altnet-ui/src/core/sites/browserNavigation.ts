@@ -1,4 +1,5 @@
-import { parseSiteRoot } from "./siteCid";
+import { parseBrowserRoot, parseSiteRoot } from "./siteCid";
+import { validSitePath } from "./sitePath";
 
 /** Разбор адресов локального браузера. Эта функция никогда не выполняет сетевой запрос. */
 export type BrowserAddress =
@@ -39,10 +40,11 @@ export function parseBrowserAddress(raw: string): BrowserAddress {
     const path = page || "index.html";
     return { kind: "site", slug, path, fragment, url: `alt://site/${slug}${page && page !== "index.html" ? "/" + page : ""}${fragment ? "#" + fragment : ""}` };
   }
-  const ipfs = /^ipfs:\/\/([a-z2-7]{1,120})(?:\/([a-z0-9][a-z0-9-]{0,63}\.html))?(?:#([a-zA-Z0-9_-]{1,128}))?$/.exec(value);
+  const ipfs = /^ipfs:\/\/([a-zA-Z0-9]{1,120})(?:\/([^#?]+))?(?:#([a-zA-Z0-9_-]{1,128}))?$/.exec(value);
   if (ipfs) {
-    const root = parseSiteRoot(ipfs[1]).toString();
+    const root = parseBrowserRoot(ipfs[1]).toString();
     const path = ipfs[2] || "index.html", fragment = ipfs[3] || "";
+    if (!validSitePath(path) || !/\.html$/.test(path)) throw new Error("Недопустимый путь страницы IPFS.");
     return { kind: "ipfs", root, path, fragment, url: `ipfs://${root}${path !== "index.html" ? "/" + path : ""}${fragment ? "#" + fragment : ""}` };
   }
   const share = /^alt:\/\/onion\/([a-z2-7]{56}\.onion)\/([a-z2-7]{1,120})$/.exec(value);

@@ -1,4 +1,12 @@
-import { parseSiteRoot, SITE_MAX_CAR_BYTES, verifySitePackage, type VerifiedSite } from "./ipfsSitePackage";
+import { SITE_MAX_CAR_BYTES, verifySitePackage, type VerifiedSite } from "./ipfsSitePackage";
+import { parseBrowserRoot } from "./siteCid";
+
+async function verifyCar(car: Uint8Array, root: string): Promise<VerifiedSite> {
+  const cid = parseBrowserRoot(root);
+  if (cid.code === 0x71) return verifySitePackage(car, cid.toString());
+  const { verifyUnixfsSite } = await import("./unixfsSite");
+  return verifyUnixfsSite(car, cid.toString());
+}
 
 // Храним исходный CAR и проверяем его заново при каждом открытии по CID.
 // Это локальный кэш, он не выполняет сетевых запросов и не подтверждает автора.
@@ -40,23 +48,23 @@ async function transact<T>(mode: IDBTransactionMode, action: (store: IDBObjectSt
 export async function cacheVerifiedSite(car: Uint8Array, root: string): Promise<VerifiedSite> {
   if (!(car instanceof Uint8Array) || !car.length || car.length > SITE_MAX_CAR_BYTES) throw new Error("Некорректный размер архива сайта.");
   const snapshot = car.slice();
-  const site = await verifySitePackage(snapshot, root);
+  const site = await verifyCar(snapshot, root);
   await transact<void>("readwrite", store => { store.put(snapshot.buffer, site.root); });
   return site;
 }
 
 export async function readCachedSite(root: string): Promise<VerifiedSite | null> {
-  const canonical = parseSiteRoot(root).toString();
+  const canonical = parseBrowserRoot(root).toString();
   const value = await transact<unknown>("readonly", (store, result) => {
     const request = store.get(canonical);
     request.onsuccess = () => result(request.result);
   });
   if (value === undefined) return null;
   if (!(value instanceof ArrayBuffer) || !value.byteLength || value.byteLength > SITE_MAX_CAR_BYTES) throw new Error("Локальная копия IPFS повреждена; данные не изменены.");
-  return verifySitePackage(new Uint8Array(value), canonical);
+  return verifyCar(new Uint8Array(value), canonical);
 }
 
 export async function deleteCachedSite(root: string): Promise<void> {
-  const canonical = parseSiteRoot(root).toString();
+  const canonical = parseBrowserRoot(root).toString();
   await transact<void>("readwrite", store => { store.delete(canonical); });
 }

@@ -1,0 +1,99 @@
+.browser-workspace {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: #e8ebf6;
+}
+
+.browser-chrome {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #313951;
+  border-radius: 14px;
+  background: #171d2c;
+  box-shadow: 0 10px 28px #05071332;
+}
+
+.browser-tab-strip {
+  display: flex;
+  min-width: 0;
+  padding: 7px 9px 0;
+  background: #101522;
+}
+
+.browser-tabs {
+  display: flex;
+  align-items: end;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #56617a transparent;
+}
+
+.browser-tab {
+  display: flex;
+  align-items: center;
+  flex: 0 0 clamp(112px, 18vw, 220px);
+  min-width: 0;
+  height: 36px;
+  margin-right: 3px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 9px 9px 0 0;
+  color: #aeb7cd;
+}
+
+.browser-tab:hover { background: #ffffff0d; color: #f4f5fc; }
+.browser-tab--active { background: #222a3d; border-color: #343d54; color: #f7f8ff; }
+.browser-tab-label { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 100%; padding: 0 9px; text-align: left; font-size: 13px; }
+.browser-tab-label svg { flex: none; color: #a79aff; }
+.browser-tab-label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-tab-close, .browser-new-tab, .browser-icon-button, .browser-address-submit { display: inline-flex; flex: none; align-items: center; justify-content: center; border-radius: 8px; }
+.browser-tab-close { width: 25px; height: 25px; margin-right: 5px; color: #9aa5ba; }
+.browser-tab-close:hover:not(:disabled), .browser-new-tab:hover, .browser-icon-button:hover:not(:disabled), .browser-address-submit:hover { background: #ffffff16; color: #fff; }
+.browser-tab-close:disabled { opacity: .35; }
+.browser-new-tab { width: 32px; height: 32px; margin: 0 4px 2px; color: #c3cadd; }
+
+.browser-toolbar { display: flex; align-items: center; gap: 8px; padding: 9px; border-top: 1px solid #343d54; }
+.browser-navigation, .browser-actions { display: flex; align-items: center; gap: 3px; flex: none; }
+.browser-icon-button { width: 36px; height: 36px; color: #d1d8e8; }
+.browser-icon-button:disabled { cursor: not-allowed; color: #687286; }
+.browser-address { display: flex; align-items: center; flex: 1; min-width: 0; height: 38px; border: 1px solid #3b465e; border-radius: 10px; background: #0e1422; transition: border-color .15s, box-shadow .15s; }
+.browser-address:focus-within { border-color: #9b8bff; box-shadow: 0 0 0 3px #806dff38; }
+.browser-address-icon { flex: none; margin-left: 11px; color: #9aa7c0; }
+.browser-address-input { min-width: 0; flex: 1; height: 100%; padding: 0 9px; background: transparent; color: #f0f2fb; font-size: 13px; outline: none; }
+.browser-address-input::placeholder { color: #8995ab; }
+.browser-address-submit { width: 32px; height: 32px; margin-right: 3px; color: #bec8da; }
+.browser-bookmarks-button, .browser-create-button { min-height: 36px; padding: 0 11px; border-radius: 8px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.browser-bookmarks-button { color: #d5daea; }
+.browser-bookmarks-button:hover { background: #ffffff12; }
+.browser-bookmarks-button span { color: #a9b4ca; }
+.browser-create-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; margin-left: 2px; background: #6851ee; color: #fff; }
+.browser-create-button:hover { background: #7964fa; }
+.browser-chrome button:focus-visible { outline: 2px solid #b4a8ff; outline-offset: -2px; }
+
+@media (max-width: 700px) {
+  .browser-tab { flex-basis: 155px; }
+  .browser-toolbar { display: grid; grid-template-columns: 1fr auto; gap: 5px; }
+  .browser-address { grid-column: 1 / -1; grid-row: 1; height: 42px; }
+  .browser-navigation { grid-column: 1; grid-row: 2; }
+  .browser-actions { grid-column: 2; grid-row: 2; }
+  .browser-icon-button { width: 38px; height: 38px; }
+  .browser-bookmarks-button, .browser-create-button { padding: 0 8px; }
+}
+
+@media (max-width: 390px) {
+  .browser-toolbar { gap: 3px; padding: 7px; }
+  .browser-navigation, .browser-actions { gap: 0; }
+  .browser-icon-button { width: 34px; }
+  .browser-bookmarks-button, .browser-create-button { padding: 0 6px; font-size: 11px; }
+}
+
+@media (max-width: 360px) {
+  .browser-create-button { width: 34px; padding: 0; }
+  .browser-create-button span { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) { .browser-address { transition: none; } }

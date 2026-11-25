@@ -1,6 +1,9 @@
 import { createSitePackage } from "../src/core/sites/ipfsSitePackage";
 import { cacheVerifiedSite, deleteCachedSite, readCachedSite } from "../src/core/sites/ipfsSiteCache";
 import { prepareLocalPreviewHtml } from "../src/core/sites/localPreview";
+import { CarWriter } from "@ipld/car";
+import { CID } from "multiformats/cid";
+import { sha256 } from "multiformats/hashes/sha2";
 
 async function run(): Promise<void> {
   const html = "<!doctype html><h1>AltNet Tor test</h1>";
@@ -35,6 +38,14 @@ async function run(): Promise<void> {
   if (!rejected) throw new Error("Повреждённый кэш не отклонён");
   await deleteCachedSite(pack.root);
   if (await readCachedSite(pack.root) !== null) throw new Error("Повреждённая копия не удалена");
+  const rawBytes = new TextEncoder().encode("<h1>UnixFS Tor test</h1>");
+  const rawCid = CID.createV1(0x55, await sha256.digest(rawBytes));
+  const { writer, out } = CarWriter.create([rawCid]);
+  const collecting = (async () => { const chunks: Uint8Array[] = []; let size = 0; for await (const chunk of out) { chunks.push(chunk); size += chunk.length; } const data = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.length; } return data; })();
+  await writer.put({ cid: rawCid, bytes: rawBytes }); await writer.close();
+  const unixfs = await cacheVerifiedSite(await collecting, rawCid.toString());
+  if (unixfs.pages[0].html !== "<h1>UnixFS Tor test</h1>" || (await readCachedSite(rawCid.toString()))?.pages[0].html !== unixfs.pages[0].html) throw new Error("UnixFS не восстановлен в Tor Browser");
+  await deleteCachedSite(rawCid.toString());
   let attacked = false;
   const onMessage = (event: MessageEvent) => { if (event.data === "altnet-test-attack") attacked = true; };
   window.addEventListener("message", onMessage);
