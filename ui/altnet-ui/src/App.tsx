@@ -90,21 +90,26 @@ const ListItem = ({
 );
 
 export default function App() {
+  // Выбор профиля пока не управляет транспортом, но открытые вкладки не смешиваются.
+  const [profile, setProfile] = usePrivacyProfile();
   const [section, setSection] = useState<Section>("feed");
   const [rail, setRail] = useState<RailView>("global");
   const [builderOpen, setBuilderOpen] = useState(false);
-  const [browserNav, setBrowserNav] = useState<{ url: string; token: number } | null>(null);
-  // Вкладки живут только в памяти приложения и не теряются при открытии конструктора.
-  const [browserTabs, setBrowserTabs] = useState(() => [createBrowserTab()]);
-  const [browserActiveId, setBrowserActiveId] = useState(() => browserTabs[0].id);
+  const [browserNav, setBrowserNav] = useState<{ url: string; token: number; profile: "anon" | "fast" } | null>(null);
+  // Сеансы вкладок раздельны по профилю и живут только в памяти приложения.
+  const [anonTabs, setAnonTabs] = useState(() => [createBrowserTab()]);
+  const [fastTabs, setFastTabs] = useState(() => [createBrowserTab()]);
+  const [anonActiveId, setAnonActiveId] = useState(() => anonTabs[0].id);
+  const [fastActiveId, setFastActiveId] = useState(() => fastTabs[0].id);
+  const browserTabs = profile === "anon" ? anonTabs : fastTabs;
+  const setBrowserTabs = profile === "anon" ? setAnonTabs : setFastTabs;
+  const browserActiveId = profile === "anon" ? anonActiveId : fastActiveId;
+  const setBrowserActiveId = profile === "anon" ? setAnonActiveId : setFastActiveId;
   const [qsOpen, setQsOpen] = useState(false);
   const [voiceVideoOpen, setVoiceVideoOpen] = useState(false);
   const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [dmSearch, setDmSearch] = useState("");
   const [serverSearch, setServerSearch] = useState("");
-
-  // === Профиль сети (глобальный, хранится в localStorage) ===
-  const [profile, setProfile] = usePrivacyProfile();
 
   // Security Coach: короткая подсказка при смене профиля
   useEffect(() => {
@@ -617,12 +622,12 @@ export default function App() {
                     onClose={() => setBuilderOpen(false)}
                     onPublished={(url) => {
                       setBuilderOpen(false);
-                      setBrowserNav({ url, token: Date.now() });
+                      setBrowserNav({ url, token: Date.now(), profile });
                     }}
                   /></Suspense>
                 ) : (
                   <Suspense fallback={<div role="status" className="p-4 text-sm">Открываем браузер…</div>}>
-                    <BrowserAlt onOpenBuilder={() => setBuilderOpen(true)} navRequest={browserNav} onNavConsumed={token => setBrowserNav(current => current?.token === token ? null : current)} tabs={browserTabs} setTabs={setBrowserTabs} activeId={browserActiveId} setActiveId={setBrowserActiveId} />
+                    <BrowserAlt key={profile} privacyProfile={profile} onOpenBuilder={() => setBuilderOpen(true)} navRequest={browserNav?.profile === profile ? browserNav : null} onNavConsumed={token => setBrowserNav(current => current?.token === token ? null : current)} tabs={browserTabs} setTabs={setBrowserTabs} activeId={browserActiveId} setActiveId={setBrowserActiveId} />
                   </Suspense>
                 ))}
 

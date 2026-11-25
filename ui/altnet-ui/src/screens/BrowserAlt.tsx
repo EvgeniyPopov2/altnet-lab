@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import { ArrowLeft, ArrowRight, Globe2, House, Pencil, Plus, RotateCw, Star, X } from "lucide-react";
 import "./browserAlt.css";
 import LocalSiteFrame from "../components/LocalSiteFrame";
-import { BOOKMARKS_KEY, readBookmarks, toggleBookmark, type BrowserBookmark } from "../core/sites/browserBookmarks";
+import { BOOKMARKS_KEY, bookmarksKey, copyLegacyBookmarks, readBookmarks, toggleBookmark, type BrowserBookmark } from "../core/sites/browserBookmarks";
+import type { PrivacyProfile } from "../core/policy/types";
 import { browserTabTitle, createBrowserTab, parseBrowserAddress, type BrowserTab } from "../core/sites/browserNavigation";
 import type { VerifiedSite } from "../core/sites/ipfsSitePackage";
 import { encodeSitePath } from "../core/sites/sitePath";
-import { usePrivacyProfile } from "../core/settings/profile";
 import {
   deletePublishedSite,
   getPublishedSite,
@@ -45,6 +45,7 @@ function fmtTime(ts: number): string {
 
 export default function BrowserAlt({
   onOpenBuilder,
+  privacyProfile,
   navRequest,
   onNavConsumed,
   tabs,
@@ -53,6 +54,7 @@ export default function BrowserAlt({
   setActiveId,
 }: {
   onOpenBuilder: () => void;
+  privacyProfile: PrivacyProfile;
   navRequest?: NavRequest | null;
   onNavConsumed: (token: number) => void;
   tabs: BrowserTab[];
@@ -60,12 +62,13 @@ export default function BrowserAlt({
   activeId: string;
   setActiveId: Dispatch<SetStateAction<string>>;
 }) {
-  const [privacyProfile] = usePrivacyProfile();
   const addressRef = useRef<HTMLInputElement>(null);
   const [addressValue, setAddressValue] = useState<string>(() => tabs[0].url);
   const [navigationError, setNavigationError] = useState("");
-  const [bookmarks, setBookmarks] = useState<BrowserBookmark[]>([]);
-  const [bookmarksError, setBookmarksError] = useState("");
+  const [bookmarksState, setBookmarksState] = useState<{ profile: PrivacyProfile; items: BrowserBookmark[]; error: string; legacyPresent: boolean } | null>(null);
+  const bookmarksReady = bookmarksState?.profile === privacyProfile;
+  const bookmarks = bookmarksReady ? bookmarksState.items : [];
+  const bookmarksError = bookmarksReady ? bookmarksState.error : "";
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
 
   const [publishedToken, setPublishedToken] = useState<number>(0);
@@ -88,14 +91,14 @@ export default function BrowserAlt({
 
   useEffect(() => {
     const read = () => {
-      try { setBookmarks(readBookmarks(localStorage)); setBookmarksError(""); }
-      catch { setBookmarksError("Не удалось прочитать закладки. Сохранённые данные не изменены."); }
+      try { setBookmarksState({ profile: privacyProfile, items: readBookmarks(localStorage, privacyProfile), error: "", legacyPresent: localStorage.getItem(BOOKMARKS_KEY) !== null }); }
+      catch { setBookmarksState({ profile: privacyProfile, items: [], error: "Не удалось прочитать закладки. Сохранённые данные не изменены.", legacyPresent: false }); }
     };
     read();
-    const onStorage = (event: StorageEvent) => { if (event.key === BOOKMARKS_KEY || event.key === null) read(); };
+    const onStorage = (event: StorageEvent) => { if (event.key === BOOKMARKS_KEY || event.key === bookmarksKey(privacyProfile) || event.key === null) read(); };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, []);
+  }, [privacyProfile]);
 
   useEffect(() => {
     let active = true; setPublishedLoading(true);
@@ -156,8 +159,9 @@ export default function BrowserAlt({
   const bookmarked = !!activeTab && bookmarks.some(item => item.url === activeTab.url);
 
   const changeBookmark = (url: string, title: string) => {
-    try { setBookmarks(toggleBookmark(localStorage, url, title)); setBookmarksError(""); }
-    catch (error) { setBookmarksError(error instanceof Error ? error.message : "Не удалось сохранить закладку."); }
+    if (!bookmarksReady || !bookmarksState) return;
+    try { setBookmarksState({ ...bookmarksState, items: toggleBookmark(localStorage, url, title, Date.now(), privacyProfile), error: "" }); }
+    catch (error) { setBookmarksState({ ...bookmarksState, error: error instanceof Error ? error.message : "Не удалось сохранить закладку." }); }
   };
 
   const setActiveUrl = (nextUrlRaw: string) => {
@@ -749,7 +753,7 @@ export default function BrowserAlt({
         </form>
 
         <div className="browser-actions">
-        <button type="button" disabled={!canBookmark || Boolean(bookmarksError)} aria-label={bookmarked ? "Убрать страницу из закладок" : "Добавить страницу в закладки"}
+        <button type="button" disabled={!canBookmark || !bookmarksReady || Boolean(bookmarksError)} aria-label={bookmarked ? "Убрать страницу из закладок" : "Добавить страницу в закладки"}
           aria-pressed={bookmarked} title={bookmarked ? "Убрать страницу из закладок" : "Добавить страницу в закладки"}
           onClick={() => activeTab && currentPage && changeBookmark(activeTab.url, currentPage.title)}
           className="browser-icon-button"><Star size={18} fill={bookmarked ? "currentColor" : "none"} /></button>
@@ -770,12 +774,16 @@ export default function BrowserAlt({
 
       <details className="browser-profile-notice">
         <summary>Профиль AltNet: {privacyProfile === "anon" ? "анонимный" : "приватный быстрый"} · подключение браузера ещё не настроено</summary>
-        <p>Выбор профиля пока не управляет маршрутом этого браузера. Закладки и локальные данные не разделены между профилями. Получение сайта с указанного onion-адреса использует управляемый Tor; при недоступности Tor прямое подключение не выполняется.</p>
+        <p>Выбор профиля пока не управляет маршрутом этого браузера. Списки закладок разделены по выбранному профилю, но другие локальные данные пока общие; полноценная изоляция ещё не подключена. Получение сайта с указанного onion-адреса использует управляемый Tor; при недоступности Tor прямое подключение не выполняется.</p>
       </details>
 
       {navigationError && <p id="browser-address-error" role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 px-3 py-2 text-sm text-amber-100">{navigationError}</p>}
       {bookmarksOpen && <section id="browser-bookmarks" aria-label="Закладки" className="rounded-xl border border-white/10 bg-white/5 p-4">
-        <p className="text-sm text-white/70">Закладки сохраняются на этом устройстве. Адреса указывают на локальные копии сайтов.</p>
+        <p className="text-sm text-white/70">Закладки сохраняются на этом устройстве отдельно для выбранного профиля. Адреса указывают на локальные копии сайтов.</p>
+        {bookmarksReady && bookmarksState.legacyPresent && <div className="mt-3 text-sm text-white/70">Ранее созданные общие закладки сохранены. Их можно скопировать в текущий профиль; исходный список останется на месте. <button type="button" className="underline" onClick={() => {
+          try { setBookmarksState({ ...bookmarksState, items: copyLegacyBookmarks(localStorage, privacyProfile), error: "" }); }
+          catch (error) { setBookmarksState({ ...bookmarksState, error: error instanceof Error ? error.message : "Не удалось скопировать закладки." }); }
+        }}>Скопировать старые закладки</button></div>}
         {bookmarks.length === 0 ? <p className="mt-3 text-sm text-white/60">Закладок пока нет.</p> : <ul className="mt-3 divide-y divide-white/10">{bookmarks.map(item => <li key={item.url} className="flex items-center gap-2 py-2">
           <button type="button" onClick={() => { setActiveUrl(item.url); setBookmarksOpen(false); }} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm text-white">{item.title}</span><span className="block truncate text-xs text-white/60">{item.url}</span></button>
           <button type="button" onClick={() => changeBookmark(item.url, item.title)} className="rounded border border-white/20 px-2 py-1 text-xs text-white/80" aria-label={`Удалить закладку ${item.title}`}>Удалить</button>
