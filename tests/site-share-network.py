@@ -143,7 +143,7 @@ def main():
         (directory / "received.car").write_bytes(received)
         subprocess.run(["node", str(fixture), "verify", str(directory)], check=True, capture_output=True)
         if args.ui_browser_test:
-            browser_args = [str(args.ui_browser.resolve(strict=True))] if args.ui_browser else []
+            browser_args = [str(args.ui_browser.resolve(strict=True)) if args.ui_browser else "", "unixfs" if args.unixfs else "altnet"]
             subprocess.run(["node", "tests/onion-real-browser.mjs", str(clients[1][1]), onion, cid, *browser_args],
                            cwd=UI, check=True, timeout=360)
         status, body = request(clients[0][1], "/api/sites/share-stop", author_token, b"{}")

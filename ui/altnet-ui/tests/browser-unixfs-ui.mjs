@@ -69,6 +69,20 @@ try {
   await page.getByRole("textbox", { name: "Адрес сайта" }).press("Enter");
   await frame.getByText("Проверенный UnixFS").waitFor();
   assert.equal(await frame.locator("h1").evaluate(e => getComputedStyle(e).color), "rgb(12, 34, 56)");
+  let requestsToPeer = 0;
+  await context.route("**/api/sites/onion-car", route => {
+    requestsToPeer++;
+    assert.equal(route.request().postDataJSON().cid, root.toV1().toString());
+    return route.fulfill({ status: 200, headers: { "content-type": "application/vnd.ipld.car", "content-length": String(car.length) }, body: car });
+  });
+  await page.evaluate(() => { const meta = document.createElement("meta"); meta.name = "altnet-session"; meta.content = "test-session"; document.head.append(meta); });
+  const address = page.getByRole("textbox", { name: "Адрес сайта" });
+  await address.fill(`alt://onion/${"a".repeat(56)}.onion/${root}`);
+  await address.press("Enter");
+  assert.equal(requestsToPeer, 0);
+  await page.getByRole("button", { name: "Получить и открыть" }).click();
+  await frame.getByText("Проверенный UnixFS").waitFor();
+  assert.equal(requestsToPeer, 1);
   assert.deepEqual(leaked, []);
   await context.close();
   console.log(`${values.engine} PASS: verified UnixFS CAR, CSS, image, page navigation and script/network isolation`);

@@ -36,6 +36,7 @@ describe("проверка стандартного сайта UnixFS", () => {
     expect(site.pages.find(p => p.path === "index.html")?.html).toBe("<h1>UnixFS</h1>");
     expect(site.pages.find(p => p.path === "about.html")?.html).toContain("О нас");
     expect(parseBrowserAddress(`ipfs://${f.root}`).url).toBe(`ipfs://${site.root}`);
+    expect(parseBrowserAddress(`alt://onion/${"a".repeat(56)}.onion/${f.root}`)).toMatchObject({ kind: "onion-share", root: site.root });
   });
   it("отклоняет подменённые и отсутствующие блоки и неверный корень", async () => {
     const f = await fixture();

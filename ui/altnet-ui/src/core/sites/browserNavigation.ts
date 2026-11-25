@@ -1,4 +1,4 @@
-import { parseBrowserRoot, parseSiteRoot } from "./siteCid";
+import { parseBrowserRoot } from "./siteCid";
 import { validSitePath } from "./sitePath";
 
 /** Разбор адресов локального браузера. Эта функция никогда не выполняет сетевой запрос. */
@@ -49,9 +49,9 @@ export function parseBrowserAddress(raw: string): BrowserAddress {
     if (!validSitePath(path) || !/\.html?$/i.test(path)) throw new Error("Недопустимый путь страницы IPFS.");
     return { kind: "ipfs", root, path, fragment, url: `ipfs://${root}${path !== "index.html" ? "/" + path : ""}${fragment ? "#" + fragment : ""}` };
   }
-  const share = /^alt:\/\/onion\/([a-z2-7]{56}\.onion)\/([a-z2-7]{1,120})$/.exec(value);
+  const share = /^alt:\/\/onion\/([a-z2-7]{56}\.onion)\/([a-zA-Z0-9]{1,120})$/.exec(value);
   if (share) {
-    const onion = share[1], root = parseSiteRoot(share[2]).toString();
+    const onion = share[1], root = parseBrowserRoot(share[2]).toString();
     return { kind: "onion-share", onion, root, url: `alt://onion/${onion}/${root}` };
   }
   if (/^http:\/\//i.test(value)) {

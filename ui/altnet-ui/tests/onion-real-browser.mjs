@@ -3,7 +3,7 @@ import { chromium } from "playwright";
 
 // Invoked by site-share-network.py while two isolated test Tor clients are running.
 // The browser connects only to the test client on loopback; Tor is used by that client.
-const [port, onion, cid, executablePath] = process.argv.slice(2);
+const [port, onion, cid, executablePath, mode = "altnet"] = process.argv.slice(2);
 if (!/^\d{1,5}$/.test(port || "") || !/^[a-z2-7]{56}\.onion$/.test(onion || "") || !/^b[a-z2-7]{58}$/.test(cid || "")) throw new Error("Invalid test parameters");
 const base = `http://127.0.0.1:${port}/`;
 const browser = await chromium.launch(executablePath ? { executablePath } : {});
@@ -22,9 +22,11 @@ try {
     await page.getByRole("heading", { name: "Получить сайт через Tor" }).waitFor();
     assert.equal(requests, 0);
     await page.getByRole("button", { name: "Получить и открыть" }).click();
-    await page.frameLocator('iframe[title="Главная"]').getByText("Привет из AltNet").waitFor({ timeout: 150000 });
+    const title = mode === "unixfs" ? "index.html" : "Главная";
+    const expected = mode === "unixfs" ? "Проверка UnixFS через Tor" : "Привет из AltNet";
+    await page.frameLocator(`iframe[title="${title}"]`).getByText(expected).waitFor({ timeout: 150000 });
     assert.equal(requests, 1);
-    assert.equal(await page.locator('iframe[title="Главная"]').getAttribute("sandbox"), "allow-scripts");
+    assert.equal(await page.locator(`iframe[title="${title}"]`).getAttribute("sandbox"), "allow-scripts");
     await context.close();
   }
   console.log("PASS: ссылка Alt открыла проверенный сайт через реальный Tor в двух размерах экрана.");
