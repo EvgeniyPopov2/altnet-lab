@@ -7,7 +7,10 @@ import tarfile
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-image = Image.open(ROOT / "ui/altnet-ui/public/altnet-logo.png").convert("RGBA")
+original = Image.open(ROOT / "ui/altnet-ui/public/altnet-logo.png").convert("RGBA")
+side = max(original.size)
+image = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+image.alpha_composite(original, ((side - original.width) // 2, (side - original.height) // 2))
 files = {}
 
 

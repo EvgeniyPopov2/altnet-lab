@@ -3,6 +3,7 @@ import importlib.util
 from pathlib import Path
 import io
 import os
+import struct
 import tarfile
 import tempfile
 import unittest
@@ -52,6 +53,19 @@ class BrandingTests(unittest.TestCase):
             self.assertTrue((asset_dir.parent / "firefox.ico").read_bytes().startswith(b"\0\0\1\0"))
             self.assertTrue((asset_dir / "about-logo.png").read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
             branding.apply(source, l10n, ASSETS)
+
+    def test_windows_icon_contains_square_resolutions(self):
+        with tarfile.open(ASSETS, "r") as tar:
+            data = tar.extractfile("firefox.ico").read()
+        reserved, kind, count = struct.unpack_from("<HHH", data)
+        self.assertEqual((reserved, kind), (0, 1))
+        sizes = set()
+        for index in range(count):
+            width, height, _, _, _, _, _, _ = struct.unpack_from("<BBBBHHII", data, 6 + 16 * index)
+            width, height = width or 256, height or 256
+            self.assertEqual(width, height)
+            sizes.add(width)
+        self.assertEqual(sizes, {16, 24, 32, 48, 64, 128, 256})
 
     def test_rejects_unexpected_archive_before_writing(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get("TEMP")) as tmp:
