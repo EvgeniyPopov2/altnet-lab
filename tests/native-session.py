@@ -525,6 +525,38 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
                             self.assertNotEqual(code.value, 259, f"Test child {name} was not stopped")
                         finally: kernel.CloseHandle(handle)
 
+    def test_bundled_workspace_receives_owned_client_status(self):
+        browser = os.environ.get("ALTNET_NATIVE_BUNDLED_BROWSER")
+        if not browser:
+            self.skipTest("Set ALTNET_NATIVE_BUNDLED_BROWSER to an isolated bundled workspace copy")
+        browser_path = Path(browser).resolve(strict=True)
+        tor_dir = browser_path.parent / "TorBrowser/Tor"
+        tor, transport = tor_dir / "tor.exe", tor_dir / "PluggableTransports/lyrebird.exe"
+        if not tor.is_file() or not transport.is_file():
+            self.skipTest("The isolated browser copy lacks the bundled Tor binaries")
+        with tempfile.TemporaryDirectory(prefix="altnet-bundled-session-", dir=os.environ.get("TEMP")) as tmp:
+            root = Path(tmp); keyring = root / "keyring"; keyring.write_bytes(b"empty test keyring")
+            config = {"command": sys.executable, "args": ["-B", str(ROOT / "scripts/bridge_client.py"),
+                      "--state", str(root / "state"), "--dist", str(ROOT / "ui/altnet-ui/dist"),
+                      "--tor", str(tor), "--transport", str(transport), "--keyring", str(keyring), "--no-official", "--no-lan"]}
+            command = [sys.executable, "-B", str(ROOT / "tests/tor-native-ui.py"), "--browser", str(browser_path),
+                       "--theme", "dark", "--native-bundled-channel-from-stdin"]
+            proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            try:
+                stdout, stderr = proc.communicate(json.dumps(config), timeout=120)
+            except subprocess.TimeoutExpired:
+                if os.name == "nt" and proc.poll() is None:
+                    subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True, check=False, timeout=20)
+                elif proc.poll() is None:
+                    proc.terminate()
+                proc.communicate(timeout=20)
+                self.fail("Isolated native workspace test did not stop in time")
+            self.assertEqual(proc.returncode, 0, stdout + stderr)
+            self.assertIn("PASS: bundled native workspace receives real child-client status over its private channel", stdout)
+            self.assertIn("PASS: bundled client React UI runs in a remote, non-system panel with isolated storage", stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

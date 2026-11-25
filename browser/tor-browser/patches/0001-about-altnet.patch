@@ -640,13 +640,95 @@ index 0000000..8206265
 +}
 diff --git a/browser/components/abouttor/NativeWorkspaceShell.sys.mjs b/browser/components/abouttor/NativeWorkspaceShell.sys.mjs
 new file mode 100644
-index 0000000..1c51543
+index 0000000..926d847
 --- /dev/null
 +++ b/browser/components/abouttor/NativeWorkspaceShell.sys.mjs
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,152 @@
 +/* Нативная компоновка окна. Не запускает клиент и не выбирает источник страницы.
 + * Этот модуль доступен только привилегированному коду браузера. */
 +const MIN_WIDTH = 800;
++const BUNDLED_ROOT = "altnet-workspace";
++const BUNDLED_PATH = "altnet-workspace-client/";
++let bundledUsers = 0;
++let bundledURI = null;
++
++export function workspaceConnectionText(status) {
++  if (!status || typeof status.torConnected !== "boolean") return "Проверяем связь с клиентом…";
++  if (status.torConnected) {
++    if (status.internet === "verified" || status.internet === "https") return "Tor подключён · интернет проверен";
++    if (status.internet === "unreachable") return "Tor подключён · проверочные сайты недоступны";
++    if (status.internet === "checking") return "Tor подключён · проверяем интернет";
++    return "Tor подключён · интернет не проверен";
++  }
++  if (status.phase === "paused") return "Tor приостановлен";
++  if (status.phase === "waiting") return "Tor: мост недоступен, повторим попытку";
++  if (status.phase === "recovering") return "Tor: восстанавливаем подключение…";
++  if (status.phase === "checking") return "Tor: проверяем мост…";
++  return "Tor: подключение…";
++}
++
++/**
++ * Экспериментальная панель из ресурсов собственной сборки браузера.
++ * Не запускает клиент и не подключает локальный API или пользовательские данные.
++ * Владелец сеанса отвечает за его закрытие после уничтожения панели.
++ */
++export function createBundledWorkspace(window, { session } = {}) {
++  if (session !== undefined && (!session || typeof session.getStatus !== "function")) throw new Error("Некорректный локальный сеанс");
++  const handler = Services.io.getProtocolHandler("resource").QueryInterface(Ci.nsISubstitutingProtocolHandler);
++  const omni = Services.dirsvc.get("GreD", Ci.nsIFile).clone();
++  omni.append("omni.ja");
++  if (!omni.exists() || !omni.isFile()) throw new Error("Ресурсы браузера недоступны");
++  const zip = Cc["@mozilla.org/libjar/zip-reader;1"].createInstance(Ci.nsIZipReader);
++  zip.open(omni);
++  try { if (!zip.hasEntry(`${BUNDLED_PATH}index.html`)) throw new Error("Интерфейс клиента не включён в эту сборку"); }
++  finally { zip.close(); }
++  const expected = Services.io.newURI(`jar:${Services.io.newFileURI(omni).spec}!/${BUNDLED_PATH}`);
++  if (!bundledUsers) {
++    if (handler.hasSubstitution(BUNDLED_ROOT)) throw new Error("Адрес панели уже занят");
++    handler.setSubstitutionWithFlags(BUNDLED_ROOT, expected, 0);
++    bundledURI = expected.spec;
++  } else if (!handler.hasSubstitution(BUNDLED_ROOT) || handler.getSubstitution(BUNDLED_ROOT).spec !== bundledURI || expected.spec !== bundledURI) {
++    throw new Error("Источник панели изменился");
++  }
++  bundledUsers++;
++  let shell;
++  try {
++    shell = createWorkspaceShell(window);
++    shell.client.loadURI(Services.io.newURI(`resource://${BUNDLED_ROOT}/index.html`), {
++      triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
++    });
++  } catch (error) {
++    shell?.destroy();
++    if (!--bundledUsers) {
++      if (handler.hasSubstitution(BUNDLED_ROOT) && handler.getSubstitution(BUNDLED_ROOT).spec === bundledURI) handler.setSubstitution(BUNDLED_ROOT, null);
++      bundledURI = null;
++    }
++    throw error;
++  }
++  let destroyed = false;
++  let timer;
++  const poll = async () => {
++    try {
++      const status = await session.getStatus();
++      if (!destroyed) shell.setConnectionStatus(`Тестовый сеанс · ${workspaceConnectionText(status)}`);
++    } catch { if (!destroyed) shell.setConnectionStatus("Тестовый сеанс · проверяем связь…"); }
++    if (!destroyed) timer = window.setTimeout(poll, 8000);
++  };
++  if (session) void poll();
++  return Object.freeze({
++    client: shell.client,
++    destroy() {
++      if (destroyed) return;
++      destroyed = true;
++      if (timer !== undefined) window.clearTimeout(timer);
++      shell.destroy();
++      if (!--bundledUsers) {
++        if (handler.hasSubstitution(BUNDLED_ROOT) && handler.getSubstitution(BUNDLED_ROOT).spec === bundledURI) handler.setSubstitution(BUNDLED_ROOT, null);
++        bundledURI = null;
++      }
++    },
++  });
++}
 +
 +export function createWorkspaceShell(window) {
 +  const doc = window?.document;
@@ -663,11 +745,13 @@ index 0000000..1c51543
 +  const header = element("hbox", { align: "center", style: "min-height: 40px; padding: 0 10px; gap: 8px;" });
 +  const title = element("label", { value: "AltNet · тестовое окно", flex: "1", style: "font-weight: 600;" });
 +  const close = element("toolbarbutton", { label: "Скрыть", tooltiptext: "Скрыть рабочую область AltNet" });
++  const connection = element("label", { id: "altnet-workspace-connection", value: "", style: "padding: 0 10px 6px; color: #b6c2d9; font-size: 11px;" });
++  connection.hidden = true;
 +  const client = element("browser", { id: "altnet-workspace-client", type: "content", remote: "true", flex: "1", disableglobalhistory: "true", disablefullscreen: "true", src: "about:blank" });
 +  const splitter = element("splitter", { id: "altnet-workspace-splitter", class: "chromeclass-extrachrome sidebar-splitter", resizebefore: "sibling", resizeafter: "none" });
 +  const toggle = element("toolbarbutton", { id: "altnet-workspace-toggle", class: "toolbarbutton-1 chromeclass-toolbar-additional", label: "AltNet", tooltiptext: "Показать или скрыть рабочую область AltNet", style: "list-style-image: url('chrome://branding/content/about-logo.png');" });
 +  header.append(title, close);
-+  panel.append(header, client);
++  panel.append(header, connection, client);
 +  root.insertBefore(panel, tabs);
 +  root.insertBefore(splitter, tabs);
 +  toolbar.insertBefore(toggle, toolbar.firstChild);
@@ -696,6 +780,11 @@ index 0000000..1c51543
 +  return Object.freeze({
 +    // Источник может назначать только вызывающий привилегированный код после проверки.
 +    client,
++    setConnectionStatus(text) {
++      if (destroyed || typeof text !== "string" || text.length > 120) return;
++      connection.setAttribute("value", text);
++      connection.hidden = !text;
++    },
 +    destroy() {
 +      if (destroyed) return;
 +      destroyed = true;

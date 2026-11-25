@@ -63,7 +63,7 @@ def wait_for(callback, label, timeout=15):
     raise AssertionError(f"Timed out: {label}")
 
 
-def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None, native_workspace=None, migration_url=None, site_tab_url=None):
+def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None, native_workspace=None, migration_url=None, site_tab_url=None, native_bundled_workspace=False, bundled_channel=None):
     root = Path(tempfile.mkdtemp(prefix="altnet-native-ui-", dir=artifact_root))
     profile = root / "profile"
     for folder in (profile, root / "appdata", root / "localappdata"):
@@ -81,7 +81,7 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
         'user_pref("media.peerconnection.enabled", false);',
         'user_pref("browser.startup.homepage_override.mstone", "ignore");',
         f'user_pref("layout.css.prefers-color-scheme.content-override", {0 if theme == "dark" else 1});',
-        *(['user_pref("privacy.spoof_english", 2);'] if native_workspace or migration_url or site_tab_url else []),
+        *(['user_pref("privacy.spoof_english", 2);'] if native_workspace or migration_url or site_tab_url or native_bundled_workspace else []),
     ]), encoding="utf-8")
     env = {**os.environ, "TEMP": str(artifact_root), "TMP": str(artifact_root),
            "APPDATA": str(root / "appdata"), "LOCALAPPDATA": str(root / "localappdata"),
@@ -315,6 +315,58 @@ return w.__altnetNativeTestSession.getOnionCar(p.onion,p.cid,'anon').then(async 
                                 raise TimeoutError("Браузер не получил тестовый сайт через Tor вовремя")
                     finally:
                         client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser');let s=w.__altnetNativeTestSession;delete w.__altnetNativeTestSession;return s.close();", "args": []})
+                if native_bundled_workspace:
+                    setup = """let w=Services.wm.getMostRecentWindow('navigator:browser'),p=arguments[0];return (async()=>{
+let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeWorkspaceShell.sys.mjs');
+let h=Services.io.getProtocolHandler('resource').QueryInterface(Ci.nsISubstitutingProtocolHandler);
+if(h.hasSubstitution('altnet-workspace'))throw Error('Unexpected existing mapping');
+h.setSubstitution('altnet-workspace',Services.io.newURI('resource://gre/'));
+let before=h.getSubstitution('altnet-workspace').spec;
+let conflict=false;try{m.createBundledWorkspace(w)}catch{conflict=true}
+let preserved=h.getSubstitution('altnet-workspace').spec===before;h.setSubstitution('altnet-workspace',null);
+if(p){let c=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionChannel.sys.mjs');
+w.__workspaceSession=await c.openNativeSession({command:p.command,args:p.args,verifyExecutable:async(command,args)=>command===p.command&&JSON.stringify(args)===JSON.stringify(p.args)});}
+w.__workspace=m.createBundledWorkspace(w,{session:w.__workspaceSession});let duplicate=false;try{m.createBundledWorkspace(w)}catch{duplicate=true}
+return {conflict,preserved,duplicate};})();"""
+                    result = client.call("WebDriver:ExecuteScript", {"script": setup, "args": [bundled_channel]})["value"]
+                    assert result == {"conflict": True, "preserved": True, "duplicate": True}, result
+                    def bundled_state():
+                        return client.call("WebDriver:ExecuteScript", {"script": "let b=Services.wm.getMostRecentWindow('navigator:browser').__workspace.client;return {url:b.currentURI?.spec,title:b.contentTitle,system:b.contentPrincipal?.isSystemPrincipal,remote:b.isRemoteBrowser};", "args": []})["value"]
+                    state = wait_for(lambda: (s if (s := bundled_state())["title"] == "AltNet" else None), "bundled client UI", timeout=30)
+                    assert state == {"url": "resource://altnet-workspace/index.html", "title": "AltNet", "system": False, "remote": True}, state
+                    denied = client.call("WebDriver:ExecuteScript", {"script": "let s=Services.scriptSecurityManager,u=Services.io.newURI('resource://altnet-workspace/index.html');return [s.createContentPrincipal(Services.io.newURI('https://example.invalid/'),{}),s.createContentPrincipal(Services.io.newURI('http://127.0.0.1:5174/'),{}),s.createNullPrincipal({})].map(p=>{try{s.checkLoadURIWithPrincipal(p,u,0);return false}catch{return true}})", "args": []})["value"]
+                    assert denied == [True, True, True], "Обычному сайту нельзя загружать ресурсы клиентской панели"
+                    probe = client.call("WebDriver:ExecuteScript", {"script": """let w=Services.wm.getMostRecentWindow('navigator:browser'),mm=w.__workspace.client.messageManager;
+return new Promise(resolve=>{let timeout=w.setTimeout(()=>resolve({error:'timeout'}),10000);mm.addMessageListener('alt:test:reply',function listener(msg){mm.removeMessageListener('alt:test:reply',listener);w.clearTimeout(timeout);resolve(msg.data)});let code=`(async()=>{let result={};try{content.localStorage.setItem('altnet.synthetic.probe','1');result.local=content.localStorage.getItem('altnet.synthetic.probe')==='1';content.localStorage.removeItem('altnet.synthetic.probe')}catch(e){result.localError=e.name}try{await new Promise((resolve,reject)=>{let r=content.indexedDB.open('altnet-synthetic-probe',1);r.onupgradeneeded=()=>r.result.createObjectStore('test');r.onsuccess=()=>{r.result.close();resolve()};r.onerror=()=>reject(r.error)});result.idb=true}catch(e){result.idbError=e.name}result.origin=content.location.origin;result.secure=content.isSecureContext;result.react=!!content.document.querySelector('.altnet-shell');sendAsyncMessage('alt:test:reply',result)})()`;mm.loadFrameScript('data:application/javascript,'+encodeURIComponent(code),false)});""", "args": []})["value"]
+                    assert probe == {"local": True, "idb": True, "origin": "resource://altnet-workspace", "secure": True, "react": True}, probe
+                    if bundled_channel:
+                        def connection_status():
+                            return client.call("WebDriver:ExecuteScript", {"script": "let d=Services.wm.getMostRecentWindow('navigator:browser').document,e=d.getElementById('altnet-workspace-connection');return e&&!e.hidden?e.getAttribute('value'):null;", "args": []})["value"]
+                        status = wait_for(connection_status, "native child status in workspace", timeout=20)
+                        assert status.startswith("Тестовый сеанс · Tor"), status
+                        print("PASS: bundled native workspace receives real child-client status over its private channel")
+                    for width in (1440, 950, 700, 500):
+                        client.call("WebDriver:SetWindowRect", {"width": width, "height": 900})
+                        time.sleep(.4)
+                        layout = client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser'),d=w.document,p=d.getElementById('altnet-workspace'),t=d.getElementById('tabbrowser-tabbox');return {panel:p.getBoundingClientRect().width,tabs:t.getBoundingClientRect().width,position:w.getComputedStyle(p).position,hidden:p.hidden};", "args": []})["value"]
+                        assert layout["panel"] >= 280 and layout["tabs"] > 200 and not layout["hidden"], layout
+                        assert (layout["position"] == "absolute") == (width < 800), layout
+                        screenshot = client.call("WebDriver:TakeScreenshot", {})["value"]
+                        (root / f"bundled-workspace-{width}.png").write_bytes(base64.b64decode(screenshot))
+                        if width < 800:
+                            toggle = client.call("WebDriver:FindElement", {"using": "css selector", "value": "#altnet-workspace-toggle"})["value"][ELEMENT]
+                            client.call("WebDriver:ElementClick", {"id": toggle})
+                            hidden = client.call("WebDriver:ExecuteScript", {"script": "return Services.wm.getMostRecentWindow('navigator:browser').document.getElementById('altnet-workspace').hidden;", "args": []})["value"]
+                            assert hidden is True
+                            client.call("WebDriver:ElementClick", {"id": toggle})
+                    client.call("WebDriver:SetWindowRect", {"width": 1440, "height": 900})
+                    cleanup = client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser'),h=Services.io.getProtocolHandler('resource').QueryInterface(Ci.nsISubstitutingProtocolHandler);return (async()=>{w.__workspace.destroy();w.__workspace.destroy();delete w.__workspace;if(w.__workspaceSession){await w.__workspaceSession.close();delete w.__workspaceSession}return !h.hasSubstitution('altnet-workspace')})();", "args": []})["value"]
+                    assert cleanup is True
+                    late = client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser'),m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeWorkspaceShell.sys.mjs');return (async()=>{let release;let old=m.createBundledWorkspace(w,{session:{getStatus:()=>new Promise(r=>{release=r})}});old.destroy();let next=m.createBundledWorkspace(w);release({torConnected:true,internet:'verified'});await new Promise(r=>w.setTimeout(r,50));let hidden=w.document.getElementById('altnet-workspace-connection').hidden;next.destroy();return hidden})();", "args": []})["value"]
+                    assert late is True, "Поздний ответ закрытого сеанса не должен менять новую панель"
+                    replaced = client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser'),m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeWorkspaceShell.sys.mjs'),h=Services.io.getProtocolHandler('resource').QueryInterface(Ci.nsISubstitutingProtocolHandler),view=m.createBundledWorkspace(w);h.setSubstitution('altnet-workspace',Services.io.newURI('resource://gre/'));let before=h.getSubstitution('altnet-workspace').spec;view.destroy();let preserved=h.hasSubstitution('altnet-workspace')&&h.getSubstitution('altnet-workspace').spec===before;h.setSubstitution('altnet-workspace',null);return preserved;", "args": []})["value"]
+                    assert replaced is True, "Чужое переназначение ресурса нельзя удалять"
+                    print("PASS: bundled client React UI runs in a remote, non-system panel with isolated storage")
                 if native_workspace:
                     setup = """let w=Services.wm.getMostRecentWindow('navigator:browser');
 let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeWorkspaceShell.sys.mjs');
@@ -422,17 +474,20 @@ if __name__ == "__main__":
     parser.add_argument("--native-channel-from-stdin", action="store_true", help="Только тест: получить конфигурацию дочернего клиента через stdin")
     parser.add_argument("--native-tor-live-from-stdin", action="store_true", help="Только тест: запустить изолированный дочерний Tor-клиент")
     parser.add_argument("--native-workspace-from-stdin", action="store_true", help="Только тест: локальная тестовая копия интерфейса рядом с вкладкой")
+    parser.add_argument("--native-bundled-workspace", action="store_true", help="Только тест: панель из ресурсов изолированной сборки браузера")
+    parser.add_argument("--native-bundled-channel-from-stdin", action="store_true", help="Только тест: панель и собственный локальный дочерний клиент")
     parser.add_argument("--test-migration-url", help="Только тест: Vite на loopback с изолированными синтетическими данными")
     parser.add_argument("--test-site-tab-url", help="Только тест: интерфейс клиента на loopback с синтетическим профилем")
     args = parser.parse_args()
     if args.native_proof_live_from_stdin and not args.test_native_proof_module:
         parser.error("Для живой проверки нужен --test-native-proof-module")
-    if sum((args.native_proof_live_from_stdin, args.native_channel_from_stdin, args.native_tor_live_from_stdin, args.native_workspace_from_stdin)) > 1:
+    if sum((args.native_proof_live_from_stdin, args.native_channel_from_stdin, args.native_tor_live_from_stdin, args.native_workspace_from_stdin, args.native_bundled_workspace, args.native_bundled_channel_from_stdin)) > 1:
         parser.error("Нельзя совместить тестовые режимы stdin")
     native_live = json.loads(sys.stdin.readline(512)) if args.native_proof_live_from_stdin else None
     native_channel = json.loads(sys.stdin.readline(16384)) if args.native_channel_from_stdin else None
     native_tor = json.loads(sys.stdin.readline(16384)) if args.native_tor_live_from_stdin else None
     native_workspace = json.loads(sys.stdin.readline(1024)) if args.native_workspace_from_stdin else None
+    bundled_channel = json.loads(sys.stdin.readline(16384)) if args.native_bundled_channel_from_stdin else None
     if args.test_migration_url:
         match = re.fullmatch(r"http://127\.0\.0\.1:([1-9][0-9]{0,4})/", args.test_migration_url)
         if not match or int(match.group(1)) > 65535:
@@ -441,4 +496,4 @@ if __name__ == "__main__":
         match = re.fullmatch(r"http://127\.0\.0\.1:([1-9][0-9]{0,4})/", args.test_site_tab_url)
         if not match or int(match.group(1)) > 65535:
             parser.error("Нужен точный тестовый адрес loopback")
-    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor, native_workspace, args.test_migration_url, args.test_site_tab_url)
+    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor, native_workspace, args.test_migration_url, args.test_site_tab_url, args.native_bundled_workspace or args.native_bundled_channel_from_stdin, bundled_channel)
