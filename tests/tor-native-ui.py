@@ -10,6 +10,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import subprocess
@@ -62,7 +63,7 @@ def wait_for(callback, label, timeout=15):
     raise AssertionError(f"Timed out: {label}")
 
 
-def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None, native_workspace=None):
+def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None, native_workspace=None, migration_url=None):
     root = Path(tempfile.mkdtemp(prefix="altnet-native-ui-", dir=artifact_root))
     profile = root / "profile"
     for folder in (profile, root / "appdata", root / "localappdata"):
@@ -80,7 +81,7 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
         'user_pref("media.peerconnection.enabled", false);',
         'user_pref("browser.startup.homepage_override.mstone", "ignore");',
         f'user_pref("layout.css.prefers-color-scheme.content-override", {0 if theme == "dark" else 1});',
-        *(['user_pref("privacy.spoof_english", 2);'] if native_workspace else []),
+        *(['user_pref("privacy.spoof_english", 2);'] if native_workspace or migration_url else []),
     ]), encoding="utf-8")
     env = {**os.environ, "TEMP": str(artifact_root), "TMP": str(artifact_root),
            "APPDATA": str(root / "appdata"), "LOCALAPPDATA": str(root / "localappdata"),
@@ -140,6 +141,23 @@ def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proo
                     module = "NativeSessionChannel" if native_channel else "NativeWorkspaceShell"
                     denied = client.call("WebDriver:ExecuteScript", {"script": "let u='moz-src:///browser/components/abouttor/'+arguments[0]+'.sys.mjs'; return Promise.all([import(u).then(()=>false,()=>true),fetch(u).then(()=>false,()=>true)]);", "args": [module]})["value"]
                     assert denied == [True, True], "Обычная страница получила доступ к каналу клиента"
+                if migration_url:
+                    client.call("WebDriver:Navigate", {"url": migration_url})
+                    migration = client.call("WebDriver:ExecuteScript", {"script": """return (async()=>{
+                      const s=await import('/src/core/migration/browserSnapshot.ts');
+                      const e=await import('/src/core/migration/encryptedTransfer.ts');
+                      const t=await import('/src/core/migration/stagedTransfer.ts');
+                      localStorage.setItem('altnet.migration.synthetic','synthetic-only');
+                      let db=await new Promise((resolve,reject)=>{let q=indexedDB.open('altnet-ipfs-site-cache',1);q.onupgradeneeded=()=>q.result.createObjectStore('cars');q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
+                      await new Promise((resolve,reject)=>{let tx=db.transaction('cars','readwrite');tx.objectStore('cars').put(Uint8Array.from([0,1,2,250,255]).buffer,'profile:anon:synthetic');tx.oncomplete=resolve;tx.onabort=()=>reject(tx.error);});db.close();
+                      let key=e.newTransferKey(),jwe=await s.encryptStableBrowserSnapshot(key),id=await t.stageEncryptedSnapshot(jwe,key);
+                      let data=s.validateBrowserSnapshot(await t.readStagedSnapshot(id,key));
+                      return {found:data.local.some(([k,v])=>k==='altnet.migration.synthetic'&&v==='synthetic-only'),
+                              binary:data.databases.some(d=>d.name==='altnet-ipfs-site-cache'&&d.records.some(([k,v])=>k==='profile:anon:synthetic'&&v.kind==='bytes'&&v.value==='AAEC+v8=')),
+                              original:localStorage.getItem('altnet.migration.synthetic'), encrypted:!jwe.includes('synthetic-only')};
+                    })();""", "args": []})["value"]
+                    assert migration == {"found": True, "binary": True, "original": "synthetic-only", "encrypted": True}, migration
+                    print("PASS: isolated AltNet Gecko encrypts and stages synthetic client data without replacing it")
                 client.call("WebDriver:Navigate", {"url": "about:altnet"})
                 logo = client.call("WebDriver:ExecuteScript", {"script": "let img = document.querySelector('.mark img'); return {source: img?.getAttribute('src'), loaded: !!img?.naturalWidth};", "args": []})["value"]
                 assert logo == {"source": "chrome://branding/content/about-logo.png", "loaded": True}, logo
@@ -335,6 +353,7 @@ if __name__ == "__main__":
     parser.add_argument("--native-channel-from-stdin", action="store_true", help="Только тест: получить конфигурацию дочернего клиента через stdin")
     parser.add_argument("--native-tor-live-from-stdin", action="store_true", help="Только тест: запустить изолированный дочерний Tor-клиент")
     parser.add_argument("--native-workspace-from-stdin", action="store_true", help="Только тест: локальная тестовая копия интерфейса рядом с вкладкой")
+    parser.add_argument("--test-migration-url", help="Только тест: Vite на loopback с изолированными синтетическими данными")
     args = parser.parse_args()
     if args.native_proof_live_from_stdin and not args.test_native_proof_module:
         parser.error("Для живой проверки нужен --test-native-proof-module")
@@ -344,4 +363,8 @@ if __name__ == "__main__":
     native_channel = json.loads(sys.stdin.readline(16384)) if args.native_channel_from_stdin else None
     native_tor = json.loads(sys.stdin.readline(16384)) if args.native_tor_live_from_stdin else None
     native_workspace = json.loads(sys.stdin.readline(1024)) if args.native_workspace_from_stdin else None
-    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor, native_workspace)
+    if args.test_migration_url:
+        match = re.fullmatch(r"http://127\.0\.0\.1:([1-9][0-9]{0,4})/", args.test_migration_url)
+        if not match or int(match.group(1)) > 65535:
+            parser.error("Нужен точный тестовый адрес loopback")
+    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor, native_workspace, args.test_migration_url)
