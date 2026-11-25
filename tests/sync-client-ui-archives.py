@@ -77,6 +77,15 @@ class SyncArchivesTests(unittest.TestCase):
         manifest = json.loads((self.output / "SHA256.json").read_text(encoding="utf-8"))
         self.assertEqual(len(manifest["replaced_scripts"]), 4)
 
+    def test_refuses_transport_without_native_dependency(self):
+        scripts = self.root / "scripts"
+        scripts.mkdir()
+        for name in ("bridge_client.py", "site_onion.py", "site_share.py"):
+            (scripts / name).write_text("fixture", encoding="utf-8")
+        result = self.run_sync("--site-transport-dir", str(scripts))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.output.exists())
+
     def test_updates_catalog_verifier_in_both_formats(self):
         catalog = self.root / "tor-bridge-catalog.py"
         catalog.write_text("verified catalog", encoding="utf-8")

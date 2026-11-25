@@ -15,6 +15,12 @@ const load = async name => import(`data:text/javascript;base64,${Buffer.from(add
 const { AboutAltNetParent } = await load("AboutAltNetParent");
 const { AboutAltNetChild } = await load("AboutAltNetChild");
 
+test("experimental process channel is not exposed to web content", () => {
+  for (const name of ["AboutAltNetParent", "AboutAltNetChild"]) {
+    assert.doesNotMatch(addedFile(`browser/components/abouttor/${name}.sys.mjs`), /NativeSessionChannel|AboutAltNet:StartClient|AboutAltNet:GetStatus/);
+  }
+});
+
 function parentFixture(uri = "about:altnet", topLevel = true) {
   const calls = [];
   const parent = new AboutAltNetParent();
@@ -29,6 +35,9 @@ test("parent opens only the three fixed settings panes", () => {
   for (const pane of ["general", "privacy", "search"]) parent.receiveMessage({ name: "AboutAltNet:OpenPreferences", data: pane });
   for (const pane of ["", "about:config", "https://example.invalid", null, {}, "constructor", "__proto__"]) parent.receiveMessage({ name: "AboutAltNet:OpenPreferences", data: pane });
   parent.receiveMessage({ name: "different message", data: "privacy" });
+  for (const name of ["AboutAltNet:StartClient", "AboutAltNet:GetStatus", "AboutAltNet:OpenSite"]) {
+    parent.receiveMessage({ name, data: { path: "https://example.invalid/" } });
+  }
   assert.deepEqual(calls, ["general", "privacy", "search"]);
 });
 

@@ -195,17 +195,30 @@ class SOCKS(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
-def watch_native_parent(stream, server):
-    # stdin is reserved for the bootstrap. EOF or extra bytes end the session;
-    # no later input can be mistaken for a command from the trusted parent.
+def serve_native_parent(stream, output, server, manager):
+    # Only a bounded, allowlisted status command is accepted over this pipe.
     try:
-        stream.read(1)
+        while True:
+            try:
+                request_id = bridge_native.read_request(stream)
+            except ValueError:
+                break
+            if request_id is None:
+                break
+            try:
+                result = {"id": request_id, "ok": True, "status": bridge_native.public_route_status(manager)}
+            except Exception:
+                result = {"id": request_id, "ok": False, "error": "status_unavailable"}
+            output.write(json.dumps(result, separators=(",", ":")) + "\n")
+            output.flush()
+    except (OSError, ValueError):
+        pass
     finally:
         server.shutdown()
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     for name in ("state", "keyring", "dist", "tor", "transport"):
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--seed", type=Path)
@@ -220,7 +233,10 @@ def main():
     parser.add_argument("--parallel-probes", choices=(1, 2), type=int, default=2)
     parser.add_argument("--socks-port", type=int, default=17861)
     parser.add_argument("--native-stdio", action="store_true", help="Экспериментальный запуск дочернего сеанса через stdin/stdout")
+    parser.add_argument("--native-http-proof", action="store_true", help="Только для экспериментов: включить HTTP-подтверждение сеанса")
     args = parser.parse_args()
+    if args.native_http_proof and not args.native_stdio:
+        parser.error("HTTP-подтверждение доступно только в дочернем сеансе")
     native_secret = None
     if args.native_stdio:
         if args.port != 0 or args.socks_port != 0:
@@ -245,7 +261,7 @@ def main():
             sources.route = lambda: manager.active_port if not manager.paused else 0
             ui.dist, ui.authority = dist, f"127.0.0.1:{ui.server_port}"
             ui.token = secrets.token_urlsafe(32)
-            ui.native_secret = native_secret
+            ui.native_secret = native_secret if args.native_http_proof else None
             ui.manager = proxy.manager = manager
             ui.socks_port = proxy.server_address[1]
             ui.site_fetch = threading.BoundedSemaphore(1)
@@ -260,7 +276,7 @@ def main():
                     threading.Thread(target=service.serve_forever, daemon=True).start()
                 if args.native_stdio:
                     print(json.dumps({"protocol": bridge_native.PROTOCOL, "authority": ui.authority}, separators=(",", ":")), flush=True)
-                    threading.Thread(target=watch_native_parent, args=(sys.stdin.buffer, ui), daemon=True).start()
+                    threading.Thread(target=serve_native_parent, args=(sys.stdin.buffer, sys.stdout, ui, manager), daemon=True).start()
                 else:
                     print("AltNet http://" + ui.authority, flush=True)
                 ui.serve_forever()

@@ -20,7 +20,7 @@ from http.server import ThreadingHTTPServer
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import bridge_native
-from bridge_client import LocalUI, watch_native_parent
+from bridge_client import LocalUI, serve_native_parent
 
 
 def token(data):
@@ -112,15 +112,35 @@ class NativeSessionTests(unittest.TestCase):
         for data in (b"", b"x"):
             stopped = threading.Event()
             server = type("Server", (), {"shutdown": lambda self: stopped.set()})()
-            watch_native_parent(io.BytesIO(data), server)
+            serve_native_parent(io.BytesIO(data), io.StringIO(), server, None)
             self.assertTrue(stopped.is_set())
+
+    def test_pipe_allows_only_bounded_status_without_private_fields(self):
+        for raw in (b'{}\n', b'{"id":true,"method":"status"}\n', b'{"id":1,"method":"switch"}\n',
+                    b'{"id":1,"id":2,"method":"status"}\n', b'x' * 1025, b'{"id":1,"method":"status"}'):
+            with self.assertRaises(ValueError):
+                bridge_native.read_request(io.BytesIO(raw))
+        status = {"phase": "ready", "progress": 100, "connected": True, "internet": "verified", "secret": "bridge-string"}
+        manager = type("Manager", (), {"public_status": lambda self: status})()
+        server = type("Server", (), {"shutdown": lambda self: None})()
+        output = io.StringIO()
+        serve_native_parent(io.BytesIO(b'{"id":7,"method":"status"}\n'), output, server, manager)
+        response = json.loads(output.getvalue())
+        self.assertEqual(response["id"], 7)
+        self.assertTrue(response["status"]["torConnected"])
+        self.assertFalse(response["status"]["fastAvailable"])
+        self.assertNotIn("bridge-string", output.getvalue())
+        status["internet"] = "unexpected"
+        output = io.StringIO()
+        serve_native_parent(io.BytesIO(b'{"id":8,"method":"status"}\n'), output, server, manager)
+        self.assertEqual(json.loads(output.getvalue()), {"id": 8, "ok": False, "error": "status_unavailable"})
 
     def test_entrypoint_rejects_invalid_bootstrap_before_writing_or_binding(self):
         with tempfile.TemporaryDirectory(dir=os.environ.get("TEMP")) as tmp:
             root = Path(tmp)
             command = [sys.executable, "-B", str(ROOT / "scripts/bridge_client.py"), "--state", str(root / "state"),
                        "--dist", str(root / "ui"), "--tor", str(root / "tor"), "--transport", str(root / "transport"),
-                       "--keyring", str(root / "keyring"), "--port", "0", "--socks-port", "0", "--native-stdio"]
+                       "--keyring", str(root / "keyring"), "--port", "0", "--socks-port", "0", "--native-stdio", "--native-http-proof"]
             bad = json.dumps({"protocol": bridge_native.PROTOCOL, "secret": token(self.secret), "extra": 1}) + "\n"
             result = subprocess.run(command, input=bad, text=True, capture_output=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
@@ -128,6 +148,14 @@ class NativeSessionTests(unittest.TestCase):
             self.assertNotIn(token(self.secret), result.stdout + result.stderr)
             default_port = command.copy(); default_port[default_port.index("--port") + 1] = "17860"
             result = subprocess.run(default_port, input="", text=True, capture_output=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((root / "state").exists())
+            without_stdio = [item for item in command if item != "--native-stdio"]
+            result = subprocess.run(without_stdio, input="", text=True, capture_output=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((root / "state").exists())
+            abbreviated = ["--native-http-pr" if item == "--native-http-proof" else item for item in command]
+            result = subprocess.run(abbreviated, input="", text=True, capture_output=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
             self.assertFalse((root / "state").exists())
 
@@ -153,16 +181,17 @@ for (const [a,c,r] of [[p.authority+'0',p.challenge,p.response],[p.authority,cre
                                 text=True, capture_output=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_next_browser_overlay_contains_the_tested_verifier(self):
+    def test_next_browser_overlay_contains_the_tested_modules(self):
         patch = (ROOT / "browser/tor-browser/patches/0001-about-altnet.patch").read_text(encoding="utf-8")
-        name = "browser/components/abouttor/NativeSessionProof.sys.mjs"
-        header = f"diff --git a/{name} b/{name}\n"
-        self.assertEqual(patch.count(header), 1)
-        block = patch.split(header, 1)[1].split("\ndiff --git ", 1)[0]
-        added = [line[1:] for line in block.splitlines() if line.startswith("+") and not line.startswith("+++")]
-        module = (ROOT / "browser/tor-browser/native/NativeSessionProof.sys.mjs").read_text(encoding="utf-8")
-        self.assertEqual("\n".join(added) + "\n", module)
-        self.assertIn('+    "NativeSessionProof.sys.mjs",', patch)
+        for filename in ("NativeSessionProof.sys.mjs", "NativeSessionChannel.sys.mjs"):
+            name = "browser/components/abouttor/" + filename
+            header = f"diff --git a/{name} b/{name}\n"
+            self.assertEqual(patch.count(header), 1)
+            block = patch.split(header, 1)[1].split("\ndiff --git ", 1)[0]
+            added = [line[1:] for line in block.splitlines() if line.startswith("+") and not line.startswith("+++")]
+            module = (ROOT / "browser/tor-browser/native" / filename).read_text(encoding="utf-8")
+            self.assertEqual("\n".join(added) + "\n", module)
+            self.assertIn(f'+    "{filename}",', patch)
 
     def test_real_entrypoint_reports_only_via_child_pipe(self):
         # Mock the transport manager: no Tor, multicast or external network is used.
@@ -175,6 +204,7 @@ class Manager:
  def __init__(self,*a,**kw):
   self.stop=threading.Event();self.fetch=threading.Event();self.wake=threading.Event();self.lock=threading.RLock();self.paused=False;self.active_port=0
  def run(self): self.stop.wait()
+ def public_status(self): return {'phase':'starting','progress':0,'connected':False,'internet':'unchecked'}
 class Share:
  def __init__(self,*a): pass
  def stop(self): pass
@@ -187,7 +217,7 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
             for name in ("tor", "transport", "keyring"): (root / name).write_bytes(b"fixture")
             command = [sys.executable, "-u", "-c", shim, str(ROOT / "scripts"), "--state", str(root / "state"),
                        "--dist", str(dist), "--tor", str(root / "tor"), "--transport", str(root / "transport"),
-                       "--keyring", str(root / "keyring"), "--port", "0", "--socks-port", "0", "--native-stdio"]
+                       "--keyring", str(root / "keyring"), "--port", "0", "--socks-port", "0", "--native-stdio", "--native-http-proof"]
             proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             try:
@@ -205,6 +235,12 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
                     response = conn.getresponse(); body = json.loads(response.read()); self.assertEqual(response.status, 200)
                 finally: conn.close()
                 self.assertEqual(body["proof"], bridge_native.proof(self.secret, ready["authority"], self.challenge))
+                proc.stdin.write(b'{"id":1,"method":"status"}\n'); proc.stdin.flush()
+                status = json.loads(proc.stdout.readline())
+                self.assertEqual(status["id"], 1)
+                self.assertFalse(status["status"]["torConnected"])
+                self.assertFalse(status["status"]["fastAvailable"])
+                self.assertNotIn(token(self.secret), json.dumps(status))
                 browser = os.environ.get("ALTNET_NATIVE_TEST_BROWSER")
                 if browser:
                     command = [sys.executable, "-B", str(ROOT / "tests/tor-native-ui.py"), "--browser", browser,
@@ -235,7 +271,8 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
             keyring = root / "keyring"; keyring.write_bytes(b"empty test keyring")
             command = [sys.executable, "-u", "-B", str(ROOT / "scripts/bridge_client.py"), "--state", str(root / "state"),
                        "--dist", str(dist), "--tor", str(tor), "--transport", str(transport), "--keyring", str(keyring),
-                       "--port", "0", "--socks-port", "0", "--no-official", "--no-lan", "--native-stdio"]
+                       "--port", "0", "--socks-port", "0", "--no-official", "--no-lan", "--native-stdio", "--native-http-proof"]
+            normal_pipe_command = command[:-1]
             proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                     creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
             try:
@@ -243,6 +280,12 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
                 lines = queue.Queue(); threading.Thread(target=lambda: lines.put(proc.stdout.readline()), daemon=True).start()
                 ready = json.loads(lines.get(timeout=20))
                 self.assertEqual(ready["protocol"], bridge_native.PROTOCOL)
+                proc.stdin.write(b'{"id":1,"method":"status"}\n'); proc.stdin.flush()
+                lines = queue.Queue(); threading.Thread(target=lambda: lines.put(proc.stdout.readline()), daemon=True).start()
+                status = json.loads(lines.get(timeout=10))
+                self.assertEqual(status["id"], 1)
+                self.assertFalse(status["status"]["torConnected"])
+                self.assertFalse(status["status"]["fastAvailable"])
                 command = [sys.executable, "-B", str(ROOT / "tests/tor-native-ui.py"), "--browser", str(browser_path),
                            "--theme", "light", "--expect-no-updater", "--test-native-proof-module", "--native-proof-live-from-stdin"]
                 result = subprocess.run(command, input=json.dumps({"secret": list(self.secret), "authority": ready["authority"]}),
@@ -256,6 +299,72 @@ sys.argv=['bridge_client.py']+sys.argv[2:];bridge_client.main()
                     proc.terminate(); proc.wait(timeout=10)
                 for stream in (proc.stdin, proc.stdout, proc.stderr):
                     if stream: stream.close()
+            # The preferred pipe mode does not expose the optional HTTP proof endpoint.
+            proc = subprocess.Popen(normal_pipe_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            try:
+                proc.stdin.write(json.dumps({"protocol": bridge_native.PROTOCOL, "secret": token(self.secret)}).encode() + b"\n"); proc.stdin.flush()
+                lines = queue.Queue(); threading.Thread(target=lambda: lines.put(proc.stdout.readline()), daemon=True).start()
+                ready = json.loads(lines.get(timeout=20)); port = int(ready["authority"].split(":")[1])
+                conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+                try:
+                    conn.request("GET", "/api/native/attest?challenge=" + self.challenge, headers={"Host": ready["authority"]})
+                    response = conn.getresponse(); self.assertEqual(response.status, 404); response.read()
+                finally: conn.close()
+                proc.stdin.close(); self.assertEqual(proc.wait(timeout=20), 0)
+            finally:
+                if proc.poll() is None:
+                    proc.terminate(); proc.wait(timeout=10)
+                for stream in (proc.stdin, proc.stdout, proc.stderr):
+                    if stream: stream.close()
+
+    def test_gecko_spawns_and_controls_the_unmocked_client_over_pipes(self):
+        browser = os.environ.get("ALTNET_NATIVE_TEST_BROWSER")
+        if not browser:
+            self.skipTest("Set ALTNET_NATIVE_TEST_BROWSER to an isolated browser with the test modules")
+        browser_path = Path(browser).resolve(strict=True); tor_dir = browser_path.parent / "TorBrowser/Tor"
+        tor, transport = tor_dir / "tor.exe", tor_dir / "PluggableTransports/lyrebird.exe"
+        if not tor.is_file() or not transport.is_file():
+            self.skipTest("The isolated browser copy lacks the bundled Tor binaries")
+        with tempfile.TemporaryDirectory(dir=os.environ.get("TEMP")) as tmp:
+            root = Path(tmp); dist = root / "ui"; dist.mkdir(); (dist / "index.html").write_text("<html><head></head></html>")
+            keyring = root / "keyring"; keyring.write_bytes(b"empty test keyring")
+            args = [str(ROOT / "scripts/bridge_client.py"), "--state", str(root / "state"), "--dist", str(dist),
+                    "--tor", str(tor), "--transport", str(transport), "--keyring", str(keyring), "--no-official", "--no-lan"]
+            fake_header = "import os,sys,time\nfrom pathlib import Path\nPath(sys.argv[1]).write_text(str(os.getpid()))\nsys.stdin.buffer.readline()\n"
+            fixtures = {
+                "bad-ready": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\ntime.sleep(60)\n",
+                "bad-status": fake_header + "print('{\"protocol\":\"altnet-native-v1\",\"authority\":\"127.0.0.1:1\"}',flush=True)\nsys.stdin.buffer.readline()\nprint('{\"id\":1,\"ok\":true,\"status\":{\"phase\":\"ready\",\"progress\":100,\"torConnected\":true,\"internet\":\"verified\",\"fastAvailable\":true}}',flush=True)\ntime.sleep(60)\n",
+                "hung": fake_header + "time.sleep(60)\n",
+            }
+            fake_args = {}
+            for name, source in fixtures.items():
+                script = root / (name + ".py"); script.write_text(source, encoding="utf-8")
+                fake_args[name] = [str(script), str(root / (name + ".pid"))]
+            command = [sys.executable, "-B", str(ROOT / "tests/tor-native-ui.py"), "--browser", str(browser_path),
+                       "--theme", "dark", "--expect-no-updater", "--native-channel-from-stdin"]
+            config = {"command": sys.executable, "args": args, "badReadyArgs": fake_args["bad-ready"],
+                      "badStatusArgs": fake_args["bad-status"], "hangArgs": fake_args["hung"]}
+            result = subprocess.run(command, input=json.dumps(config),
+                                    text=True, capture_output=True, timeout=90)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("PASS: Gecko starts a verified-test child, reads bounded status over pipes and closes it", result.stdout)
+            if os.name == "nt":
+                import ctypes
+                kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+                kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+                kernel.OpenProcess.restype = ctypes.c_void_p
+                kernel.GetExitCodeProcess.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+                kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+                for name in fixtures:
+                    pid = int((root / (name + ".pid")).read_text())
+                    handle = kernel.OpenProcess(0x1000, 0, pid)
+                    if handle:
+                        code = ctypes.c_ulong()
+                        try:
+                            self.assertTrue(kernel.GetExitCodeProcess(handle, ctypes.byref(code)))
+                            self.assertNotEqual(code.value, 259, f"Test child {name} was not stopped")
+                        finally: kernel.CloseHandle(handle)
 
 
 if __name__ == "__main__":
