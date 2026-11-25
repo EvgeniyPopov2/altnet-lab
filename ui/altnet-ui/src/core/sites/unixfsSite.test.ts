@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { CarWriter } from "@ipld/car";
 import { importer } from "ipfs-unixfs-importer";
+import { exporter } from "ipfs-unixfs-exporter";
 import { CID } from "multiformats/cid";
 import { parseBrowserAddress } from "./browserNavigation";
 import { verifyUnixfsSite } from "./unixfsSite";
 
-async function fixture() {
+async function fixture(sharded = false) {
   const blocks = new Map<string, { cid: CID; bytes: Uint8Array }>();
-  const store = { async put(cid: CID, source: Uint8Array | Iterable<Uint8Array> | AsyncIterable<Uint8Array>) {
+  const store = { *get(cid: CID) { const block = blocks.get(cid.toString()); if (!block) throw new Error("Missing fixture block"); yield block.bytes; }, async put(cid: CID, source: Uint8Array | Iterable<Uint8Array> | AsyncIterable<Uint8Array>) {
     const parts: number[] = [];
     if (source instanceof Uint8Array) parts.push(...source);
     else for await (const part of source) parts.push(...part);
@@ -16,7 +17,7 @@ async function fixture() {
   } };
   const enc = new TextEncoder();
   let root: CID | undefined;
-  for await (const entry of importer([{ path: "index.html", content: enc.encode("<h1>UnixFS</h1>") }, { path: "about.html", content: enc.encode("<p>О нас</p>") }], store, { wrapWithDirectory: true, cidVersion: 0, rawLeaves: false })) root = entry.cid;
+  for await (const entry of importer([{ path: "index.html", content: enc.encode("<h1>UnixFS</h1>") }, { path: "about.html", content: enc.encode("<p>О нас</p>") }], store, { wrapWithDirectory: true, cidVersion: 0, rawLeaves: false, ...(sharded ? { shardSplitThresholdBytes: 1 } : {}) })) root = entry.cid;
   if (!root) throw new Error("fixture root missing");
   async function car(items = [...blocks.values()], carRoot = root!) {
     const { writer, out } = CarWriter.create([carRoot]);
@@ -24,7 +25,7 @@ async function fixture() {
     for (const item of items) await writer.put(item);
     await writer.close(); return output;
   }
-  return { root, blocks: [...blocks.values()], car };
+  return { root, blocks: [...blocks.values()], car, store };
 }
 
 describe("проверка стандартного сайта UnixFS", () => {
@@ -44,5 +45,12 @@ describe("проверка стандартного сайта UnixFS", () => {
     await expect(verifyUnixfsSite(await f.car(corrupt), f.root.toString())).rejects.toThrow(/целостности/);
     await expect(verifyUnixfsSite(await f.car(f.blocks.slice(0, -1)), f.root.toString())).rejects.toThrow();
     await expect(verifyUnixfsSite(await f.car(), f.blocks[0].cid.toString())).rejects.toThrow(/не совпадает/);
+  });
+  it("читает страницы из шардированного каталога UnixFS", async () => {
+    const f = await fixture(true);
+    const rootEntry = await exporter(f.root, f.store);
+    expect(rootEntry.type === "directory" && rootEntry.unixfs.type).toBe("hamt-sharded-directory");
+    const site = await verifyUnixfsSite(await f.car(), f.root.toString());
+    expect(site.pages.map(page => page.path).sort()).toEqual(["about.html", "index.html"]);
   });
 });
