@@ -91,8 +91,33 @@ try {
 
   // CID is a real content address: reopen from the verified local CAR,
   // navigate inside it, persist a bookmark and re-check on every read.
+  // Simulate a cache created before profiles were separated: copying must be explicit.
+  await page.evaluate(async root => {
+    const db = await new Promise((resolve,reject) => { const req = indexedDB.open('altnet-ipfs-site-cache',1); req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error); });
+    await new Promise((resolve,reject) => {
+      const tx = db.transaction('cars','readwrite'), store = tx.objectStore('cars');
+      const request = store.get(`profile:anon:${root}`);
+      request.onsuccess = () => { if (!request.result) { tx.abort(); return; } store.put(request.result,root); store.delete(`profile:anon:${root}`); };
+      tx.oncomplete=resolve; tx.onabort=()=>reject(tx.error || new Error('Missing cache fixture')); tx.onerror=()=>reject(tx.error);
+    });
+    db.close();
+  }, root);
   await address.fill(`ipfs://${root}`);
   await address.press('Enter');
+  await page.getByText('Локальная копия IPFS не найдена').waitFor();
+  await page.getByRole('button',{name:'Скопировать старую копию'}).click();
+  await home.getByText('Привет из редактора').waitFor();
+  assert.equal(await page.evaluate(async root => {
+    const db = await new Promise((resolve,reject) => { const req = indexedDB.open('altnet-ipfs-site-cache',1); req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error); });
+    const result = await new Promise((resolve,reject) => { const tx=db.transaction('cars','readonly'), request=tx.objectStore('cars').get(root); request.onsuccess=()=>resolve(Boolean(request.result)); request.onerror=()=>reject(request.error); });
+    db.close(); return result;
+  }, root), true, 'Старая копия не должна удаляться');
+  await page.evaluate(() => { localStorage.setItem('altnet.profile.v1','fast'); window.dispatchEvent(new CustomEvent('altnet:profile',{detail:{profile:'fast'}})); });
+  await page.getByText('Профиль AltNet: приватный быстрый',{exact:false}).waitFor();
+  await address.fill(`ipfs://${root}`);
+  await address.press('Enter');
+  await page.getByText('Локальная копия IPFS не найдена').waitFor();
+  await page.evaluate(() => { localStorage.setItem('altnet.profile.v1','anon'); window.dispatchEvent(new CustomEvent('altnet:profile',{detail:{profile:'anon'}})); });
   await home.getByText('Привет из редактора').waitFor();
   await home.getByRole('link',{name:'Контакты'}).click();
   await page.frameLocator('iframe[title="Контакты"]').getByText('Вторая страница сайта').waitFor();
@@ -107,7 +132,7 @@ try {
   assert.equal(await address.inputValue(),ipfsUrl);
   await page.evaluate(async ({root, damaged}) => {
     const db = await new Promise((resolve,reject) => { const req = indexedDB.open('altnet-ipfs-site-cache',1); req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error); });
-    await new Promise((resolve,reject) => { const tx = db.transaction('cars','readwrite'); tx.objectStore('cars').put(new Uint8Array(damaged).buffer,root); tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error); });
+    await new Promise((resolve,reject) => { const tx = db.transaction('cars','readwrite'); tx.objectStore('cars').put(new Uint8Array(damaged).buffer,`profile:anon:${root}`); tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error); });
     db.close();
   }, {root,damaged:[...damaged]});
   await page.getByRole('button',{name:'Обновить',exact:true}).click();

@@ -1,5 +1,6 @@
 import { SITE_MAX_CAR_BYTES, verifySitePackage, type VerifiedSite } from "./ipfsSitePackage";
 import { parseBrowserRoot } from "./siteCid";
+import type { PrivacyProfile } from "../policy/types";
 
 async function verifyCar(car: Uint8Array, root: string): Promise<VerifiedSite> {
   const cid = parseBrowserRoot(root);
@@ -12,6 +13,13 @@ async function verifyCar(car: Uint8Array, root: string): Promise<VerifiedSite> {
 // Это локальный кэш, он не выполняет сетевых запросов и не подтверждает автора.
 const DATABASE = "altnet-ipfs-site-cache";
 const STORE = "cars";
+
+export function ipfsCacheKey(root: string, profile?: PrivacyProfile): string {
+  const canonical = parseBrowserRoot(root).toString();
+  if (profile === undefined) return canonical; // Старый общий список сохраняется без изменений.
+  if (profile !== "anon" && profile !== "fast") throw new Error("Неизвестный профиль кэша IPFS.");
+  return `profile:${profile}:${canonical}`;
+}
 
 async function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -45,18 +53,18 @@ async function transact<T>(mode: IDBTransactionMode, action: (store: IDBObjectSt
   } finally { db.close(); }
 }
 
-export async function cacheVerifiedSite(car: Uint8Array, root: string): Promise<VerifiedSite> {
+export async function cacheVerifiedSite(car: Uint8Array, root: string, profile?: PrivacyProfile): Promise<VerifiedSite> {
   if (!(car instanceof Uint8Array) || !car.length || car.length > SITE_MAX_CAR_BYTES) throw new Error("Некорректный размер архива сайта.");
   const snapshot = car.slice();
   const site = await verifyCar(snapshot, root);
-  await transact<void>("readwrite", store => { store.put(snapshot.buffer, site.root); });
+  await transact<void>("readwrite", store => { store.put(snapshot.buffer, ipfsCacheKey(site.root, profile)); });
   return site;
 }
 
-export async function readCachedSite(root: string): Promise<VerifiedSite | null> {
+export async function readCachedSite(root: string, profile?: PrivacyProfile): Promise<VerifiedSite | null> {
   const canonical = parseBrowserRoot(root).toString();
   const value = await transact<unknown>("readonly", (store, result) => {
-    const request = store.get(canonical);
+    const request = store.get(ipfsCacheKey(canonical, profile));
     request.onsuccess = () => result(request.result);
   });
   if (value === undefined) return null;
@@ -64,7 +72,30 @@ export async function readCachedSite(root: string): Promise<VerifiedSite | null>
   return verifyCar(new Uint8Array(value), canonical);
 }
 
-export async function deleteCachedSite(root: string): Promise<void> {
+export async function deleteCachedSite(root: string, profile?: PrivacyProfile): Promise<void> {
   const canonical = parseBrowserRoot(root).toString();
-  await transact<void>("readwrite", store => { store.delete(canonical); });
+  await transact<void>("readwrite", store => { store.delete(ipfsCacheKey(canonical, profile)); });
+}
+
+/** Копирует старую запись только по запросу, с повторной проверкой и без замены новой. */
+export async function copyLegacyCachedSite(root: string, profile: PrivacyProfile): Promise<VerifiedSite | null> {
+  const canonical = parseBrowserRoot(root).toString();
+  const key = ipfsCacheKey(canonical, profile);
+  const value = await transact<unknown>("readonly", (store, result) => {
+    const request = store.get(canonical);
+    request.onsuccess = () => result(request.result);
+  });
+  if (value === undefined) return null;
+  if (!(value instanceof ArrayBuffer) || !value.byteLength || value.byteLength > SITE_MAX_CAR_BYTES) throw new Error("Старая копия IPFS повреждена; данные не изменены.");
+  const snapshot = value.slice(0);
+  const site = await verifyCar(new Uint8Array(snapshot), canonical);
+  // add выполняется в транзакции и не перезаписывает существующую запись,
+  // даже если другая вкладка создала её после начала проверки.
+  try {
+    await transact<void>("readwrite", store => { store.add(snapshot, key); });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "ConstraintError") throw new Error("В этом профиле уже есть копия IPFS; данные не изменены.");
+    throw error;
+  }
+  return site;
 }

@@ -86,6 +86,8 @@ export default function BrowserAlt({
   const [ipfsState, setIpfsState] = useState<{ root: string; loading: boolean; site: VerifiedSite | null; error: string } | null>(null);
   const [ipfsDeleteError, setIpfsDeleteError] = useState("");
   const deletingIpfs = useRef(new Set<string>());
+  const copyingIpfs = useRef(false);
+  const [copyingIpfsVisible, setCopyingIpfsVisible] = useState(false);
   const siteFrameRef = useRef<HTMLIFrameElement>(null);
   const deletingSites = useRef(new Set<string>());
 
@@ -133,13 +135,13 @@ export default function BrowserAlt({
     let active = true;
     const root = address.root;
     setIpfsState({ root, loading: true, site: null, error: "" });
-    import("../core/sites/ipfsSiteCache").then(({ readCachedSite }) => readCachedSite(root)).then(site => {
+    import("../core/sites/ipfsSiteCache").then(({ readCachedSite }) => readCachedSite(root, privacyProfile)).then(site => {
       if (active) setIpfsState({ root, loading: false, site, error: "" });
     }, error => {
       if (active) setIpfsState({ root, loading: false, site: null, error: error instanceof Error ? error.message : "Не удалось проверить локальную копию IPFS." });
     });
     return () => { active = false; };
-  }, [activeTab?.url, activeTab?.reloadToken]);
+  }, [activeTab?.url, activeTab?.reloadToken, privacyProfile]);
 
   const activeUrl = activeTab?.url;
   useEffect(() => {
@@ -343,16 +345,31 @@ export default function BrowserAlt({
   };
 
   const deleteIpfsCopy = async (root: string) => {
-    if (deletingIpfs.current.has(root) || !window.confirm("Удалить локальную копию IPFS? Закладки и другие публикации сохранятся.")) return;
+    if (deletingIpfs.current.has(root) || !window.confirm("Удалить локальную копию IPFS в выбранном профиле? Старые копии, другие профили, закладки и публикации сохранятся.")) return;
     deletingIpfs.current.add(root);
     try {
       const { deleteCachedSite } = await import("../core/sites/ipfsSiteCache");
-      await deleteCachedSite(root);
+      await deleteCachedSite(root, privacyProfile);
       setIpfsDeleteError("");
       setIpfsState(current => current?.root === root ? { root, loading: false, site: null, error: "" } : current);
     } catch {
       setIpfsDeleteError("Не удалось удалить локальную копию IPFS; повторите попытку.");
     } finally { deletingIpfs.current.delete(root); }
+  };
+
+  const copyOldIpfs = async (root: string) => {
+    if (copyingIpfs.current) return;
+    copyingIpfs.current = true;
+    setCopyingIpfsVisible(true);
+    setIpfsDeleteError("");
+    try {
+      const { copyLegacyCachedSite } = await import("../core/sites/ipfsSiteCache");
+      const site = await copyLegacyCachedSite(root, privacyProfile);
+      if (!site) throw new Error("Старая общая копия с этим CID не найдена.");
+      setIpfsState(current => current?.root === root ? { root, loading: false, site, error: "" } : current);
+    } catch (error) {
+      setIpfsDeleteError(error instanceof Error ? error.message : "Не удалось проверить и скопировать старую копию IPFS.");
+    } finally { copyingIpfs.current = false; setCopyingIpfsVisible(false); }
   };
 
   const importCar = async (source: "file" | "onion") => {
@@ -373,7 +390,7 @@ export default function BrowserAlt({
         data = await fetchOnionCar(onionAddress.trim(), root);
       }
       const { cacheVerifiedSite } = await import("../core/sites/ipfsSiteCache");
-      const site = await cacheVerifiedSite(data, root);
+      const site = await cacheVerifiedSite(data, root, privacyProfile);
       if (parseBrowserRoot(root).code !== 0x71) {
         setCarFile(null); setCarCid(""); setActiveUrl(`ipfs://${site.root}`); return;
       }
@@ -402,7 +419,7 @@ export default function BrowserAlt({
       const { fetchOnionCar } = await import("../core/sites/onionCar");
       const bytes = await fetchOnionCar(address.onion, address.root);
       const { cacheVerifiedSite } = await import("../core/sites/ipfsSiteCache");
-      await cacheVerifiedSite(bytes, address.root);
+      await cacheVerifiedSite(bytes, address.root, privacyProfile);
       const nextUrl = `ipfs://${address.root}`;
       setTabs(previous => previous.map(tab => {
         // A completed download must not redirect a tab that the user has since navigated.
@@ -607,7 +624,8 @@ export default function BrowserAlt({
     if (state.error) return <div role="alert" className="rounded-2xl border border-amber-400/50 p-6 text-amber-100">{state.error} <button type="button" className="underline" onClick={() => void deleteIpfsCopy(address.root)}>Удалить копию IPFS</button></div>;
     if (!state.site) return <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-white/80">
       <div className="text-xl font-semibold">Локальная копия IPFS не найдена</div>
-      <p className="mt-2 text-sm">Автоматический поиск в сети пока не подключён. Импортируйте CAR с этим CID на главной странице.</p>
+      <p className="mt-2 text-sm">Автоматический поиск в сети пока не подключён. Импортируйте CAR с этим CID на главной странице или проверьте старую общую копию.</p>
+      <button type="button" disabled={copyingIpfsVisible} className="mt-3 mr-2 rounded bg-white/10 px-3 py-2 disabled:opacity-50" onClick={() => void copyOldIpfs(address.root)}>{copyingIpfsVisible ? "Проверяем…" : "Скопировать старую копию"}</button>
       <button type="button" className="mt-3 rounded bg-white/10 px-3 py-2" onClick={() => { setCarCid(address.root); setActiveUrl("alt://home"); }}>На главную</button>
     </div>;
     const page = state.site.pages.find(item => item.path === address.path);
@@ -774,7 +792,7 @@ export default function BrowserAlt({
 
       <details className="browser-profile-notice">
         <summary>Профиль AltNet: {privacyProfile === "anon" ? "анонимный" : "приватный быстрый"} · подключение браузера ещё не настроено</summary>
-        <p>Выбор профиля пока не управляет маршрутом этого браузера. Списки закладок разделены по выбранному профилю, но другие локальные данные пока общие; полноценная изоляция ещё не подключена. Получение сайта с указанного onion-адреса использует управляемый Tor; при недоступности Tor прямое подключение не выполняется.</p>
+        <p>Выбор профиля пока не управляет маршрутом этого браузера. Вкладки, закладки и локальные копии IPFS разделены по выбранному профилю, но некоторые другие данные пока общие; полноценная изоляция ещё не подключена. Получение сайта с указанного onion-адреса использует управляемый Tor; при недоступности Tor прямое подключение не выполняется.</p>
       </details>
 
       {navigationError && <p id="browser-address-error" role="alert" className="rounded-lg border border-amber-500/50 bg-amber-950/70 px-3 py-2 text-sm text-amber-100">{navigationError}</p>}

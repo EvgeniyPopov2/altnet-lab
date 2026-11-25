@@ -1,5 +1,5 @@
 import { createSitePackage } from "../src/core/sites/ipfsSitePackage";
-import { cacheVerifiedSite, deleteCachedSite, readCachedSite } from "../src/core/sites/ipfsSiteCache";
+import { cacheVerifiedSite, copyLegacyCachedSite, deleteCachedSite, readCachedSite } from "../src/core/sites/ipfsSiteCache";
 import { prepareLocalPreviewHtml } from "../src/core/sites/localPreview";
 import { CarWriter } from "@ipld/car";
 import { CID } from "multiformats/cid";
@@ -10,6 +10,15 @@ async function run(): Promise<void> {
   const pack = await createSitePackage("Проверка", [{ path: "index.html", title: "Главная", html }]);
   const verified = await cacheVerifiedSite(pack.car, pack.root);
   if (verified.root !== pack.root || (await readCachedSite(pack.root))?.pages[0].html !== html) throw new Error("Повторное чтение отличается от исходной страницы");
+  if (await readCachedSite(pack.root, "anon") || await readCachedSite(pack.root, "fast")) throw new Error("Старая копия появилась в профиле без явного переноса");
+  await copyLegacyCachedSite(pack.root, "anon");
+  if (!(await readCachedSite(pack.root, "anon")) || await readCachedSite(pack.root, "fast")) throw new Error("Копия перенесена не в тот профиль");
+  let duplicateRejected = false;
+  try { await copyLegacyCachedSite(pack.root, "anon"); } catch { duplicateRejected = true; }
+  if (!duplicateRejected || !(await readCachedSite(pack.root, "anon"))) throw new Error("Повторный перенос перезаписал запись профиля");
+  await cacheVerifiedSite(pack.car, pack.root, "fast");
+  await deleteCachedSite(pack.root, "anon");
+  if (await readCachedSite(pack.root, "anon") || !(await readCachedSite(pack.root, "fast")) || !(await readCachedSite(pack.root))) throw new Error("Удаление затронуло другую копию");
   const bad = pack.car.slice();
   const marker = new TextEncoder().encode("AltNet Tor test");
   let offset = -1;
@@ -36,6 +45,10 @@ async function run(): Promise<void> {
   rejected = false;
   try { await readCachedSite(pack.root); } catch { rejected = true; }
   if (!rejected) throw new Error("Повреждённый кэш не отклонён");
+  rejected = false;
+  try { await copyLegacyCachedSite(pack.root, "anon"); } catch { rejected = true; }
+  if (!rejected || await readCachedSite(pack.root, "anon") || !(await readCachedSite(pack.root, "fast"))) throw new Error("Повреждённая старая копия нарушила данные профилей");
+  await deleteCachedSite(pack.root, "fast");
   await deleteCachedSite(pack.root);
   if (await readCachedSite(pack.root) !== null) throw new Error("Повреждённая копия не удалена");
   const rawBytes = new TextEncoder().encode("<h1>UnixFS Tor test</h1>");
