@@ -6,11 +6,14 @@ profile, with non-local networking disabled and a non-routable SOCKS proxy.
 """
 import argparse
 import base64
+import hashlib
+import hmac
 import json
 import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -59,7 +62,7 @@ def wait_for(callback, label, timeout=15):
     raise AssertionError(f"Timed out: {label}")
 
 
-def run(browser, artifact_root, theme, expect_no_updater=False):
+def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None):
     root = Path(tempfile.mkdtemp(prefix="altnet-native-ui-", dir=artifact_root))
     profile = root / "profile"
     for folder in (profile, root / "appdata", root / "localappdata"):
@@ -73,6 +76,7 @@ def run(browser, artifact_root, theme, expect_no_updater=False):
         'user_pref("network.proxy.socks", "127.0.0.1");',
         'user_pref("network.proxy.socks_port", 1);',
         'user_pref("network.proxy.socks_remote_dns", true);',
+        'user_pref("network.proxy.no_proxies_on", "127.0.0.1,localhost");',
         'user_pref("media.peerconnection.enabled", false);',
         'user_pref("browser.startup.homepage_override.mstone", "ignore");',
         f'user_pref("layout.css.prefers-color-scheme.content-override", {0 if theme == "dark" else 1});',
@@ -148,6 +152,18 @@ def run(browser, artifact_root, theme, expect_no_updater=False):
                 # Read the chrome stylesheet in this isolated test process; no browser
                 # preferences or permissions are changed by this check.
                 client.call("Marionette:SetContext", {"value": "chrome"})
+                if test_native_proof_module:
+                    secret, nonce, authority = bytes(range(32)), bytes(range(32, 64)), "127.0.0.1:17777"
+                    encoded = lambda value: base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+                    payload = b"altnet-native-v1\0" + authority.encode("ascii") + b"\0" + nonce
+                    response = {"protocol": "altnet-native-v1", "proof": encoded(hmac.new(secret, payload, hashlib.sha256).digest())}
+                    native_proof = client.call("WebDriver:ExecuteScript", {"script": "let m = ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionProof.sys.mjs'); let s = Uint8Array.from(arguments[0]); let p = arguments[1]; return Promise.all([m.verifyNativeProof(s,p.authority,p.challenge,p.response),m.verifyNativeProof(s,p.authority+'1',p.challenge,p.response)]);", "args": [list(secret), {"authority": authority, "challenge": encoded(nonce), "response": response}]})["value"]
+                    assert native_proof == [True, False], native_proof
+                    print("PASS: Gecko verifies a bound native-session proof and rejects a changed address")
+                    if native_live:
+                        live = client.call("WebDriver:ExecuteScript", {"script": "let m = ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeSessionProof.sys.mjs'); let p=arguments[0]; let w=Services.wm.getMostRecentWindow('navigator:browser'); let c=m.createNativeChallenge(); return w.fetch('http://'+p.authority+'/api/native/attest?challenge='+c,{cache:'no-store',credentials:'omit',redirect:'error'}).then(r=>r.json()).then(async response=>[await m.verifyNativeProof(Uint8Array.from(p.secret),p.authority,c,response),await m.verifyNativeProof(Uint8Array.from(p.secret),p.authority,m.createNativeChallenge(),response)]);", "args": [native_live]})["value"]
+                        assert live == [True, False], live
+                        print("PASS: Gecko verifies the live child response and rejects replay")
                 result = client.call("WebDriver:ExecuteScript", {"script": "let w = Services.wm.getMostRecentWindow('navigator:browser'); let d = w.document; let bg = d.querySelector('#urlbar > .urlbar-background'); let tab = d.querySelector('#TabsToolbar .tab-background'); let ext = Services.prefs.getBoolPref('network.protocol-handler.external-default'); let brand = Services.strings.createBundle('chrome://branding/locale/brand.properties').GetStringFromName('brandShortName'); return {loaded: !!d.querySelector('link[href*=\\\"altnet-chrome.css\\\"]'), radius: bg && w.getComputedStyle(bg).borderTopLeftRadius, tabRadius: tab && w.getComputedStyle(tab).borderTopLeftRadius, brand, externalDefault: ext, externalAlt: Services.prefs.getBoolPref('network.protocol-handler.external.alt', ext), externalIpfs: Services.prefs.getBoolPref('network.protocol-handler.external.ipfs', ext)};", "args": []})["value"]
                 assert result["loaded"] and result["radius"] == "10px" and result["tabRadius"] == "10px", result
                 assert "AltNet" in result["brand"] and "Tor" not in result["brand"], result
@@ -213,5 +229,10 @@ if __name__ == "__main__":
     parser.add_argument("--artifacts", type=Path, default=Path(os.environ.get("TEMP", tempfile.gettempdir())))
     parser.add_argument("--theme", choices=("light", "dark"), default="dark")
     parser.add_argument("--expect-no-updater", action="store_true")
+    parser.add_argument("--test-native-proof-module", action="store_true")
+    parser.add_argument("--native-proof-live-from-stdin", action="store_true", help="Только тест: получить параметры временного дочернего клиента через stdin")
     args = parser.parse_args()
-    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater)
+    if args.native_proof_live_from_stdin and not args.test_native_proof_module:
+        parser.error("Для живой проверки нужен --test-native-proof-module")
+    native_live = json.loads(sys.stdin.readline(512)) if args.native_proof_live_from_stdin else None
+    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live)

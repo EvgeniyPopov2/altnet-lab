@@ -13,6 +13,7 @@ import select
 import shutil
 import socket
 import socketserver
+import sys
 import threading
 from urllib.parse import urlsplit
 
@@ -21,6 +22,7 @@ from bridge_power import Budget
 from bridge_sources import Sources, catalog
 from site_onion import fetch_car, MAX_CAR
 from site_share import Share
+import bridge_native
 
 
 class HTTP(BaseHTTPRequestHandler):
@@ -56,15 +58,30 @@ class Mirror(HTTP):
 
 class LocalUI(HTTP):
     def local(self):
-        return self.headers.get("Host") == self.server.authority
+        return self.headers.get_all("Host", []) == [self.server.authority]
 
     def authorized(self):
-        return hmac.compare_digest(self.headers.get("X-AltNet-Session", "").encode(), self.server.token.encode())
+        values = self.headers.get_all("X-AltNet-Session", [])
+        return len(values) == 1 and hmac.compare_digest(values[0].encode(), self.server.token.encode())
 
     def do_GET(self):
         if not self.local():
             return self.reply(403)
         route = urlsplit(self.path).path
+        if route == "/api/native/attest":
+            secret = getattr(self.server, "native_secret", None)
+            if secret is None:
+                return self.reply(404)
+            # A single canonical 32-byte challenge; no secrets in the URL.
+            parsed = urlsplit(self.path)
+            query = parsed.query
+            if parsed.fragment or not query.startswith("challenge=") or "&" in query:
+                return self.reply(400)
+            try:
+                tag = bridge_native.proof(secret, self.server.authority, query[len("challenge="):])
+            except ValueError:
+                return self.reply(400)
+            return self.reply(200, json.dumps({"protocol": bridge_native.PROTOCOL, "proof": tag}).encode("ascii"))
         if route == "/api/bridges/status":
             if not self.authorized():
                 return self.reply(403)
@@ -83,7 +100,7 @@ class LocalUI(HTTP):
         self.reply(200, file, mimetypes.guess_type(file.name)[0] or "application/octet-stream")
 
     def do_POST(self):
-        if (not self.local() or self.headers.get("Origin") != "http://" + self.server.authority
+        if (not self.local() or self.headers.get_all("Origin", []) != ["http://" + self.server.authority]
                 or not self.authorized()):
             return self.reply(403)
         if self.path == "/api/sites/share":
@@ -178,6 +195,15 @@ class SOCKS(socketserver.ThreadingTCPServer):
     daemon_threads = True
 
 
+def watch_native_parent(stream, server):
+    # stdin is reserved for the bootstrap. EOF or extra bytes end the session;
+    # no later input can be mistaken for a command from the trusted parent.
+    try:
+        stream.read(1)
+    finally:
+        server.shutdown()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("state", "keyring", "dist", "tor", "transport"):
@@ -193,7 +219,16 @@ def main():
     parser.add_argument("--port", type=int, default=17860)
     parser.add_argument("--parallel-probes", choices=(1, 2), type=int, default=2)
     parser.add_argument("--socks-port", type=int, default=17861)
+    parser.add_argument("--native-stdio", action="store_true", help="Экспериментальный запуск дочернего сеанса через stdin/stdout")
     args = parser.parse_args()
+    native_secret = None
+    if args.native_stdio:
+        if args.port != 0 or args.socks_port != 0:
+            parser.error("Для дочернего сеанса оба локальных порта должны выбираться системой (0)")
+        try:
+            native_secret = bridge_native.read_bootstrap(sys.stdin.buffer)
+        except ValueError:
+            parser.error("Некорректное сообщение дочернего сеанса")
     os.umask(0o077)
     state = args.state.resolve()
     state.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -210,19 +245,24 @@ def main():
             sources.route = lambda: manager.active_port if not manager.paused else 0
             ui.dist, ui.authority = dist, f"127.0.0.1:{ui.server_port}"
             ui.token = secrets.token_urlsafe(32)
+            ui.native_secret = native_secret
             ui.manager = proxy.manager = manager
             ui.socks_port = proxy.server_address[1]
             ui.site_fetch = threading.BoundedSemaphore(1)
             ui.site_share = Share(manager)
             ui.site_publish = threading.BoundedSemaphore(1)
             if args.peer or args.mirror_host:
-                print("Обмен каталогом с соседями отключён до интеграции сетевых профилей.", flush=True)
+                print("Обмен каталогом с соседями отключён до интеграции сетевых профилей.", file=sys.stderr if args.native_stdio else sys.stdout, flush=True)
             worker = threading.Thread(target=manager.run)
             try:
                 worker.start()
                 for service in [proxy]:
                     threading.Thread(target=service.serve_forever, daemon=True).start()
-                print("AltNet http://" + ui.authority, flush=True)
+                if args.native_stdio:
+                    print(json.dumps({"protocol": bridge_native.PROTOCOL, "authority": ui.authority}, separators=(",", ":")), flush=True)
+                    threading.Thread(target=watch_native_parent, args=(sys.stdin.buffer, ui), daemon=True).start()
+                else:
+                    print("AltNet http://" + ui.authority, flush=True)
                 ui.serve_forever()
             except KeyboardInterrupt:
                 pass
