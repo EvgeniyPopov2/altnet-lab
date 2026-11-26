@@ -1,3 +1,4 @@
+import { workspaceRecords } from "../nativeWorkspaceRecords";
 import { isRecord } from "../records";
 
 export type PublishedPage = { path: string; title: string; html: string };
@@ -62,6 +63,15 @@ function isPages(value: unknown, html: string, count: number): value is Publishe
 }
 
 export async function listIndexedSites(): Promise<SiteMetaRecord[]> {
+  const native = workspaceRecords();
+  if (native) {
+    const [rows] = await native.batch(DATABASE,[{op:"metadata",key:META}]);
+    if (!Array.isArray(rows)) throw new Error("Список публикаций повреждён.");
+    return rows.map(([key, value]) => {
+      if (!isMeta(value) || key !== META + value.slug) throw new Error("Список публикаций повреждён.");
+      return value;
+    });
+  }
   return transact("readonly", (store, result, fail) => {
     const entries: SiteMetaRecord[] = [];
     const request = store.openCursor(IDBKeyRange.bound(META, META + "\uffff"));
@@ -75,7 +85,9 @@ export async function listIndexedSites(): Promise<SiteMetaRecord[]> {
 }
 
 export async function readIndexedSite(slug: string): Promise<SiteRecord | null> {
-  const value = await transact<{ meta?: unknown; html?: unknown; pages?: unknown }>("readonly", (store, result) => {
+  const native = workspaceRecords();
+  const value = native ? await native.batch(DATABASE,[META,HTML,PAGES].map(prefix => ({op:"read",key:prefix+slug})))
+    .then(([meta,html,pages]) => ({meta,html,pages})) : await transact<{ meta?: unknown; html?: unknown; pages?: unknown }>("readonly", (store, result) => {
     const found: { meta?: unknown; html?: unknown; pages?: unknown } = {};
     const meta = store.get(META + slug), html = store.get(HTML + slug), pages = store.get(PAGES + slug);
     meta.onsuccess = () => { found.meta = meta.result; };
@@ -98,6 +110,15 @@ export async function writeIndexedSite(site: SiteRecord, replace: boolean): Prom
   delete rest.pageCount;
   if (pages !== undefined && (!isPages(pages, html, pages.length) || pages.length < 2 || pages.length > 500)) throw new Error("Некорректный список страниц публикации.");
   const meta: SiteMetaRecord = { ...rest, ...(pages ? { pageCount: pages.length } : {}) };
+  const native = workspaceRecords();
+  if (native) {
+    const op = replace ? "put" : "add";
+    const changes: Parameters<typeof native.batch>[1] = [{op,key:META+site.slug,value:meta},{op,key:HTML+site.slug,value:html}];
+    if (pages) changes.push({op,key:PAGES+site.slug,value:pages});
+    else if (replace) changes.push({op:"delete",key:PAGES+site.slug});
+    await native.batch(DATABASE,changes);
+    return;
+  }
   await transact<void>("readwrite", store => {
     if (replace) {
       store.put(meta, META + site.slug); store.put(html, HTML + site.slug);
@@ -110,5 +131,10 @@ export async function writeIndexedSite(site: SiteRecord, replace: boolean): Prom
 }
 
 export async function deleteIndexedSite(slug: string): Promise<void> {
+  const native = workspaceRecords();
+  if (native) {
+    await native.batch(DATABASE,[META,HTML,PAGES].map(prefix => ({op:"delete",key:prefix+slug})));
+    return;
+  }
   await transact<void>("readwrite", store => { store.delete(META + slug); store.delete(HTML + slug); store.delete(PAGES + slug); });
 }

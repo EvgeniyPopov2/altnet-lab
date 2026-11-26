@@ -1,8 +1,10 @@
 import { parseSiteRoot, SITE_MAX_CAR_BYTES } from "./ipfsSitePackage";
 
+import { workspaceRecords } from "../nativeWorkspaceRecords";
+
 export type OnionShareStatus =
   | { active: false; reason: string }
-  | { active: true; onion: string; cid: string; reachability: "unverified" };
+  | { active: true; onion: string; cid: string; reachability: "unverified"; mesh?: boolean };
 
 async function request(path: string, init: RequestInit): Promise<OnionShareStatus> {
   const token = document.querySelector<HTMLMetaElement>('meta[name="altnet-session"]')?.content;
@@ -24,17 +26,28 @@ async function request(path: string, init: RequestInit): Promise<OnionShareStatu
   throw new Error("Некорректный ответ клиента.");
 }
 
+async function linuxShare(op: "status" | "stop" | "start", key = "", value?: unknown): Promise<OnionShareStatus> {
+  const records = workspaceRecords();
+  if (!records?.linuxSites) throw new Error("Служба публикации недоступна.");
+  const [status] = await records.batch("site-publication", [{op, key, value}]);
+  return status as OnionShareStatus;
+}
+
 export function shareStatus(): Promise<OnionShareStatus> {
+  if (workspaceRecords()?.linuxSites) return linuxShare("status");
   return request("/api/sites/share", { method: "GET" });
 }
 
 /** Вызывается только после проверки CAR и явного действия пользователя. */
-export function startOnionShare(cid: string, car: Uint8Array): Promise<OnionShareStatus> {
+export function startOnionShare(cid: string, car: Uint8Array, mesh = false): Promise<OnionShareStatus> {
   parseSiteRoot(cid);
   if (!car.length || car.length > SITE_MAX_CAR_BYTES) throw new Error("Некорректный размер пакета.");
+  if (workspaceRecords()?.linuxSites) return linuxShare("start", cid, {mode:mesh ? "both" : "tor", car:new Uint8Array(car).buffer});
+  if (mesh) throw new Error("Раздача через Yggdrasil недоступна.");
   return request("/api/sites/share", { method: "POST", headers: { "Content-Type": "application/vnd.ipld.car", "X-AltNet-Site-CID": cid }, body: new Uint8Array(car).buffer });
 }
 
 export function stopOnionShare(): Promise<OnionShareStatus> {
+  if (workspaceRecords()?.linuxSites) return linuxShare("stop");
   return request("/api/sites/share-stop", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
 }

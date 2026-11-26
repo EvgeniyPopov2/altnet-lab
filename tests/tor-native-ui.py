@@ -63,7 +63,80 @@ def wait_for(callback, label, timeout=15):
     raise AssertionError(f"Timed out: {label}")
 
 
-def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None, native_workspace=None, migration_url=None, site_tab_url=None, native_bundled_workspace=False, bundled_channel=None):
+def check_native_addresses(client, root, installed):
+    # Рабочее окно должно появиться само, без вызова createBundledWorkspace из теста.
+    def script(code, *args):
+        return client.call("WebDriver:ExecuteScript", {"script": code, "args": list(args)})["value"]
+
+    window = "let w=Services.wm.getMostRecentWindow('navigator:browser');"
+    ready = wait_for(lambda: script(window + "return w.gBrowserInit.altNetWorkspace?.client.contentTitle || null;"), "startup workspace")
+    assert ready == "AltNet", ready
+    if installed:
+        status = wait_for(lambda: (value if (value := script(window +
+            "return w.document.getElementById('altnet-workspace-connection')?.getAttribute('value') || '';")).startswith("Клиент AltNet · Tor") else None),
+            "existing installed client via OS-verified socket")
+        print("PASS: active client in native window:", status)
+    entry = Path(__file__).resolve().parents[1] / "ui/altnet-ui"
+    fixture = root / "unixfs.mjs"
+    build = "require('esbuild').buildSync({entryPoints:['tests/unixfs-network-fixture.ts'],bundle:true,platform:'node',format:'esm',outfile:process.argv[1]})"
+    subprocess.run(["node", "-e", build, str(fixture)], cwd=entry, check=True, capture_output=True)
+    subprocess.run(["node", str(fixture), "create", str(root)], check=True, capture_output=True)
+    cid = (root / "root.txt").read_text().strip()
+    car = base64.b64encode((root / "site.car").read_bytes()).decode("ascii")
+
+    def type_address(value):
+        # Реальные клавиатурные события проходят через обработчик Gecko.
+        script(window + "w.gURLBar.focus();w.gURLBar.select();")
+        bar = client.call("WebDriver:FindElement", {"using": "css selector", "value": "#urlbar-input"})["value"][ELEMENT]
+        client.call("WebDriver:ElementSendKeys", {"id": bar, "text": value + "\ue007"})
+
+    def context(name):
+        client.call("Marionette:SetContext", {"value": name})
+
+    def view(text):
+        context("content")
+        def iframe():
+            try:
+                return client.call("WebDriver:FindElement", {"using": "css selector", "value": "iframe"})["value"]
+            except RuntimeError:
+                return None
+        frame = wait_for(iframe, "sandboxed site tab")
+        assert script("return document.querySelector('iframe').getAttribute('sandbox');") == "allow-scripts"
+        client.call("WebDriver:SwitchToFrame", {"id": frame})
+        wait_for(lambda: text in script("return document.body?.innerText || '';"), "verified site content")
+        assert script("return document.body.dataset.attack || null;") is None
+        client.call("WebDriver:SwitchToFrame", {"id": None})
+        context("chrome")
+
+    type_address("alt://site/missing")
+    wait_for(lambda: script(window + "return w.gBrowser.selectedBrowser.currentURI.spec;").startswith("resource://altnet-workspace/index.html#altnet-open?"), "typed local URL")
+    context("content")
+    wait_for(lambda: "Локальная копия сайта не найдена" in script("return document.body?.innerText || '';"), "missing site")
+    script("""
+      const [cid, car] = arguments;
+      localStorage.setItem('altnet.sites.published.index.v1',JSON.stringify([{slug:'typed',title:'Typed site',createdAt:1,updatedAt:1}]));
+      localStorage.setItem('altnet.sites.published.site.v1:typed','<h1>Native typed Alt</h1>');
+      return new Promise((resolve,reject)=>{
+        const r=indexedDB.open('altnet-ipfs-site-cache',1);
+        r.onupgradeneeded=()=>r.result.createObjectStore('cars');r.onerror=()=>reject(r.error);
+        r.onsuccess=()=>{const db=r.result,tx=db.transaction('cars','readwrite');
+          tx.objectStore('cars').put(Uint8Array.from(atob(car), x=>x.charCodeAt(0)).buffer,'profile:anon:'+cid);
+          tx.oncomplete=()=>{db.close();resolve(true)};tx.onabort=()=>reject(tx.error)};
+      });""", cid, car)
+    context("chrome")
+    type_address("alt://site/typed")
+    view("Native typed Alt")
+    type_address("ipfs://" + cid)
+    view("Проверка UnixFS через Tor")
+    type_address("ipfs://broken")
+    context("content")
+    wait_for(lambda: "Некорректная ссылка" in script("return document.body?.innerText || '';"), "invalid local address")
+    client.call("WebDriver:Navigate", {"url": "about:altnet"})
+    context("chrome")
+    print("PASS: automatic workspace startup, real address bar, sandboxed Alt/UnixFS tabs and local errors")
+
+
+def run(browser, artifact_root, theme, expect_no_updater=False, test_native_proof_module=False, native_live=None, native_channel=None, native_tor=None, native_workspace=None, migration_url=None, site_tab_url=None, native_bundled_workspace=False, bundled_channel=None, installed=False):
     root = Path(tempfile.mkdtemp(prefix="altnet-native-ui-", dir=artifact_root))
     profile = root / "profile"
     for folder in (profile, root / "appdata", root / "localappdata"):
@@ -316,9 +389,11 @@ return w.__altnetNativeTestSession.getOnionCar(p.onion,p.cid,'anon').then(async 
                     finally:
                         client.call("WebDriver:ExecuteScript", {"script": "let w=Services.wm.getMostRecentWindow('navigator:browser');let s=w.__altnetNativeTestSession;delete w.__altnetNativeTestSession;return s.close();", "args": []})
                 if native_bundled_workspace:
+                    check_native_addresses(client, root, installed)
                     setup = """let w=Services.wm.getMostRecentWindow('navigator:browser'),p=arguments[0];return (async()=>{
 let m=ChromeUtils.importESModule('moz-src:///browser/components/abouttor/NativeWorkspaceShell.sys.mjs');
 let h=Services.io.getProtocolHandler('resource').QueryInterface(Ci.nsISubstitutingProtocolHandler);
+w.gBrowserInit.altNetWorkspace.destroy(); w.gBrowserInit.altNetWorkspace=null;
 if(h.hasSubstitution('altnet-workspace'))throw Error('Unexpected existing mapping');
 h.setSubstitution('altnet-workspace',Services.io.newURI('resource://gre/'));
 let before=h.getSubstitution('altnet-workspace').spec;
@@ -474,6 +549,7 @@ if __name__ == "__main__":
     parser.add_argument("--native-channel-from-stdin", action="store_true", help="Только тест: получить конфигурацию дочернего клиента через stdin")
     parser.add_argument("--native-tor-live-from-stdin", action="store_true", help="Только тест: запустить изолированный дочерний Tor-клиент")
     parser.add_argument("--native-workspace-from-stdin", action="store_true", help="Только тест: локальная тестовая копия интерфейса рядом с вкладкой")
+    parser.add_argument("--test-installed-workspace", action="store_true", help="Проверить подключение к действующему клиенту без изменения мостов")
     parser.add_argument("--native-bundled-workspace", action="store_true", help="Только тест: панель из ресурсов изолированной сборки браузера")
     parser.add_argument("--native-bundled-channel-from-stdin", action="store_true", help="Только тест: панель и собственный локальный дочерний клиент")
     parser.add_argument("--test-migration-url", help="Только тест: Vite на loopback с изолированными синтетическими данными")
@@ -496,4 +572,4 @@ if __name__ == "__main__":
         match = re.fullmatch(r"http://127\.0\.0\.1:([1-9][0-9]{0,4})/", args.test_site_tab_url)
         if not match or int(match.group(1)) > 65535:
             parser.error("Нужен точный тестовый адрес loopback")
-    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor, native_workspace, args.test_migration_url, args.test_site_tab_url, args.native_bundled_workspace or args.native_bundled_channel_from_stdin, bundled_channel)
+    run(args.browser.resolve(strict=True), args.artifacts.resolve(strict=True), args.theme, args.expect_no_updater, args.test_native_proof_module, native_live, native_channel, native_tor, native_workspace, args.test_migration_url, args.test_site_tab_url, args.native_bundled_workspace or args.native_bundled_channel_from_stdin or args.test_installed_workspace, bundled_channel, args.test_installed_workspace)

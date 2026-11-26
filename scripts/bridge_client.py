@@ -24,6 +24,7 @@ from bridge_manager import Manager
 from bridge_power import Budget
 from bridge_sources import Sources, catalog
 from site_onion import fetch_car, MAX_CAR
+from site_mesh import MeshRoute
 from site_share import Share
 import bridge_native
 
@@ -89,6 +90,10 @@ class LocalUI(HTTP):
             if not self.authorized():
                 return self.reply(403)
             return self.reply(200, json.dumps(self.server.manager.public_status()).encode())
+        if route == "/api/sites/mesh-route":
+            if not self.authorized():
+                return self.reply(403)
+            return self.reply(200, json.dumps({"configured": getattr(self.server, "mesh_route", None) is not None}).encode())
         if route == "/api/sites/share":
             if not self.authorized():
                 return self.reply(403)
@@ -115,9 +120,9 @@ class LocalUI(HTTP):
         if self.headers.get_content_type() != "application/json":
             return self.reply(403)
         allowed = {"/api/bridges/" + a: a for a in ("refresh", "switch", "manual", "pause", "resume")}
-        if self.path not in allowed and self.path not in ("/api/sites/onion-car", "/api/sites/share-stop", "/api/browser/standalone"):
+        if self.path not in allowed and self.path not in ("/api/sites/onion-car", "/api/sites/mesh-car", "/api/sites/share-stop", "/api/browser/standalone"):
             return self.reply(404)
-        if self.path in ("/api/browser/standalone", "/api/sites/onion-car") and (self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) != 1):
+        if self.path in ("/api/browser/standalone", "/api/sites/onion-car", "/api/sites/mesh-car") and (self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) != 1):
             return self.reply(400)
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -146,6 +151,21 @@ class LocalUI(HTTP):
         if self.path == "/api/sites/share-stop":
             self.server.site_share.stop()
             return self.reply(200, json.dumps(self.server.site_share.status()).encode())
+        if self.path == "/api/sites/mesh-car":
+            if set(body) != {"cid", "profile"} or body["profile"] != "fast":
+                return self.reply(400)
+            route = getattr(self.server, "mesh_route", None)
+            if not route:
+                return self.reply(409)
+            if not self.server.site_fetch.acquire(blocking=False):
+                return self.reply(429)
+            try:
+                car = route.fetch(body["cid"], lambda: not self.server.manager.stop.is_set() and not self.server.manager.paused)
+                return self.reply(200, car, "application/vnd.ipld.car")
+            except (ValueError, OSError, HTTPException):
+                return self.reply(502)
+            finally:
+                self.server.site_fetch.release()
         if self.path == "/api/sites/onion-car":
             if set(body) != {"onion", "cid", "profile"} or body.get("profile") not in ("anon", "fast"):
                 return self.reply(400)
@@ -336,6 +356,7 @@ def main():
     parser.add_argument("--socks-port", type=int, default=17861)
     parser.add_argument("--native-stdio", action="store_true", help="Экспериментальный запуск дочернего сеанса через stdin/stdout")
     parser.add_argument("--native-http-proof", action="store_true", help="Только для экспериментов: включить HTTP-подтверждение сеанса")
+    parser.add_argument("--yggdrasil-route", type=Path, help="Локальная конфигурация доверенного шлюза CAR внутри Yggdrasil")
     parser.add_argument("--standalone-browser", type=Path, help="Явно заданный исполняемый файл для запуска браузера в отдельном окне")
     args = parser.parse_args()
     if args.standalone_browser and (not args.standalone_browser.is_absolute() or not args.standalone_browser.is_file()
@@ -358,6 +379,10 @@ def main():
     dist = args.dist.resolve()
     if not (dist / "index.html").is_file() or not all(p.is_file() for p in (args.tor, args.transport, args.keyring)):
         parser.error("Нужны сборка интерфейса, Tor, транспорт obfs4 и доверенный ключ")
+    try:
+        mesh_route = MeshRoute.from_file(args.yggdrasil_route) if args.yggdrasil_route else None
+    except (ValueError, OSError):
+        parser.error("Не удалось прочитать конфигурацию Yggdrasil")
     with ThreadingHTTPServer(("127.0.0.1", args.port), LocalUI) as ui, SOCKS(("127.0.0.1", args.socks_port), Forward) as proxy:
         with catalog.catalog_lock(state / "client"):
             sources = Sources(state / "public", args.keyring.resolve(), args.gpgv, official=not args.no_official)
@@ -374,6 +399,7 @@ def main():
             ui.manager = proxy.manager = manager
             ui.socks_port = proxy.server_address[1]
             ui.site_fetch = threading.BoundedSemaphore(1)
+            ui.mesh_route = mesh_route
             ui.site_share = Share(manager)
             ui.site_publish = threading.BoundedSemaphore(1)
             if args.peer or args.mirror_host:

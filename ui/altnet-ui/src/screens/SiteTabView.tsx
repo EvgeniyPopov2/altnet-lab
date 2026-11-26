@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import LocalSiteFrame from "../components/LocalSiteFrame";
 import { parseBrowserAddress } from "../core/sites/browserNavigation";
-import { readCachedSite } from "../core/sites/ipfsSiteCache";
+import { workspaceRecords } from "../core/nativeWorkspaceRecords";
+import { readCachedSite, verifyCar } from "../core/sites/ipfsSiteCache";
 import { getPublishedSite } from "../core/sites/published";
 import { encodeSitePath } from "../core/sites/sitePath";
 import { parseSiteTabHash, siteTabHash, type SiteTabAddress } from "../core/sites/siteTabAddress";
@@ -14,6 +15,7 @@ export default function SiteTabView() {
   const [target, setTarget] = useState<SiteTabAddress | null>(() => parseSiteTabHash(window.location.hash));
   const [state, setState] = useState<LoadState | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
+  const network = useRef<{key:string; pending:Promise<SiteContent>} | null>(null);
   const key = target ? `${target.profile}:${target.address}` : "";
 
   useEffect(() => {
@@ -27,9 +29,21 @@ export default function SiteTabView() {
     let live = true;
     const current = parseBrowserAddress(target.address);
     const load = async (): Promise<SiteContent | null> => {
-      if (current.kind === "ipfs") {
+      if (current.kind === "ipfs" || current.kind === "onion-share") {
         const site = await readCachedSite(current.root, target.profile);
-        return site ? { pages: site.pages, resources: site.resources } : null;
+        if (site) return site;
+        const records = workspaceRecords();
+        if (!records) return null;
+        const sourceKey = target.profile + ":" + current.root;
+        if (network.current?.key === sourceKey) return network.current.pending;
+        if (current.kind === "ipfs" && target.profile !== "fast") return null;
+        const pending = records.batch("site-transport", [{ profile:target.profile, cid:current.root, onion:current.kind === "onion-share" ? current.onion : undefined }])
+          .then(([bytes]) => {
+            if (!(bytes instanceof ArrayBuffer)) throw new Error("Пустой ответ узла");
+            return verifyCar(new Uint8Array(bytes), current.root);
+          });
+        network.current = {key:sourceKey,pending};
+        try { return await pending; } catch (error) { if (network.current?.pending === pending) network.current = null; throw error; }
       }
       if (current.kind === "site") {
         const site = await getPublishedSite(current.slug);
@@ -48,19 +62,20 @@ export default function SiteTabView() {
   const current = target ? parseBrowserAddress(target.address) : null;
   const content = state?.key === key ? state.content : null;
   const paths = content?.pages.map(page => page.path) ?? [];
-  const page = current && (current.kind === "site" || current.kind === "ipfs") ? content?.pages.find(item => item.path === current.path) : null;
+  const path = current?.kind === "onion-share" ? "index.html" : current?.kind === "ipfs" || current?.kind === "site" ? current.path : "";
+  const page = content?.pages.find(item => item.path === path);
 
   useEffect(() => { document.title = page ? `${page.title} — AltNet` : "Сайт AltNet"; }, [page]);
 
   useEffect(() => {
-    if (!target || !current || (current.kind !== "site" && current.kind !== "ipfs") || !content) return;
+    if (!target || !current || (current.kind !== "site" && current.kind !== "ipfs" && current.kind !== "onion-share") || !content) return;
     const onMessage = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || !event.data || event.data.type !== "altnet.local-page" ||
           typeof event.data.path !== "string" || !content.pages.some(item => item.path === event.data.path)) return;
       const fragment: unknown = event.data.fragment;
       if (fragment !== undefined && (typeof fragment !== "string" || (fragment !== "" && !/^[a-zA-Z0-9_-]{1,128}$/.test(fragment)))) return;
-      const base = current.kind === "ipfs" ? `ipfs://${current.root}` : `alt://site/${current.slug}`;
-      const path = event.data.path === "index.html" ? "" : `/${current.kind === "ipfs" ? encodeSitePath(event.data.path) : event.data.path}`;
+      const base = current.kind !== "site" ? `ipfs://${current.root}` : `alt://site/${current.slug}`;
+      const path = event.data.path === "index.html" ? "" : `/${current.kind !== "site" ? encodeSitePath(event.data.path) : event.data.path}`;
       try {
         const hash = siteTabHash(`${base}${path}${fragment ? `#${fragment}` : ""}`, target.profile);
         history.pushState(null, "", hash);
@@ -74,14 +89,14 @@ export default function SiteTabView() {
   return <main className="flex h-dvh min-h-0 flex-col bg-slate-950 text-slate-100">
     <header className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-slate-700 px-4 py-2 text-sm">
       <strong>AltNet</strong><span className="order-3 w-full min-w-0 break-all text-slate-300 sm:order-none sm:w-auto sm:flex-1">{target?.address ?? "Некорректный адрес"}</span>
-      {target && <span className="ml-auto text-xs text-slate-400">{target.profile === "fast" ? "Быстрый профиль · локально" : "Анонимный профиль · локально"}</span>}
+      {target && <span className="ml-auto text-xs text-slate-400">{target.profile === "fast" ? "Быстрый профиль" : "Анонимный профиль"}</span>}
     </header>
     {!target ? <p role="alert" className="p-5">Некорректная ссылка на локальный сайт.</p> :
       state?.key !== key ? <p role="status" className="p-5">Проверяем сайт…</p> :
       state.error ? <p role="alert" className="p-5">{state.error}</p> :
       !content ? <p role="alert" className="p-5">Локальная копия сайта не найдена в этом профиле браузера.</p> :
       !page ? <p role="alert" className="p-5">Страница отсутствует в локальной копии сайта.</p> : <>
-        <p className="shrink-0 bg-slate-900 px-4 py-1 text-xs text-slate-300">{current?.kind === "ipfs" ? "Копия проверена по CID; автор не подтверждён. " : "Локальная публикация. "}Внешние ресурсы и произвольные скрипты отключены.</p>
+        <p className="shrink-0 bg-slate-900 px-4 py-1 text-xs text-slate-300">{current?.kind !== "site" ? "Копия проверена по CID; автор не подтверждён. " : "Локальная публикация. "}Внешние ресурсы и произвольные скрипты отключены.</p>
         {content.warning && <p role="alert" className="px-4 py-1 text-xs text-amber-300">{content.warning}</p>}
         <LocalSiteFrame key={key} frameRef={frame} title={page.title} html={page.html} paths={paths} fragment={current?.kind === "ipfs" || current?.kind === "site" ? current.fragment : ""} resources={content.resources} pagePath={page.path} className="min-h-0 w-full flex-1 border-0 bg-white" />
       </>}

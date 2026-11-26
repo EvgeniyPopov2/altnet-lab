@@ -113,7 +113,7 @@ def main():
     ui = collect_ui(args.dist)
     replacements = {}
     if args.site_transport_dir:
-        for name in ("bridge_client.py", "bridge_native.py", "site_onion.py", "site_share.py"):
+        for name in ("bridge_client.py", "bridge_native.py", "site_onion.py", "site_share.py", "site_mesh.py"):
             path = args.site_transport_dir / name
             if path.is_symlink() or not path.is_file():
                 raise ValueError("Missing site transport script: " + name)

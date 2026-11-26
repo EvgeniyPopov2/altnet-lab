@@ -407,13 +407,35 @@ export default function BrowserAlt({
     } finally { copyingIpfs.current = false; setCopyingIpfsVisible(false); }
   };
 
-  const importCar = async (source: "file" | "onion") => {
+  const [meshConfigured, setMeshConfigured] = useState(false);
+  useEffect(() => {
+    const token = document.querySelector<HTMLMetaElement>('meta[name="altnet-session"]')?.content;
+    const native = window.location.protocol === "resource:" && window.location.hostname === "altnet-workspace" ? window.altNetRecords : undefined;
+    if (native?.linuxSites && privacyProfile === "fast") {
+      let active = true;
+      native.batch("site-publication", [{op:"mesh-configured",key:""}]).then(([ready]) => {
+        if (active) setMeshConfigured(ready === true);
+      }, () => { if (active) setMeshConfigured(false); });
+      return () => { active = false; };
+    }
+    if (!token || privacyProfile !== "fast") return;
+    const controller = new AbortController();
+    fetch("/api/sites/mesh-route", { mode: "same-origin", cache: "no-store", redirect: "error",
+      headers: { "X-AltNet-Session": token }, signal: controller.signal })
+      .then(async response => response.ok && (await response.json()).configured === true)
+      .then(configured => { if (!controller.signal.aborted) setMeshConfigured(configured); })
+      .catch(() => { if (!controller.signal.aborted) setMeshConfigured(false); });
+    return () => controller.abort();
+  }, [privacyProfile]);
+
+  const importCar = async (source: "file" | "onion" | "mesh") => {
     if (carImportBusy.current || (source === "file" && !carFile)) return;
     if (source === "onion" && privacyProfile !== "anon") {
       setCarError("Быстрый маршрут пока не подключён. Для получения сайта через Tor выберите анонимный профиль.");
       return;
     }
-    const controller = source === "onion" ? new AbortController() : null;
+    if (source === "mesh" && (privacyProfile !== "fast" || !meshConfigured)) return;
+    const controller = source === "file" ? null : new AbortController();
     carAbort.current = controller;
     carImportBusy.current = true;
     setCarLoading(true);
@@ -426,6 +448,9 @@ export default function BrowserAlt({
       if (source === "file") {
         if (!carFile || !carFile.size || carFile.size > SITE_MAX_CAR_BYTES) throw new Error("Некорректный размер файла CAR.");
         data = new Uint8Array(await carFile.arrayBuffer());
+      } else if (source === "mesh") {
+        const { fetchMeshCar } = await import("../core/sites/onionCar");
+        data = await fetchMeshCar(root, privacyProfile, controller?.signal);
       } else {
         const { fetchOnionCar } = await import("../core/sites/onionCar");
         data = await fetchOnionCar(onionAddress.trim(), root, privacyProfile, controller?.signal);
@@ -433,7 +458,8 @@ export default function BrowserAlt({
       if (controller?.signal.aborted) return;
       const { cacheVerifiedSite } = await import("../core/sites/ipfsSiteCache");
       const site = await cacheVerifiedSite(data, root, privacyProfile);
-      if (parseBrowserRoot(root).code !== 0x71) {
+      if (controller?.signal.aborted) return;
+      if (source === "mesh" || parseBrowserRoot(root).code !== 0x71) {
         setCarFile(null); setCarCid(""); setActiveUrl(`ipfs://${site.root}`); return;
       }
       const home = site.pages.find(page => page.path === "index.html");
@@ -521,7 +547,8 @@ export default function BrowserAlt({
               <input aria-label="Адрес onion-шлюза" value={onionAddress} onChange={event => setOnionAddress(event.target.value)} disabled={carLoading} autoComplete="off" spellCheck={false} placeholder="адрес.onion" className="mt-1 block w-full rounded border border-white/20 bg-[#0c0f1a] p-2 text-white" />
             </label>
             <button type="button" disabled={privacyProfile !== "anon" || carLoading || !onionAddress.trim() || !carCid.trim()} onClick={() => void importCar("onion")} className="mt-3 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">{carLoading ? "Загружаем и проверяем…" : "Получить через Tor и открыть"}</button>
-            {privacyProfile === "fast" && <p className="mt-2 text-sm text-amber-300">Быстрый маршрут пока не подключён. Для получения сайта через Tor выберите анонимный профиль.</p>}
+            {privacyProfile === "fast" && meshConfigured && <button type="button" disabled={carLoading || !carCid.trim()} onClick={() => void importCar("mesh")} className="mt-3 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">Получить через Yggdrasil и открыть</button>}
+            {privacyProfile === "fast" && !meshConfigured && <p className="mt-2 text-sm text-amber-300">Быстрый маршрут пока не подключён. Для получения сайта через Tor выберите анонимный профиль.</p>}
           </div>
           {carError && <p role="alert" className="mt-2 text-sm text-amber-300">{carError}</p>}
         </details>

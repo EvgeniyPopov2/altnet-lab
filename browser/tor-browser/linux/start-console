@@ -1,0 +1,26 @@
+#!/bin/sh
+# Открыть приложение на экране тестовой ВМ из уже авторизованного сеанса SSH.
+set -eu
+umask 077
+[ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] || { echo "Запустите через sudo из учётной записи участника"; exit 1; }
+user=$SUDO_USER
+uid=$(id -u "$user")
+base=/opt/altnet-browser
+run=/run/altnet-browser-display
+[ ! -e /tmp/.X11-unix/X0 ] || { echo "Экран уже занят. Откройте AltNet из действующего графического сеанса."; exit 1; }
+[ ! -e "$run" ] || { echo "Сеанс AltNet уже подготовлен"; exit 1; }
+# Только локальный X11, отдельный случайный cookie для этого запуска.
+install -d -m 0711 "$run"
+install -o "$user" -m 0600 /dev/null "$run/auth"
+cookie=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+printf 'add :0 . %s\n' "$cookie" | xauth -f "$run/auth" -
+chown "$user" "$run/auth"
+chmod 0600 "$run/auth"
+systemd-run --quiet --unit=altnet-display --collect --property="ExecStopPost=/usr/bin/rm -rf /run/altnet-browser-display" /usr/lib/xorg/Xorg :0 vt7 -nolisten tcp -auth "$run/auth" -noreset
+count=0
+until [ -S /tmp/.X11-unix/X0 ]; do
+    count=$((count+1)); [ "$count" -lt 50 ] || { systemctl stop altnet-display; exit 1; }; sleep .2
+done
+systemd-run --quiet --unit=altnet-window --collect --uid="$user" --property=BindsTo=altnet-display.service --property=After=altnet-display.service \
+    --setenv=DISPLAY=:0 --setenv=XAUTHORITY="$run/auth" --setenv=XDG_RUNTIME_DIR="/run/user/$uid" \
+    /usr/bin/dbus-run-session -- /bin/sh -c 'openbox & exec /opt/altnet-browser/altnet-browser about:blank'

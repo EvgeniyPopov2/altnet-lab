@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Only synthetic files in a fresh temporary directory on H:."""
 import os
+import runpy
 from pathlib import Path
 import subprocess
 import sys
@@ -21,6 +22,15 @@ class BundledWorkspacePackageTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "w") as out:
                 for name in ("NativeWorkspaceShell.sys.mjs", "NativeSessionChannel.sys.mjs"):
                     out.writestr("moz-src/browser/components/abouttor/" + name, b"old synthetic module")
+            sys.path.insert(0, str(SCRIPT.parent))
+            self.addCleanup(sys.path.remove, str(SCRIPT.parent))
+            pack = runpy.run_path(str(SCRIPT))
+            (browser / "browser").mkdir()
+            chrome = browser / "browser/omni.ja"
+            with zipfile.ZipFile(chrome, "w") as out:
+                for entry, path in pack["CHROME"].items():
+                    out.writestr(entry, "\n".join(old for old, _ in pack["chrome_hunks"](path)))
+            original_chrome = chrome.read_bytes()
             original = archive.read_bytes()
             private = browser / "TorBrowser/Data/Browser/profile.default/private.txt"
             private.parent.mkdir(parents=True); private.write_text("synthetic private data", encoding="utf-8")
@@ -37,6 +47,11 @@ class BundledWorkspacePackageTests(unittest.TestCase):
             self.assertFalse((copy / "TorBrowser/Data").exists())
             self.assertEqual(private.read_text(encoding="utf-8"), "synthetic private data")
             self.assertEqual(archive.read_bytes(), original)
+            self.assertEqual(chrome.read_bytes(), original_chrome)
+            with zipfile.ZipFile(copy / "browser/omni.ja") as updated:
+                for entry, path in pack["CHROME"].items():
+                    for _, after in pack["chrome_hunks"](path):
+                        self.assertIn(after, updated.read(entry).decode())
             with zipfile.ZipFile(copy / "omni.ja") as bundled:
                 self.assertEqual(bundled.read("altnet-workspace-client/index.html"), b"<title>synthetic</title>")
                 self.assertEqual(bundled.read("altnet-workspace-client/assets/app-test.js"), b"synthetic")

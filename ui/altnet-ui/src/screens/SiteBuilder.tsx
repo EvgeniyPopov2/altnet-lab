@@ -4,6 +4,7 @@ import React, { useCallback, useMemo, useRef, useState, useEffect, useReducer } 
 import { exportSiteZip, exportSingleHtml, downloadBlob, adaptFromSiteBuilderDoc, unsupportedBlockTypes } from "../builder/exporter";
 import { upsertPublishedSite } from "../core/sites/published";
 import type { PublishedPage } from "../core/sites/publishedDb";
+import { workspaceRecords } from "../core/nativeWorkspaceRecords";
 import { shareStatus, startOnionShare, stopOnionShare, type OnionShareStatus } from "../core/sites/onionShare";
 import { pushSecurityEvent } from "../core/security/bus";
 import Canvas from "./SiteBuilder/canvas/Canvas";
@@ -559,6 +560,7 @@ export default function SiteBuilder({
   const [exportError, setExportError] = useState("");
   const [carRoot, setCarRoot] = useState("");
   const [carCopyStatus, setCarCopyStatus] = useState("");
+  const linuxPublisher = !!workspaceRecords()?.linuxSites;
   const [onionPanel, setOnionPanel] = useState(false);
   const [onionShare, setOnionShare] = useState<OnionShareStatus | null>(null);
   const [onionError, setOnionError] = useState("");
@@ -898,9 +900,9 @@ export default function SiteBuilder({
     await runExport("html");
   }, [runExport]);
 
-  const onExportCar = useCallback(async (mode: "download" | "share") => {
+  const onExportCar = useCallback(async (mode: "download" | "share" | "both") => {
     if (isExporting || publishingRef.current) return;
-    if (mode === "share" && onionShare?.active) return;
+    if (mode !== "download" && onionShare?.active) return;
     setExportError("");
     setOnionError("");
     setCarRoot("");
@@ -931,13 +933,13 @@ export default function SiteBuilder({
         setCarRoot(result.root);
       } else {
         onionEpoch.current++;
-        const status = await startOnionShare(result.root, result.car);
+        const status = await startOnionShare(result.root, result.car, mode === "both");
         onionEpoch.current++;
         setOnionShare(status);
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Не удалось создать пакет сайта.";
-      if (mode === "share") setOnionError(message);
+      if (mode !== "download") setOnionError(message);
       else setExportError(message);
     } finally { setExportState(null); }
   }, [doc,isExporting,onionShare]);
@@ -1464,12 +1466,13 @@ export default function SiteBuilder({
         {carCopyStatus && <span> {carCopyStatus}</span>}
       </div>}
       {onionPanel && <section aria-label="Временная раздача через Tor" className="col-span-full rounded-lg border border-[#6E59F2] bg-[#121528] p-3 text-sm text-[#e6e9f4]">
-        <div className="flex flex-wrap items-center justify-between gap-2"><strong>Временная раздача сайта через Tor</strong><button type="button" className="underline" onClick={() => setOnionPanel(false)}>Скрыть</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-2"><strong>{linuxPublisher ? "Публикация сайта с этого узла" : "Временная раздача сайта через Tor"}</strong><button type="button" className="underline" onClick={() => setOnionPanel(false)}>Скрыть</button></div>
         <p className="mt-2">Сайт сможет получить каждый, кому известны адрес onion и CID. Не размещайте здесь приватные данные. Доступность с другого устройства пока не проверяется автоматически.</p>
-        <p className="mt-1 text-[#c2c7db]">Адрес временный: раздача остановится при выключении приложения, потере Tor или смене моста. Это передача CAR через Tor, а не поиск сайтов в сети IPFS.</p>
+        <p className="mt-1 text-[#c2c7db]">{linuxPublisher ? "Публикация доступна, пока работает служба узла. Здесь её можно остановить. При выборе двух маршрутов один CID будет виден в обеих сетях." : "Адрес временный: раздача остановится при выключении приложения, потере Tor или смене моста. Это передача CAR через Tor, а не поиск сайтов в сети IPFS."}</p>
         {onionShare?.active ? <>
           <p role="status" className="mt-2">Раздача запущена; доступность ещё не подтверждена.</p>
           <p className="mt-1 break-all">Onion: <code>{onionShare.onion}</code></p>
+          {onionShare.mesh && <p className="break-all">Yggdrasil · <code>{`ipfs://${onionShare.cid}`}</code></p>}
           <p className="break-all">CID: <code>{onionShare.cid}</code></p>
           <p className="break-all">Ссылка Alt: <code>{`alt://onion/${onionShare.onion}/${onionShare.cid}`}</code></p>
           <p className="mt-1 text-[#c2c7db]">Получатель может вставить ссылку в адресную строку браузера AltNet.</p>
@@ -1489,6 +1492,7 @@ export default function SiteBuilder({
           {onionShare?.reason === "route_lost" && <p role="status" className="mt-2 text-amber-300">Раздача остановлена из-за изменения маршрута Tor.</p>}
           {!onionShare && <p className="mt-2 text-amber-300">Проверяем локальный клиент. Если состояние не появилось, обновите клиент.</p>}
           <button type="button" disabled={isExporting || publishing || !onionShare || onionBusy} onClick={() => void onExportCar("share")} className="mt-2 rounded bg-indigo-600 px-3 py-2 text-white disabled:opacity-40">Начать открытую раздачу</button>
+          {linuxPublisher && <button type="button" disabled={isExporting || publishing || !onionShare || onionBusy} onClick={() => void onExportCar("both")} className="ms-2 mt-2 rounded border px-3 py-2 disabled:opacity-40">Опубликовать через Yggdrasil и Tor</button>}
         </>}
         {onionError && <p role="alert" className="mt-2 text-amber-300">{onionError}</p>}
       </section>}

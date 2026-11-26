@@ -107,16 +107,21 @@ def fetch_car(proxy_port, host, cid, route_ready):
     if sock is None:
         raise OSError("Не удалось подключиться через Tor")
     with sock:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0 or not route_ready():
-            raise OSError("Подключение Tor прервано или истекло время ожидания")
-        timer = threading.Timer(remaining, lambda: _interrupt(sock))
-        timer.daemon = True
-        timer.start()
-        try:
-            return _receive(sock, host, cid, route_ready, deadline)
-        finally:
-            timer.cancel()
+        return receive_car(sock, host, cid, route_ready, deadline)
+
+
+def receive_car(sock, host, cid, route_ready, deadline):
+    """Общий ограниченный HTTP-ответ поверх уже установленного защищённого маршрута."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0 or not route_ready():
+        raise OSError("Маршрут недоступен или истекло время ожидания")
+    timer = threading.Timer(remaining, lambda: _interrupt(sock))
+    timer.daemon = True
+    timer.start()
+    try:
+        return _receive(sock, host, cid, route_ready, deadline)
+    finally:
+        timer.cancel()
 
 
 def _interrupt(sock):
@@ -128,7 +133,7 @@ def _interrupt(sock):
 
 def _receive(sock, host, cid, route_ready, deadline):
     if not route_ready():
-        raise OSError("Подключение Tor прервано")
+        raise OSError("Соединение прервано")
     sock.sendall((f"GET /ipfs/{cid}?format=car HTTP/1.1\r\nHost: {host}\r\n"
                   "Accept: application/vnd.ipld.car\r\nAccept-Encoding: identity\r\nConnection: close\r\n\r\n").encode("ascii"))
     response = http.client.HTTPResponse(sock)
@@ -144,7 +149,7 @@ def _receive(sock, host, cid, route_ready, deadline):
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0 or not route_ready():
-            raise OSError("Подключение Tor прервано или истекло время ожидания")
+            raise OSError("Соединение прервано или истекло время ожидания")
         sock.settimeout(min(20, remaining))
         part = response.read(min(65536, MAX_CAR + 1 - len(data)))
         if not part:

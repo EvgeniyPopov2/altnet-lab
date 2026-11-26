@@ -1,3 +1,4 @@
+import { workspaceRecords } from "../../core/nativeWorkspaceRecords";
 import { INDEXED_DB_MARKER, STORAGE_KEY } from "./storage";
 import type { Doc } from "./types";
 
@@ -26,6 +27,8 @@ export async function openDraftDatabase(): Promise<IDBDatabase> {
 }
 
 export async function writeIndexedDraft(json: string): Promise<void> {
+  const native = workspaceRecords();
+  if (native) { await native.batch(DATABASE,[{op:"put",key:CURRENT,value:json}]); return; }
   const db = await openDraftDatabase();
   try {
     await new Promise<void>((resolve, reject) => {
@@ -43,6 +46,12 @@ export async function writeIndexedDraft(json: string): Promise<void> {
 }
 
 export async function readIndexedDraft(): Promise<string | undefined> {
+  const native = workspaceRecords();
+  if (native) {
+    const [value] = await native.batch(DATABASE,[{op:"read",key:CURRENT}]);
+    if (value !== undefined && typeof value !== "string") throw new Error("Некорректный черновик.");
+    return value;
+  }
   const db = await openDraftDatabase();
   try {
     return await new Promise((resolve, reject) => {

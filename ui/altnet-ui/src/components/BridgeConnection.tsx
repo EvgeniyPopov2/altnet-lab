@@ -13,7 +13,30 @@ const sources: Record<string, string> = {
 };
 const button = "rounded-lg bg-white/10 px-3 py-2 text-sm hover:bg-white/20 disabled:opacity-45";
 
+function UbuntuConnection({ panic }: { panic: boolean }) {
+  const [text, setText] = useState("Проверяем транспорт Ubuntu…");
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function update() {
+      try {
+        const [result] = await window.altNetRecords!.batch("site-publication", [{op:"route-status",key:""}]);
+        const status = result as {tor:boolean; mesh:boolean};
+        if (active) setText([status.tor ? "Tor · SOCKS доступен" : "Tor · SOCKS недоступен", status.mesh ? "Yggdrasil · интерфейс готов" : ""].filter(Boolean).join("   ·   "));
+      } catch { if (active) setText("Сведения о транспорте недоступны"); }
+      if (active) timer = setTimeout(update, 30000);
+    }
+    if (!panic) void update();
+    return () => { active = false; clearTimeout(timer); };
+  }, [panic]);
+  return <div role="status" className="flex items-center gap-2 px-3 py-2 text-xs"><Network size={16} />{panic ? "Паника включена" : text}</div>;
+}
+
 export default function BridgeConnection({ panic }: { panic: boolean }) {
+  if (typeof window !== "undefined" && window.location.protocol === "resource:" && window.altNetRecords?.linuxSites) return <UbuntuConnection panic={panic} />;
+  return <ManagedConnection panic={panic} />;
+}
+function ManagedConnection({ panic }: { panic: boolean }) {
   const [status, setStatus] = useState<BridgeStatus | null>(null);
   const [lines, setLines] = useState("");
   const [error, setError] = useState("");

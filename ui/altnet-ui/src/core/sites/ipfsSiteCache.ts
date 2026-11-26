@@ -1,8 +1,9 @@
+import { workspaceRecords } from "../nativeWorkspaceRecords";
 import { SITE_MAX_CAR_BYTES, verifySitePackage, type VerifiedSite } from "./ipfsSitePackage";
 import { parseBrowserRoot } from "./siteCid";
 import type { PrivacyProfile } from "../policy/types";
 
-async function verifyCar(car: Uint8Array, root: string): Promise<VerifiedSite> {
+export async function verifyCar(car: Uint8Array, root: string): Promise<VerifiedSite> {
   const cid = parseBrowserRoot(root);
   if (cid.code === 0x71) return verifySitePackage(car, cid.toString());
   const { verifyUnixfsSite } = await import("./unixfsSite");
@@ -57,16 +58,24 @@ export async function cacheVerifiedSite(car: Uint8Array, root: string, profile?:
   if (!(car instanceof Uint8Array) || !car.length || car.length > SITE_MAX_CAR_BYTES) throw new Error("Некорректный размер архива сайта.");
   const snapshot = car.slice();
   const site = await verifyCar(snapshot, root);
-  await transact<void>("readwrite", store => { store.put(snapshot.buffer, ipfsCacheKey(site.root, profile)); });
+  const key = ipfsCacheKey(site.root, profile), native = workspaceRecords();
+  if (native) await native.batch(DATABASE,[{op:"put",key,value:snapshot.buffer}]);
+  else await transact<void>("readwrite", store => { store.put(snapshot.buffer, key); });
   return site;
+}
+
+async function readCar(key: string): Promise<unknown> {
+  const native = workspaceRecords();
+  if (native) return (await native.batch(DATABASE,[{op:"read",key}]))[0];
+  return transact<unknown>("readonly", (store, result) => {
+    const request = store.get(key);
+    request.onsuccess = () => result(request.result);
+  });
 }
 
 export async function readCachedSite(root: string, profile?: PrivacyProfile): Promise<VerifiedSite | null> {
   const canonical = parseBrowserRoot(root).toString();
-  const value = await transact<unknown>("readonly", (store, result) => {
-    const request = store.get(ipfsCacheKey(canonical, profile));
-    request.onsuccess = () => result(request.result);
-  });
+  const value = await readCar(ipfsCacheKey(canonical, profile));
   if (value === undefined) return null;
   if (!(value instanceof ArrayBuffer) || !value.byteLength || value.byteLength > SITE_MAX_CAR_BYTES) throw new Error("Локальная копия IPFS повреждена; данные не изменены.");
   return verifyCar(new Uint8Array(value), canonical);
@@ -74,17 +83,16 @@ export async function readCachedSite(root: string, profile?: PrivacyProfile): Pr
 
 export async function deleteCachedSite(root: string, profile?: PrivacyProfile): Promise<void> {
   const canonical = parseBrowserRoot(root).toString();
-  await transact<void>("readwrite", store => { store.delete(ipfsCacheKey(canonical, profile)); });
+  const key = ipfsCacheKey(canonical, profile), native = workspaceRecords();
+  if (native) await native.batch(DATABASE, [{ op: "delete", key }]);
+  else await transact<void>("readwrite", store => { store.delete(key); });
 }
 
 /** Копирует старую запись только по запросу, с повторной проверкой и без замены новой. */
 export async function copyLegacyCachedSite(root: string, profile: PrivacyProfile): Promise<VerifiedSite | null> {
   const canonical = parseBrowserRoot(root).toString();
   const key = ipfsCacheKey(canonical, profile);
-  const value = await transact<unknown>("readonly", (store, result) => {
-    const request = store.get(canonical);
-    request.onsuccess = () => result(request.result);
-  });
+  const value = await readCar(canonical);
   if (value === undefined) return null;
   if (!(value instanceof ArrayBuffer) || !value.byteLength || value.byteLength > SITE_MAX_CAR_BYTES) throw new Error("Старая копия IPFS повреждена; данные не изменены.");
   const snapshot = value.slice(0);
@@ -92,7 +100,9 @@ export async function copyLegacyCachedSite(root: string, profile: PrivacyProfile
   // add выполняется в транзакции и не перезаписывает существующую запись,
   // даже если другая вкладка создала её после начала проверки.
   try {
-    await transact<void>("readwrite", store => { store.add(snapshot, key); });
+    const native = workspaceRecords();
+    if (native) await native.batch(DATABASE,[{op:"add",key,value:snapshot}]);
+    else await transact<void>("readwrite", store => { store.add(snapshot, key); });
   } catch (error) {
     if (error instanceof DOMException && error.name === "ConstraintError") throw new Error("В этом профиле уже есть копия IPFS; данные не изменены.");
     throw error;

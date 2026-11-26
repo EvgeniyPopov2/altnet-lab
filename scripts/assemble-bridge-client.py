@@ -54,7 +54,7 @@ def main():
             shutil.copyfile(Path(str(src) + ".asc"), sig)
             unpack(local, sig, args.gpgv, args.keyring, root / target, expected)
         (root / "scripts").mkdir()
-        for file in [*scripts.glob("bridge_*.py"), scripts / "tor-bridge-catalog.py", scripts / "site_onion.py", scripts / "site_share.py"]:
+        for file in [*scripts.glob("bridge_*.py"), scripts / "tor-bridge-catalog.py", scripts / "site_onion.py", scripts / "site_share.py", scripts / "site_mesh.py"]:
             shutil.copy2(file, root / "scripts" / file.name)
         for name in ("Start-AltNet.sh", "Start-AltNet.ps1", "AltNet.cmd"):
             shutil.copy2(scripts / name, root / name)

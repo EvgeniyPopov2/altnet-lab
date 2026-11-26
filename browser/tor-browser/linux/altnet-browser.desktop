@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=AltNet Browser
+Name[ru]=Браузер AltNet
+Type=Application
+Exec=/opt/altnet-browser/altnet-browser
+Icon=/opt/altnet-browser/altnet-logo.png
+Categories=Network;WebBrowser;
+Terminal=false

@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+umask 077
+base=$(CDPATH= cd -- "$(dirname -- "$(readlink -f -- "$0")")" && pwd)
+profile="${XDG_DATA_HOME:-$HOME/.local/share}/altnet/browser-profile"
+mkdir -p "$profile/extensions"
+/usr/bin/python3 -I -B "$base/Browser/altnet-linux/site_transport.py" init "$profile"
+noscript='{73a6fe31-595d-460b-a920-fcc0f8843232}.xpi'
+if [ ! -e "$profile/extensions/$noscript" ]; then
+    cp "$base/Browser/distribution/extensions/$noscript" "$profile/extensions/$noscript"
+fi
+export TOR_PROVIDER=none TOR_SKIP_LAUNCH=1 TOR_SOCKS_PORT=9050 TOR_SOCKS_HOST=127.0.0.1
+unset TOR_TRANSPROXY TOR_SOCKS_IPC_PATH
+cd "$base/Browser"
+# Gecko кэширует привилегированный JS отдельно от данных приложения.
+if [ ! -s "$base/BUILD-SHA256" ]; then
+    export MOZ_PURGE_CACHES=1
+elif ! cmp -s "$base/BUILD-SHA256" "$profile/.altnet-resource-version"; then
+    MOZ_PURGE_CACHES=1 ./firefox -no-remote -profile "$profile" "$@"
+    tmp=$(mktemp "$profile/.resource-version.XXXXXXXX")
+    cp "$base/BUILD-SHA256" "$tmp"
+    mv -f "$tmp" "$profile/.altnet-resource-version"
+    exit 0
+fi
+exec ./firefox -no-remote -profile "$profile" "$@"

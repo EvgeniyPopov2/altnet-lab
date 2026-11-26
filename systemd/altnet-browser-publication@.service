@@ -1,0 +1,17 @@
+[Unit]
+Description=Публикация выбранного сайта AltNet (%i)
+After=yggdrasil.service tor@default.service
+
+[Service]
+User=%i
+UMask=0077
+ExecStart=/usr/bin/python3 -I -B /opt/altnet-browser/Browser/altnet-linux/site_transport.py serve
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
