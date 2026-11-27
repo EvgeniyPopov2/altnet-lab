@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "37296735699ee5ab91868215cdceeeea6bba585ece57445710bf505b23dbcd3e"
+DIGEST = "75eefaeb2eba6cd9726eefedb82f062d43c90c31c16410e04644c87f0d219bee"
 
 
 def stage(name):
@@ -143,6 +143,10 @@ def trace_route(cfg, address, peer, restored, workers, old_guards):
     def signalling():
         with socket.create_connection((address,17910),timeout=1.5):
             pass
+    def media_tcp():
+        rows=run("ss","-Ht6ne","state","established","( sport = :17911 or dport = :17911 )")
+        if "["+address+"]" not in rows:
+            raise RuntimeError("Waiting for the media TCP connection")
     def pinned():
         route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
         if not all(route.values()):
@@ -152,7 +156,7 @@ def trace_route(cfg, address, peer, restored, workers, old_guards):
         if not current-workers:
             raise RuntimeError("Waiting for renewed mesh worker")
     for label, probe in (("meshWorkerLaunched",worker_changed), ("torMailbox", lambda:exchange(cfg,"clock",timeout=1)),
-                         ("pinnedPeerObserved", pinned), ("meshSignallingTcp", signalling)):
+                         ("pinnedPeerObserved", pinned), ("meshSignallingTcp", signalling), ("mediaTcpEstablished",media_tcp)):
         threading.Thread(target=sample,args=(label,probe),daemon=True).start()
     return results
 
@@ -263,6 +267,8 @@ def call(cfg):
             remote_heard = exchange(cfg,"node1Heard"+suffix)
             pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
                    "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
+            after=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
+            stages["retainedGuardSockets"] = len(set(guards["inodes"]) & set(after["inodes"]))
             stages["entryBeforeCut"] = before_cut
             stages["privatePeerRenewed"] = private_peer_workers() != peer_workers
             error = round(clock_error+restore["uncertainty"]+.05,2)

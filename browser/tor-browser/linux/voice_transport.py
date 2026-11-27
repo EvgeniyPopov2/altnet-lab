@@ -117,7 +117,19 @@ def voice_identity(route):
             for key, field in (("localCert", "cert"), ("peerCert", "peerCert"))}
 
 
-async def routed_stream(route, ctx, pinned, preface=PREFACE):
+class RoomDial:
+    """Бюджет TCP только для повторного соединения с принятым собеседником."""
+
+    def __init__(self):
+        self.last_connect = None
+
+    def timeout(self, attempt, seconds_waiting):
+        if self.last_connect is None or attempt % 4 == 3 or seconds_waiting >= 90:
+            return 4
+        return min(4, max(1.1, 3*self.last_connect + .15))
+
+
+async def routed_stream(route, ctx, pinned, preface=PREFACE, timing=None):
     loop = asyncio.get_running_loop()
     server = route["mode"] == "listen"
     if server:
@@ -129,14 +141,21 @@ async def routed_stream(route, ctx, pinned, preface=PREFACE):
                     break
                 sock.close()
     else:
+        started, attempt = loop.time(), 0
         while True:
             sock = bound_socket(route, False)
             try:
-                await asyncio.wait_for(loop.sock_connect(sock, (route["peer"], route["port"])), 4)
+                sent = loop.time()
+                budget = timing.timeout(attempt, sent-started) if timing else 4
+                await asyncio.wait_for(loop.sock_connect(sock, (route["peer"], route["port"])), budget)
+                elapsed = loop.time()-sent
                 break
-            except (ConnectionRefusedError, asyncio.TimeoutError):
+            except (ConnectionRefusedError, asyncio.TimeoutError) as exc:
                 sock.close()
-                await asyncio.sleep(.65)
+                attempt += 1
+                # При отказе узла сохраняем паузу. После истёкшего короткого
+                # ожидания SYN можно заново отправлять по восстановленному пути.
+                await asyncio.sleep(.15 if isinstance(exc, asyncio.TimeoutError) and budget < 4 else .65)
             except BaseException:
                 sock.close()
                 raise
@@ -160,6 +179,8 @@ async def routed_stream(route, ctx, pinned, preface=PREFACE):
         await writer.drain()
         if await asyncio.wait_for(reader.readexactly(len(preface)), 4) != preface:
             raise VoiceError("Несовместимый протокол голосовой связи.")
+        if timing and not server:
+            timing.last_connect = elapsed
         return reader, writer
     except BaseException:
         if writer:
@@ -463,11 +484,12 @@ class Room:
             await asyncio.wait_for(writer.drain(), 5)
 
     async def link(self, route, context, pin, identity):
+        timing = RoomDial()
         while True:
             writer = codec = output = None
             pumps = []
             try:
-                reader, writer = await routed_stream(route, context, pin, self.preface)
+                reader, writer = await routed_stream(route, context, pin, self.preface, timing)
                 output, codec = Pulse(), Opus()
                 meter, queue = Meter(), asyncio.Queue(maxsize=6)
                 self.members[identity] = (route["peerName"], meter, queue)

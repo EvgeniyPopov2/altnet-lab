@@ -23,7 +23,12 @@ with socket.socket(socket.AF_UNIX) as sock:
             for guard in guards:
                 if not re.fullmatch("[A-Fa-f0-9]{40}",guard):
                     continue
-                for row in control(stream,b"GETINFO ns/id/"+guard.encode()).decode().splitlines():
+                try:
+                    descriptor=control(stream,b"GETINFO ns/id/"+guard.encode())
+                except RuntimeError:
+                    # Мост может отсутствовать в публичном консенсусе.
+                    continue
+                for row in descriptor.decode().splitlines():
                     fields=row.split()
                     if fields[:1]==["r"] and len(fields)>=8:
                         endpoints.add(fields[-3]+":"+fields[-2])

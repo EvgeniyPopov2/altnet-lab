@@ -44,7 +44,8 @@ class RoomRetry(unittest.IsolatedAsyncioTestCase):
                     task = asyncio.create_task(self.connect())
                     try:
                         await asyncio.wait_for(retried.wait(), 4)
-                        self.assertEqual(calls,[ (self.route,self.context,self.pin,self.room.preface) ]*2)
+                        self.assertEqual([args[:4] for args in calls],[(self.route,self.context,self.pin,self.room.preface)]*2)
+                        self.assertIs(calls[0][4],calls[1][4])
                         self.assertEqual(self.room.session.phase,"waiting")
                         self.assertFalse(self.room.ready.is_set())
                         self.room.session.devices.mute.assert_called_once()
@@ -58,6 +59,20 @@ class RoomRetry(unittest.IsolatedAsyncioTestCase):
                 with patch.dict(self.room.link.__globals__,routed_stream=Mock(side_effect=error)):
                     with self.assertRaises(type(error)):
                         await asyncio.wait_for(self.connect(),2)
+
+
+class DialTimingTests(unittest.TestCase):
+    def test_short_retries_start_only_after_authentication(self):
+        timing = voice["RoomDial"]()
+        self.assertEqual(timing.timeout(0,0),4)
+        timing.last_connect = .2
+        self.assertEqual([timing.timeout(i,i*2) for i in range(5)],[1.1,1.1,1.1,4,1.1])
+        self.assertEqual(timing.timeout(0,90),4)
+
+    def test_long_round_trip_keeps_full_budget(self):
+        timing = voice["RoomDial"]()
+        timing.last_connect = 1.4
+        self.assertEqual(timing.timeout(0,0),4)
 
 
 class OwnerExit(unittest.TestCase):
