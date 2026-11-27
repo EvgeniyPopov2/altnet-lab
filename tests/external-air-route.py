@@ -1,4 +1,4 @@
-import json, pathlib, runpy, socket, subprocess, sys
+import json, pathlib, re, runpy, socket, subprocess, sys
 uri=sys.argv[1]
 authority,pin=uri.removeprefix("onion://").split("?key=")
 control=runpy.run_path("/opt/altnet-browser/Browser/altnet-linux/bridge_tor.py")["command"]
@@ -15,6 +15,25 @@ with socket.socket(socket.AF_UNIX) as sock:
         tor=bool(ids)
         rendezvous=any(len(parts:=row.split())>=4 and parts[0] in ids and parts[1]=="BUILT"
                        and "PURPOSE=HS_CLIENT_REND" in parts for row in circuits)
+        if sys.argv[2:] == ["--guards"]:
+            # Сопоставить только первый релей цепочек проверяемого onion.
+            guards={parts[2].split(",")[0][1:41] for row in circuits if len(parts:=row.split())>=4
+                    and parts[0] in ids and parts[1]=="BUILT" and parts[2].startswith("$")}
+            endpoints=set()
+            for guard in guards:
+                if not re.fullmatch("[A-Fa-f0-9]{40}",guard):
+                    continue
+                for row in control(stream,b"GETINFO ns/id/"+guard.encode()).decode().splitlines():
+                    fields=row.split()
+                    if fields[:1]==["r"] and len(fields)>=8:
+                        endpoints.add(fields[-3]+":"+fields[-2])
+                    elif fields[:1]==["a"] and len(fields)==2:
+                        endpoints.add(fields[1])
+            listing=subprocess.check_output(["ss","-Htnep","state","established"],text=True)
+            sockets=[int(m[1]) for row in listing.splitlines() if len(row.split())>=4 and row.split()[3] in endpoints
+                     and '("tor",' in row and (m:=re.search(r"\bino:(\d+)",row))]
+            print(json.dumps(dict(guards=len(guards),inodes=sockets)))
+            sys.exit(0)
 matched=False
 for row in pathlib.Path("/proc/net/unix").read_text().splitlines():
     path=row.split()[-1]

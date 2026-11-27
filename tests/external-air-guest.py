@@ -97,7 +97,19 @@ def private_peer_workers():
     return set(run("pgrep","-u",str(os.getuid()),"-x","yggdrasil").splitlines())
 
 
-def trace_route(cfg, address, peer, restored, workers):
+def guard_counters(inodes):
+    lines=run("sudo","-n","ss","-Htinpe","state","established").splitlines()
+    result={}
+    for row,info in zip(lines,lines[1:]):
+        inode=re.search(r"\bino:(\d+)",row)
+        if not inode or int(inode[1]) not in inodes:
+            continue
+        values={k:int(v) for k,v in re.findall(r"\b(bytes_received|bytes_acked|backoff|rto):(\d+)",info)}
+        result[int(inode[1])] = values
+    return result
+
+
+def trace_route(cfg, address, peer, restored, workers, old_guards):
     results = {}
     def sample(label, probe):
         start = time.monotonic()
@@ -108,6 +120,26 @@ def trace_route(cfg, address, peer, restored, workers):
                 return
             except (OSError,RuntimeError):
                 time.sleep(.4)
+    def observe_guard():
+        start = time.monotonic()
+        results["guardSocketsObserved"]=len(old_guards)
+        if not old_guards:
+            return
+        results["guardBackoffBeforeRestore"]=max(s.get("backoff",0) for s in old_guards.values())
+        results["guardRtoMsBeforeRestore"]=max(s.get("rto",0) for s in old_guards.values())
+        while time.monotonic()-start < 120:
+            current = guard_counters(old_guards)
+            elapsed = round(time.monotonic()-restored,2)
+            if not current:
+                results["guardSocketsClosed"]=elapsed
+                return
+            for key,label in (("bytes_received","firstGuardPayload"),("bytes_acked","firstGuardAck")):
+                if any(fields.get(key,0)>old_guards[ino].get(key,0) for ino,fields in current.items()):
+                    results.setdefault(label,elapsed)
+            if "firstGuardAck" in results and "firstGuardPayload" in results:
+                return
+            time.sleep(.2)
+    threading.Thread(target=observe_guard,daemon=True).start()
     def signalling():
         with socket.create_connection((address,17910),timeout=1.5):
             pass
@@ -200,6 +232,8 @@ def call(cfg):
             assert 1 <= len(peer_workers) <= 2
             offset, clock_error = clock_offset(cfg)
             before_cut=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--counts"))
+            guards=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
+            before_cut["guardRelays"] = guards["guards"]
             exchange(cfg,"armed"+suffix,True)
             exchange(cfg,"cut"+suffix)
             stage("Interrupting all non-loopback traffic during the established call")
@@ -213,10 +247,11 @@ def call(cfg):
                 outage=counters()
                 assert outage["seconds"]>=seconds-.2 and outage["droppedPackets"]["output"]>0 and outage["droppedPackets"]["input"]>0
                 assert ui("airview")["phase"]=="waiting" and not ui("has_capture") and ui("recovery_heard") is None
+                old_guards = guard_counters(guards["inodes"])
             outage.update(detectedAfterSeconds=lost_at,phase=lost["phase"],microphoneReleased=True)
             restore = counters.restoration
             restored_at = restore["mono"]
-            stages = trace_route(cfg,address,peer,restored_at,peer_workers)
+            stages = trace_route(cfg,address,peer,restored_at,peer_workers,old_guards)
             stage("Network restored; waiting for the existing room without user interaction")
             wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"automatic reconnection",120)
             reconnect_seconds=round(time.monotonic()-restored_at,1)
