@@ -236,6 +236,11 @@ class Panel:
         if op == "airclick":
             self.click(data["selector"])
             return True
+        if op == "air_room":
+            room=self.b.panel('return (await win.altNetVoice.air("airPoll","{}")).room;')
+            if not isinstance(room,str) or not re.fullmatch(r"[0-9a-f]{64}",room):
+                raise RuntimeError("Нет действующей комнаты Эфира")
+            return room
         if op == "airview":
             return self.b.panel("""const d=win.document.querySelector('dialog[data-air-contacts]'); return {
               phase:d?.dataset.contactAirPhase??"closed",text:d?.innerText??"",selected:[...d?.querySelectorAll('input:checked')??[]].map(e=>e.dataset.airContact),

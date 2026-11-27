@@ -17,7 +17,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "eb78aae8c2dc7e665c83de6d041f2df554d2d5bb50192805feb3aeaaf37bad09"
+DIGEST = "0bf23b6386164b772c9e01f717951299e441f5f023404e636d837f5b583bae50"
 
 
 def stage(name):
@@ -142,6 +142,7 @@ def call(cfg):
         stage("Admitted by node1; signed invitation, Tor rendezvous and live Yggdrasil peer verified")
         ui("airclick",selector="[data-network-call]")
         first_rx,first_tx,first_socket=measure_call(ui,cfg,address,"")
+        original_room=ui("air_room")
         assert ui("has_capture") and ui("airview")["phase"]=="connected"
         exchange(cfg,"armed",True)
         exchange(cfg,"cut")
@@ -156,7 +157,17 @@ def call(cfg):
             assert outage["seconds"]>=29 and outage["droppedPackets"]["output"]>0 and outage["droppedPackets"]["input"]>0
             assert ui("airview")["phase"]=="waiting" and not ui("has_capture")
         outage.update(detectedAfterSeconds=lost_at,phase=lost["phase"],microphoneReleased=True)
-        stage("Network restored; restarting the native client with its existing profile")
+        restored_at=time.monotonic()
+        stage("Network restored; waiting for the existing room without user interaction")
+        wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"automatic reconnection",120)
+        reconnect_seconds=round(time.monotonic()-restored_at,1)
+        assert ui("browser_pid")==first_pid and ui("air_room")==original_room
+        wait(lambda:ui("has_capture"),bool,"automatic capture resume",10)
+        route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
+        assert route==dict(torStream=True,rendezvous=True,pinnedYggdrasilPeer=True)
+        resumed_rx,resumed_tx,resumed_socket=measure_call(ui,cfg,address,"Resume")
+        assert first_socket!=resumed_socket
+        stage("Duplex audio resumed in the same room; verifying separate restart/redial scenario")
         exchange(cfg,"restored",True)
         ui("restart")
         assert ui("is_locked") and ui("browser_pid")!=first_pid
@@ -176,12 +187,15 @@ def call(cfg):
         assert not ui("has_capture")
         ui("airclick",selector='[data-air-action="create"]')
         measured,verdict,new_socket=measure_call(ui,cfg,address,"2")
-        assert new_socket!=first_socket
+        assert len({new_socket,resumed_socket,first_socket})==3
         if ui("airview")["phase"]!="closed":
             ui("airclick",selector='[data-air-action="leave"]')
         wait(lambda:ui("has_capture"),lambda active:not active,"release microphone")
         exchange(cfg,"left",True)
         data={"node1_to_actions":measured,"actions_to_node1":verdict,"installedArchiveSHA256":DIGEST,
+              "automaticResume":{"node1_to_actions":resumed_rx,"actions_to_node1":resumed_tx,
+                                 "secondsAfterRestore":reconnect_seconds,"sameRoom":True,"sameProcess":True,
+                                 "freshMediaSocket":True,"verifiedRoute":route},
               "initialAudio":{"node1_to_actions":first_rx,"actions_to_node1":first_tx},"outage":outage,
               "freshMediaSocket":True,"sameAccount":True,"sameMembership":True,"redialFromSavedContact":True,
               "zeroInitialPeers":True,"desktopInvitation":True,"torRendezvous":True,
