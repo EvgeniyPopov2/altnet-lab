@@ -72,6 +72,7 @@ def check(e,slot,wait,provision,decode,mark):
         return resumed,lost
     resumed,lost = interrupt("",initial[2])
     second,_ = interrupt("Again",resumed[2])
+    third,_ = interrupt("Third",second[2])
     wait(lambda:slot("restored"),bool,"remote completed automatic resume",120)
     saved=wait(lambda:e.cmd("contact_labels"),lambda v:len(v)==1 and any("Эфир Стриж" in label for label in v.values()),"original trusted contact")
     e.cmd("restart")
@@ -84,7 +85,7 @@ def check(e,slot,wait,provision,decode,mark):
     slot("redial",True)
     mark("Both clients are using their saved contact for the second call")
     repeated=audio_round("2",accept=True)
-    assert len({initial[2],resumed[2],second[2],repeated[2]})==4
+    assert len({initial[2],resumed[2],second[2],third[2],repeated[2]})==5
     wait(lambda:slot("left"),bool,"remote capture released",90)
     view=e.cmd("airview")
     if view["phase"]!="closed":
@@ -92,6 +93,7 @@ def check(e,slot,wait,provision,decode,mark):
     wait(lambda:e.cmd("has_capture"),lambda active:not active,"local capture released",30)
     return dict(audio={"node1_to_actions":repeated[1],"actions_to_node1":repeated[0]},
                 automaticResumeAudio={"node1_to_actions":resumed[1],"actions_to_node1":resumed[0]},
+                thirdAutomaticResumeAudio={"node1_to_actions":third[1],"actions_to_node1":third[0]},
                 secondAutomaticResumeAudio={"node1_to_actions":second[1],"actions_to_node1":second[0]},
                 hostResumedSameRoom=True,hostResumedSameProcess=True,hostResumedOnNewSocket=True,
                 initialAudio={"node1_to_actions":initial[1],"actions_to_node1":initial[0]},
