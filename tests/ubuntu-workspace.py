@@ -44,7 +44,7 @@ class Browser:
 
 
 @contextmanager
-def session(root):
+def session(root, *, executable="/opt/altnet-browser/altnet-browser", headless=True, require_tor_status=True):
     data = root / "appdata"
     profile = data / "altnet/browser-profile"
     profile.mkdir(parents=True,exist_ok=True)
@@ -54,7 +54,8 @@ def session(root):
     (profile/"user.js").write_text(f'user_pref("marionette.port",{port});\nuser_pref("privacy.spoof_english",2);\n')
     env={**os.environ,"XDG_DATA_HOME":str(data),"XDG_CACHE_HOME":str(root/"cache")}
     with (root/"firefox.log").open("ab") as log:
-        proc=subprocess.Popen(["/opt/altnet-browser/altnet-browser","-headless","-marionette","--remote-allow-system-access","about:blank"],env=env,stdout=log,stderr=log)
+        args = [str(executable), *(["-headless"] if headless else []), "-marionette", "--remote-allow-system-access", "about:blank"]
+        proc=subprocess.Popen(args,env=env,stdout=log,stderr=log)
         try:
             def connect():
                 if proc.poll() is not None: raise RuntimeError("Gecko завершился, см. "+str(log.name))
@@ -71,7 +72,8 @@ def session(root):
                 assert browser.script('const {AddonManager}=ChromeUtils.importESModule("resource://gre/modules/AddonManager.sys.mjs");return AddonManager.getAddonByID(arguments[0]).then(a=>!!a?.isActive);',NS), "NoScript"
                 proxy=browser.script("return [Services.prefs.getIntPref('network.proxy.type'), Services.prefs.getStringPref('network.proxy.socks'), Services.prefs.getIntPref('network.proxy.socks_port'), Services.prefs.getBoolPref('network.proxy.socks_remote_dns')];")
                 assert proxy == [1,"127.0.0.1",9050,True], proxy
-                wait(lambda: browser.panel("return !!win.document.body.innerText.includes(args[0])","Tor · SOCKS доступен"),"индикатор транспорта Ubuntu",50)
+                if require_tor_status:
+                    wait(lambda: browser.panel("return !!win.document.body.innerText.includes(args[0])","Tor · SOCKS доступен"),"индикатор транспорта Ubuntu",50)
                 try: yield browser
                 finally:
                     try: client.call("Marionette:Quit",{"flags":["eAttemptQuit"]})
