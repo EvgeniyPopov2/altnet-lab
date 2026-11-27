@@ -135,6 +135,7 @@ def call(cfg):
         if ui("airview")["phase"]!="closed":
             ui("airclick",selector='[data-air-action="leave"]')
         wait(lambda:ui("has_capture"),lambda active:not active,"release microphone")
+        exchange(cfg,"left",True)
         data={"node1_to_actions":measured,"actions_to_node1":verdict,"installedArchiveSHA256":DIGEST,
               "zeroInitialPeers":True,"desktopInvitation":True,"torRendezvous":True,
               "pinnedYggdrasilPeer":True,"speakerIndicatorsAtBothEnds":True}

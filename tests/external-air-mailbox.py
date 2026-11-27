@@ -10,7 +10,7 @@ import socket
 import sys
 import threading
 
-INCOMING = {"ready", "claim", "recording", "result"}
+INCOMING = {"ready", "claim", "recording", "result", "left"}
 OUTGOING = {"invite", "play", "done"}
 state = {}
 lock = threading.Lock()
@@ -56,7 +56,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError
             value = json.loads(self.rfile.read(length))
             if key == "claim":
-                valid = isinstance(value, str) and re.fullmatch(r"[\d\s-]{4,16}",value)
+                valid = isinstance(value, str) and re.fullmatch(r"[0-9]{6}",value)
             elif key == "result":
                 valid = isinstance(value, dict) and set(value)=={"Hz440","Hz880","Hz1220","samples"} and all(type(n) is int and 0<=n<=20000000 for n in value.values())
             else:
