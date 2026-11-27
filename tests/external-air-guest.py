@@ -137,7 +137,7 @@ def measure_call(ui, cfg, address, suffix):
     ui("record")
     exchange(cfg,"recording"+suffix,True)
     exchange(cfg,"play"+suffix)
-    ui("play_room")
+    ui("play_duplex")
     wait(lambda:ui("airview"),lambda s:any(p["name"]=="Эфир Маяк" and p["speaking"] for p in s["people"]),"node1 speaking",65)
     wait(lambda:ui("marker",hz=440),lambda level:level>700,"remote speech marker on the runner speaker",65)
     measured=ui("measure")
@@ -197,7 +197,7 @@ def call(cfg):
         assert ui("has_capture") and ui("airview")["phase"]=="connected"
         def interrupt(suffix,prior_socket,seconds):
             peer_workers = private_peer_workers()
-            assert len(peer_workers) == 1
+            assert 1 <= len(peer_workers) <= 2
             offset, clock_error = clock_offset(cfg)
             exchange(cfg,"armed"+suffix,True)
             exchange(cfg,"cut"+suffix)

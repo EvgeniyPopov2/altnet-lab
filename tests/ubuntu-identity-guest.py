@@ -476,14 +476,14 @@ def serve(args, root, stack):
                 with (root/"received.raw").open("wb") as out:
                     recorder=media["child"](stack,["parec","--device=speakers.monitor","--raw","--rate=16000","--channels=1","--format=s16le"],stdout=out)
                 result=True
-            elif op in ("play","play_room"):
+            elif op in ("play","play_room","play_duplex"):
                 rate, data=media["wave_data"](args.name)
                 source=root/"stimulus.raw"
-                if op=="play_room":
+                if op in ("play_room","play_duplex"):
                     hz={"node1":440,"node2":880,"node3":1220}[args.name]
                     speech=array.array("h",data)[rate+rate//9:]
                     data=array.array("h",(int(v*.55+3500*math.sin(2*math.pi*hz*i/rate)) for i,v in enumerate(speech))).tobytes()
-                source.write_bytes(data*8)
+                source.write_bytes(data*(32 if op=="play_duplex" else 8))
                 player=media["child"](stack,["pacat","--device=mic","--raw","--rate="+str(rate),"--channels=1","--format=s16le",str(source)])
                 result=True
             elif op == "stop":

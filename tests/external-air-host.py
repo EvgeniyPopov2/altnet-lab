@@ -15,12 +15,12 @@ def check(e,slot,wait,provision,decode,mark):
         e.cmd("record")
         wait(lambda:slot("recording"+suffix),bool,"guest recording")
         slot("play"+suffix,True)
+        e.cmd("play_duplex")
         wait(lambda:e.cmd("airview"),lambda s:any(p["name"]=="Эфир Стриж" and p["speaking"] for p in s["people"]),"remote speaker",80)
         wait(lambda:e.cmd("marker",hz=880),lambda level:level>700,"remote speech marker on the node1 speaker",65)
         heard=e.cmd("measure")
         assert heard["Hz880"]>700 and heard["Hz880"]>5*heard["Hz440"] and heard["samples"]>=16000
         mark("Remote Ubuntu -> node1 "+str(heard))
-        e.cmd("play_room")
         other=wait(lambda:slot("result"+suffix),bool,"remote audio",100)
         assert other["Hz440"]>700 and other["Hz440"]>5*other["Hz880"] and other["samples"]>=16000
         mark("node1 -> remote Ubuntu "+str(other))
