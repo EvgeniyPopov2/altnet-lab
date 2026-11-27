@@ -18,7 +18,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "0bf23b6386164b772c9e01f717951299e441f5f023404e636d837f5b583bae50"
+DIGEST = "eacde0a6b8359f905aeb7d8f63138f062bf321b0c439701e6cc0822efef41724"
 
 
 def stage(name):
@@ -148,6 +148,7 @@ def call(cfg):
         ui("airclick",selector="[data-network-call]")
         first_rx,first_tx,first_socket=measure_call(ui,cfg,address,"")
         original_room=ui("air_room")
+        original_worker,=ui("air_workers")
         assert ui("has_capture") and ui("airview")["phase"]=="connected"
         exchange(cfg,"armed",True)
         exchange(cfg,"cut")
@@ -178,6 +179,7 @@ def call(cfg):
         exchange(cfg,"restored",True)
         ui("restart")
         assert ui("is_locked") and ui("browser_pid")!=first_pid
+        wait(lambda:ui("air_workers"),lambda ids:original_worker not in ids,"previous voice process exited",6)
         assert ui("unlock",password=password)==identity
         assert ui("network_storage")==membership
         ui("contact_home")

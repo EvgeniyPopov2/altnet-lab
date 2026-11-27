@@ -47,6 +47,7 @@ def check(e,slot,wait,provision,decode,mark):
     mark("Matched confirmation and approved request on node1")
     initial=audio_round("",accept=True)
     room=e.cmd("air_room")
+    worker,=e.cmd("air_workers")
     wait(lambda:slot("armed"),bool,"external caller is still connected")
     assert e.cmd("has_capture") and e.cmd("airview")["phase"]=="connected"
     # Снятие правил на Ubuntu выполняется локально и не зависит от управляющего канала.
@@ -66,10 +67,11 @@ def check(e,slot,wait,provision,decode,mark):
     saved=wait(lambda:e.cmd("contact_labels"),lambda v:len(v)==1 and any("Эфир Стриж" in label for label in v.values()),"original trusted contact")
     e.cmd("restart")
     assert e.cmd("browser_pid")!=pid and e.cmd("is_locked")
+    wait(lambda:e.cmd("air_workers"),lambda ids:worker not in ids,"old node1 audio process exited",6)
     assert e.cmd("unlock",password=password)==identity
     e.cmd("contact_home")
     wait(lambda:e.cmd("contact_labels"),lambda v:set(v)==set(saved),"node1 trusted contact after restart")
-    assert not e.cmd("has_capture")
+    wait(lambda:e.cmd("has_capture"),lambda active:not active,"capture released after restart",6)
     slot("redial",True)
     mark("Both clients are using their saved contact for the second call")
     repeated=audio_round("2",accept=True)

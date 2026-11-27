@@ -507,6 +507,18 @@ def serve(args, root, stack):
                     safe=[re.sub(r"\[[^\]]+\]","[mesh]",s)[:220] for s in rows.splitlines() if re.search(r":179(?:1[1-9]|2[0-9]|3[0-8])\b",s)]
                     raise RuntimeError("Проверка сокетов Эфира: "+repr(safe))
                 result=links
+            elif op == "air_workers":
+                import os
+                tag=b"PULSE_SERVER="+os.environ["PULSE_SERVER"].encode()
+                result=[]
+                for entry in Path("/proc").glob("[0-9]*"):
+                    try:
+                        if (entry/"comm").read_text().strip()!="python3":continue
+                        argv=(entry/"cmdline").read_bytes().split(bytes([0]))
+                        if b"--contact-air" in argv and tag in (entry/"environ").read_bytes().split(bytes([0])):
+                            result.append(int(entry.name))
+                    except OSError:
+                        continue
             elif op == "has_capture":
                 result=bool(subprocess.check_output(["pactl","list","short","source-outputs"],text=True).strip())
             elif op == "air_screen":

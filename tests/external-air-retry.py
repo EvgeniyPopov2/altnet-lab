@@ -1,6 +1,12 @@
 """Повторные попытки комнаты после временной потери маршрута в установленном клиенте."""
 import asyncio
 import errno
+import json
+import os
+import select
+import signal
+import subprocess
+import sys
 from pathlib import Path
 import runpy
 import unittest
@@ -52,6 +58,42 @@ class RoomRetry(unittest.IsolatedAsyncioTestCase):
                 with patch.dict(self.room.link.__globals__,routed_stream=Mock(side_effect=error)):
                     with self.assertRaises(type(error)):
                         await asyncio.wait_for(self.connect(),2)
+
+
+class OwnerExit(unittest.TestCase):
+    def test_owner_death_stops_helper_even_with_open_command_pipe(self):
+        owner_code = """
+import subprocess, sys, time
+child=subprocess.Popen([sys.executable,"-IB",sys.argv[1],"--contact-air"],
+                       stdin=int(sys.argv[2]),stdout=int(sys.argv[3]),close_fds=True)
+print(child.pid,flush=True)
+time.sleep(60)
+"""
+        read_cmd,write_cmd=os.pipe()
+        read_reply,write_reply=os.pipe()
+        with os.fdopen(read_cmd,"rb") as read, os.fdopen(write_cmd,"wb") as write, \
+             os.fdopen(read_reply,"rb") as reply, os.fdopen(write_reply,"wb") as output:
+            owner=subprocess.Popen([sys.executable,"-c",owner_code,str(native),str(read.fileno()),str(output.fileno())],
+                                   stdout=subprocess.PIPE,pass_fds=(read.fileno(),output.fileno()))
+            handle=None
+            try:
+                handle=os.pidfd_open(int(owner.stdout.readline()))
+                write.write(b'{"op":"airPoll","arg":{}}\n')
+                write.flush()
+                self.assertTrue(select.select([reply],[],[],8)[0])
+                self.assertIn("value",json.loads(reply.readline()))
+                owner.terminate()
+                owner.wait(timeout=5)
+                self.assertTrue(select.select([handle],[],[],2)[0],"old helper still alive")
+            finally:
+                if owner.poll() is None:
+                    owner.kill()
+                    owner.wait()
+                owner.stdout.close()
+                if handle is not None:
+                    if not select.select([handle],[],[],0)[0]:
+                        signal.pidfd_send_signal(handle,signal.SIGKILL)
+                    os.close(handle)
 
 
 if __name__=="__main__":

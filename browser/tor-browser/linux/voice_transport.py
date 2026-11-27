@@ -774,6 +774,11 @@ if __name__ == "__main__":
         except (ValueError, OSError, VoiceError, TypeError, KeyError):
             sys.exit(1)
     elif sys.argv[1:] == ["--contact-air"]:
+        # Завершение браузера должно сразу освобождать микрофон и слушающий порт,
+        # в том числе когда канал команд ещё открыт во время сетевого ожидания.
+        parent = os.getppid()
+        if parent == 1 or _LIBC.prctl(1, signal.SIGKILL, 0, 0, 0) or os.getppid() != parent:
+            sys.exit(1)
         import runpy
         asyncio.run(runpy.run_path(str(Path(__file__).with_name("contact_air.py")))["serve"](sys.modules[__name__]))
     elif not sys.argv[1:]:
