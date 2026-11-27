@@ -24,8 +24,14 @@ jobs:
         env:
           QA_TRANSFER: ${{ secrets.ALTNET_EXTERNAL_AIR_QA_20261127 }}
         run: /usr/bin/python3 -IBu tests/external-air-guest.py install
-      - name: Check temporary route errors against the installed voice transport
-        run: /usr/bin/python3 -IB tests/external-air-retry.py
+      - name: Check media retries, pinned peers and call recovery against the installed release
+        run: |
+          /usr/bin/python3 -IB tests/external-air-retry.py
+          checks=$(mktemp -d)
+          mkdir -p "$checks/tests" "$checks/browser/tor-browser"
+          ln -s /opt/altnet-browser/Browser/altnet-linux "$checks/browser/tor-browser/linux"
+          cp tests/test-join-link.py "$checks/tests/"
+          /usr/bin/python3 -IB "$checks/tests/test-join-link.py"
       - name: Prepare isolated display and audio devices
         run: |
           sudo apt-get -o Acquire::Retries=2 update -qq

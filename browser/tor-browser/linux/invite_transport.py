@@ -1,0 +1,330 @@
+"""Вход по приглашению через ограниченный список TLS-пиров быстрого профиля."""
+import asyncio
+import base64
+import ctypes
+import hashlib
+import ipaddress
+import json
+import os
+from pathlib import Path
+import re
+import runpy
+import sys
+import tempfile
+import time
+from urllib.parse import urlsplit
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+
+LOOPBACK = Path("/run/yggdrasil/altnet-loopback.uri")
+ENTRIES = Path("/etc/altnet-transport")
+PORT = 17907
+LIMIT = 4
+ONION_ENTRY = Path("/run/altnet-onion-entry/peer")
+
+
+def onion_host(public):
+    checksum = hashlib.sha3_256(b".onion checksum" + public + b"\x03").digest()[:2]
+    return base64.b32encode(public + checksum + b"\x03").decode("ascii").lower() + ".onion"
+
+
+def via_tor(uri):
+    return uri.startswith("onion://")
+
+
+def peer(uri):
+    if not isinstance(uri, str) or len(uri) > 160:
+        raise ValueError("Некорректная точка входа.")
+    onion = re.fullmatch(r"onion://([a-z2-7]{56})\.onion:17907\?key=([a-f0-9]{64})", uri)
+    if onion:
+        public = base64.b32decode(onion[1].upper())[:32]
+        if onion_host(public) != onion[1] + ".onion":
+            raise ValueError("Некорректная контрольная сумма адреса Tor.")
+        return uri
+    match = re.fullmatch(r"tls://(\[[0-9a-fA-F:]+\]|[0-9.]+):17907\?key=([0-9a-f]{64})", uri)
+    if not match:
+        raise ValueError("Для входа нужен TLS-пир с закреплённым ключом.")
+    address = ipaddress.ip_address(match[1].strip("[]"))
+    if (not address.is_global or address.is_reserved or address.is_multicast or
+            (address.version == 6 and (address not in ipaddress.ip_network("2000::/3")
+                                       or address.sixtofour or address.teredo))):
+        raise ValueError("В приглашении допустим только публичный одноадресный IP.")
+    host = str(address) if address.version == 4 else f"[{address}]"
+    return f"tls://{host}:{PORT}?key={match[2]}"
+
+
+def local_entry():
+    try:
+        value = peer(ONION_ENTRY.read_text(encoding="ascii").strip())
+        if via_tor(value):
+            return value
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def entry_generation(uri):
+    return hashlib.sha256(uri.encode("ascii")).hexdigest()
+
+
+def shareable(learned, expected_generation=None):
+    local = local_entry()
+    if expected_generation is not None and (not local or entry_generation(local) != expected_generation):
+        raise ValueError("Точка входа сменилась. Проверьте её состояние и создайте новую ссылку.")
+    if local:
+        return [local]
+    values = []
+    for name in ("invite-peers.json", "peers.json"):
+        if name == "peers.json":
+            values.extend(learned)
+        try:
+            raw = (ENTRIES / name).read_bytes()
+            batch = json.loads(raw) if len(raw) <= 4096 else []
+            if isinstance(batch, list):
+                values.extend(batch[:LIMIT])
+        except (OSError, ValueError):
+            pass
+    result = []
+    for entry in values:
+        try:
+            uri = peer(entry)
+        except ValueError:
+            continue
+        if uri not in result:
+            result.append(uri)
+    # Одна ссылка задаёт один способ входа, в том числе при повторной передаче.
+    return [uri for uri in result if via_tor(uri) == via_tor(result[0])][:LIMIT]
+
+
+def pack_peers(entries):
+    data = bytearray()
+    if not 1 <= len(entries) <= LIMIT:
+        raise ValueError("Допускается от одной до четырёх точек входа.")
+    for entry in entries:
+        address = urlsplit(peer(entry))
+        if via_tor(entry):
+            encoded = b"\x03" + base64.b32decode(address.hostname[:56].upper())[:32]
+        else:
+            ip = ipaddress.ip_address(address.hostname)
+            encoded = bytes([ip.version]) + ip.packed
+        data.extend(encoded + bytes.fromhex(address.query[4:]))
+    return bytes(data)
+
+
+def unpack_peers(data, *, onion=False):
+    result = []
+    while data and len(result) < LIMIT:
+        size = ({3: 32} if onion else {4: 4, 6: 16}).get(data[0])
+        if not size or len(data) < 33 + size:
+            raise ValueError("Повреждён адрес точки входа.")
+        if onion:
+            endpoint = "onion://" + onion_host(data[1:1 + size])
+        else:
+            address = ipaddress.ip_address(data[1:1 + size])
+            endpoint = "tls://" + (str(address) if size == 4 else f"[{address}]")
+        uri = peer(f"{endpoint}:{PORT}?key={data[1+size:33+size].hex()}")
+        if uri in result:
+            raise ValueError("Повторяющаяся точка входа.")
+        result.append(uri)
+        data = data[33 + size:]
+    if data or not result:
+        raise ValueError("Некорректный список точек входа.")
+    return result
+
+
+class Transport:
+    def __init__(self):
+        self.process = self.directory = None
+        self.entries = []
+        self.retry = 0
+        self.onion = None
+        self.proxy_port = None
+        self.priming = None
+        self.config = None
+        self.call_probe = None
+        self.call_retry_at = 0
+        self.call_entry = 0
+
+    def destination(self, uri, *, authenticated=False):
+        peer(uri)
+        if not via_tor(uri):
+            return uri
+        # Yggdrasil 0.4 передаёт имя службе SOCKS и включает TLS и проверку ключа.
+        isolation = self.onion.user.decode("ascii") + ":x@" if authenticated else ""
+        return f"socks://{isolation}127.0.0.1:{self.proxy_port}/" + uri[len("onion://"):]
+
+    async def update(self, entries):
+        if self.process and self.process.returncode is None and self.entries == entries:
+            return
+        if self.priming is not None and self.entries == entries:
+            if not self.priming.done():
+                return
+            task, self.priming = self.priming, None
+            self.retry = time.monotonic() + 15
+            await task
+            await self.launch()
+            return
+        if entries and entries == self.entries and time.monotonic() < self.retry:
+            raise OSError("Идёт повторное подключение быстрого профиля.")
+        await self.close()
+        if not entries:
+            return
+        self.entries = entries.copy()
+        self.retry = time.monotonic() + 15
+        local = LOOPBACK.read_text().strip()
+        if not re.fullmatch(r"tls://127\.0\.0\.1:17910\?key=[0-9a-f]{64}", local):
+            raise ValueError("Недоступен локальный транспорт быстрого профиля.")
+        self.directory = tempfile.TemporaryDirectory(prefix="altnet-invite-")
+        if len(entries) > LIMIT or any(via_tor(entry) != via_tor(entries[0]) for entry in entries):
+            raise ValueError("Некорректная комбинация точек входа.")
+        for entry in entries:
+            peer(entry)
+        if via_tor(entries[0]):
+            proxy = runpy.run_path(str(Path(__file__).with_name("onion_proxy.py")))
+            self.onion = proxy["OnionProxy"](entries)
+            self.proxy_port = await self.onion.start()
+        self.config = dict(IfName="none", Listen=[], Peers=[local, *(self.destination(e, authenticated=True) for e in entries)], InterfacePeers={},
+                      AdminListen="unix://" + self.directory.name + "/admin.sock",
+                      MulticastInterfaces=[], NodeInfoPrivacy=True)
+        if self.onion:
+            # The intermediate peer keeps its identity only for this unlocked transport.
+            key = Ed25519PrivateKey.generate()
+            seed = key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())
+            public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+            self.config.update(PrivateKey=(seed+public).hex(), PublicKey=public.hex())
+            self.priming = asyncio.create_task(self.onion.ready())
+        else:
+            await self.launch()
+
+    async def launch(self):
+        self.process = await asyncio.create_subprocess_exec(
+            sys.executable, "-IB", __file__, "worker", str(os.getpid()),
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
+        self.process.stdin.write(json.dumps(self.config).encode())
+        self.process.stdin.close()
+
+    async def discard_call_probe(self):
+        if self.call_probe is not None:
+            _, task = self.call_probe
+            self.call_probe = None
+            task.cancel()
+            result, = await asyncio.gather(task, return_exceptions=True)
+            if isinstance(result, tuple):
+                result[1].close()
+
+    async def recover_call(self, waiting):
+        # A dial to the same authorised onion can complete while Yggdrasil 0.4
+        # is between its fixed one-minute attempts. Leave every live path in place
+        # until Tor has a usable replacement and there is still no incoming traffic.
+        now = time.monotonic()
+        if (not waiting or not self.onion or not self.process or
+                any(now-stamp < 8 for stamp in self.onion.last_receive.values())):
+            await self.discard_call_probe()
+            return
+        if self.call_probe is None:
+            if now < self.call_retry_at:
+                return
+            host = urlsplit(self.entries[self.call_entry % len(self.entries)]).hostname.encode("ascii")
+            self.call_entry += 1
+            task = asyncio.create_task(asyncio.wait_for(self.onion.dial(host), 45))
+            self.call_probe = host, task
+            return
+        host, task = self.call_probe
+        if not task.done():
+            return
+        self.call_probe = None
+        try:
+            reader, writer = task.result()
+        except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError):
+            self.call_retry_at = now + 2
+            return
+        if reader.at_eof() or writer.is_closing():
+            writer.close()
+            self.call_retry_at = now + 2
+            return
+        transferred = False
+        try:
+            await self.stop_worker()
+            previous = self.onion.pending.pop(host, None)
+            if previous is not None:
+                previous.cancel()
+                result, = await asyncio.gather(previous, return_exceptions=True)
+                if isinstance(result, tuple):
+                    result[1].close()
+            self.onion.pending[host] = task
+            transferred = True
+            await self.launch()
+        finally:
+            if not transferred:
+                writer.close()
+            self.call_retry_at = time.monotonic() + 25
+
+    async def connected(self):
+        if not self.directory:
+            return []
+        writer = None
+        try:
+            reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(self.directory.name + "/admin.sock"), 1)
+            writer.write(b'{"request":"getpeers","keepalive":false}\n')
+            await writer.drain()
+            data = b""
+            while len(data) < 32768:
+                part = await asyncio.wait_for(reader.read(4096), 1)
+                if not part:
+                    break
+                data += part
+                if data.rstrip().endswith(b"}"):
+                    try:
+                        json.loads(data)
+                        break
+                    except ValueError:
+                        pass
+            rows = json.loads(data)["response"]["peers"]
+            rows = rows.values() if isinstance(rows, dict) else rows
+            return [uri for uri in self.entries if any(
+                row.get("key") == uri.rsplit("=", 1)[1] and row.get("remote", "").split("?")[0] == self.destination(uri).split("?")[0]
+                for row in rows)]
+        except (OSError, ValueError, KeyError, asyncio.TimeoutError):
+            return []
+        finally:
+            if writer:
+                writer.close()
+
+    async def stop_worker(self):
+        if self.process and self.process.returncode is None:
+            try:
+                self.process.terminate()
+                await asyncio.wait_for(self.process.wait(), 3)
+            except asyncio.TimeoutError:
+                self.process.kill()
+                await self.process.wait()
+            except ProcessLookupError:
+                pass
+        self.process = None
+
+    async def close(self):
+        await self.discard_call_probe()
+        self.call_retry_at = self.call_entry = 0
+        if self.priming is not None:
+            self.priming.cancel()
+            await asyncio.gather(self.priming,return_exceptions=True)
+            self.priming = None
+        self.config = None
+        await self.stop_worker()
+        if self.onion:
+            await self.onion.close()
+            self.onion = self.proxy_port = None
+        if self.directory:
+            self.directory.cleanup()
+            self.directory = None
+        self.entries = []
+
+
+if __name__ == "__main__" and len(sys.argv) == 3 and sys.argv[1] == "worker":
+    # Завершить пир вместе с процессом профиля, в том числе после аварии клиента.
+    import signal
+    if ctypes.CDLL(None).prctl(1, signal.SIGTERM, 0, 0, 0) or os.getppid() != int(sys.argv[2]):
+        raise SystemExit(1)
+    os.execv("/usr/sbin/yggdrasil", ["yggdrasil", "-useconf", "-loglevel", "error"])

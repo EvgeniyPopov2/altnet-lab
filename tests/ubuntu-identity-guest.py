@@ -490,6 +490,11 @@ def serve(args, root, stack):
                 if player and player.poll() is None:
                     player.terminate(); player.wait(3)
                 result=True
+            elif op == "marker":
+                hz = cmd["hz"]
+                assert hz in (440,880)
+                raw = root/"received.raw"
+                result = media["probe"](raw,hz,tail=True) if raw.stat().st_size >= 32000 else 0
             elif op == "measure":
                 recorder.terminate(); recorder.wait(3)
                 raw=root/"received.raw"

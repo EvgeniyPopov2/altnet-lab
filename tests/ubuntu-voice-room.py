@@ -146,8 +146,11 @@ def screen(browser, path):
     path.write_bytes(base64.b64decode(data,validate=True))
 
 
-def probe(path, hz):
-    data = array.array("h", path.read_bytes())
+def probe(path, hz, *, tail=False):
+    with path.open("rb") as pcm:
+        if tail:
+            pcm.seek(max(0, path.stat().st_size - 4*RATE) // 2 * 2)
+        data = array.array("h", pcm.read())
     size = RATE // 25
     cosine = [math.cos(2*math.pi*hz*i/RATE) for i in range(size)]
     sine = [math.sin(2*math.pi*hz*i/RATE) for i in range(size)]

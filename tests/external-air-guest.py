@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "eacde0a6b8359f905aeb7d8f63138f062bf321b0c439701e6cc0822efef41724"
+DIGEST = "7dc6e4a48b30da97d9597f9646fafc84c982b3714cd5b25d9b2743cacc2eb826"
 
 
 def stage(name):
@@ -93,7 +93,11 @@ def clock_offset(cfg):
     return (lower+upper)/2, (upper-lower)/2
 
 
-def trace_route(cfg, address, restored):
+def private_peer_workers():
+    return set(run("pgrep","-u",str(os.getuid()),"-x","yggdrasil").splitlines())
+
+
+def trace_route(cfg, address, peer, restored):
     results = {}
     def sample(label, probe):
         start = time.monotonic()
@@ -107,7 +111,12 @@ def trace_route(cfg, address, restored):
     def signalling():
         with socket.create_connection((address,17910),timeout=1.5):
             pass
-    for label, probe in (("torMailbox", lambda:exchange(cfg,"clock",timeout=1)), ("meshSignallingTcp", signalling)):
+    def pinned():
+        route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
+        if not all(route.values()):
+            raise RuntimeError("Waiting for the pinned peer")
+    for label, probe in (("torMailbox", lambda:exchange(cfg,"clock",timeout=1)),
+                         ("pinnedPeerObserved", pinned), ("meshSignallingTcp", signalling)):
         threading.Thread(target=sample,args=(label,probe),daemon=True).start()
     return results
 
@@ -126,7 +135,7 @@ def measure_call(ui, cfg, address, suffix):
     exchange(cfg,"play"+suffix)
     ui("play_room")
     wait(lambda:ui("airview"),lambda s:any(p["name"]=="Эфир Маяк" and p["speaking"] for p in s["people"]),"node1 speaking",65)
-    time.sleep(2)
+    wait(lambda:ui("marker",hz=440),lambda level:level>700,"remote speech marker on the runner speaker",65)
     measured=ui("measure")
     assert measured["samples"]>=16000 and measured["Hz440"]>700 and measured["Hz440"]>5*measured["Hz880"]
     exchange(cfg,"result"+suffix,measured)
@@ -182,44 +191,56 @@ def call(cfg):
         original_room=ui("air_room")
         original_worker,=ui("air_workers")
         assert ui("has_capture") and ui("airview")["phase"]=="connected"
-        offset, clock_error = clock_offset(cfg)
-        exchange(cfg,"armed",True)
-        exchange(cfg,"cut")
-        stage("Interrupting all non-loopback traffic during the established call")
-        with runpy.run_path(str(HERE/"external-air-outage.py"))["disconnected"]() as counters:
-            until=time.monotonic()+30
-            lost=wait(lambda:ui("airview"),lambda s:s["phase"]=="waiting" and len(s["people"])==1 and not s["people"][0]["speaking"],"peer loss",40)
-            wait(lambda:ui("has_capture"),lambda active:not active,"offline microphone release",8)
-            lost_at=counters()["seconds"]
-            ui("recovery_audio_start")
-            time.sleep(max(0,until-time.monotonic()))
-            outage=counters()
-            assert outage["seconds"]>=29 and outage["droppedPackets"]["output"]>0 and outage["droppedPackets"]["input"]>0
-            assert ui("airview")["phase"]=="waiting" and not ui("has_capture") and ui("recovery_heard") is None
-        outage.update(detectedAfterSeconds=lost_at,phase=lost["phase"],microphoneReleased=True)
-        restore = counters.restoration
-        restored_at = restore["mono"]
-        stages = trace_route(cfg,address,restored_at)
-        stage("Network restored; waiting for the existing room without user interaction")
-        wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"automatic reconnection",120)
-        reconnect_seconds=round(time.monotonic()-restored_at,1)
-        assert ui("browser_pid")==first_pid and ui("air_room")==original_room
-        wait(lambda:ui("has_capture"),bool,"automatic capture resume",10)
-        route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
-        assert route==dict(torStream=True,rendezvous=True,pinnedYggdrasilPeer=True)
-        local_heard = wait(lambda:ui("recovery_heard"),bool,"resumed PCM on runner",60)
-        remote_heard = exchange(cfg,"node1Heard")
-        pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
-               "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
-        error = round(clock_error+restore["uncertainty"]+.05,2)
-        assert min(pcm.values()) >= -error
-        exchange(cfg,"heardBoth",True)
-        ui("recovery_audio_stop")
-        stage("Resumed speaker PCM "+json.dumps(dict(seconds=pcm,node1TimingError=error,stages=stages,ui=reconnect_seconds)))
-        resumed_rx,resumed_tx,resumed_socket=measure_call(ui,cfg,address,"Resume")
-        assert first_socket!=resumed_socket
-        stage("Automatic resume: "+json.dumps({"secondsAfterRestore":reconnect_seconds,"signalAtNode1":resumed_tx["Hz880"],
-                                            "signalAtRunner":resumed_rx["Hz440"]}))
+        def interrupt(suffix,prior_socket):
+            peer_workers = private_peer_workers()
+            assert len(peer_workers) == 1
+            offset, clock_error = clock_offset(cfg)
+            exchange(cfg,"armed"+suffix,True)
+            exchange(cfg,"cut"+suffix)
+            stage("Interrupting all non-loopback traffic during the established call")
+            with runpy.run_path(str(HERE/"external-air-outage.py"))["disconnected"]() as counters:
+                until=time.monotonic()+30
+                lost=wait(lambda:ui("airview"),lambda s:s["phase"]=="waiting" and len(s["people"])==1 and not s["people"][0]["speaking"],"peer loss",40)
+                wait(lambda:ui("has_capture"),lambda active:not active,"offline microphone release",8)
+                lost_at=counters()["seconds"]
+                ui("recovery_audio_start")
+                time.sleep(max(0,until-time.monotonic()))
+                outage=counters()
+                assert outage["seconds"]>=29 and outage["droppedPackets"]["output"]>0 and outage["droppedPackets"]["input"]>0
+                assert ui("airview")["phase"]=="waiting" and not ui("has_capture") and ui("recovery_heard") is None
+            outage.update(detectedAfterSeconds=lost_at,phase=lost["phase"],microphoneReleased=True)
+            restore = counters.restoration
+            restored_at = restore["mono"]
+            stages = trace_route(cfg,address,peer,restored_at)
+            stage("Network restored; waiting for the existing room without user interaction")
+            wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"automatic reconnection",120)
+            reconnect_seconds=round(time.monotonic()-restored_at,1)
+            assert ui("browser_pid")==first_pid and ui("air_room")==original_room
+            wait(lambda:ui("has_capture"),bool,"automatic capture resume",10)
+            route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
+            assert route==dict(torStream=True,rendezvous=True,pinnedYggdrasilPeer=True)
+            local_heard = wait(lambda:ui("recovery_heard"),bool,"resumed PCM on runner",60)
+            remote_heard = exchange(cfg,"node1Heard"+suffix)
+            pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
+                   "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
+            stages["privatePeerRenewed"] = private_peer_workers() != peer_workers
+            error = round(clock_error+restore["uncertainty"]+.05,2)
+            assert min(pcm.values()) >= -error
+            exchange(cfg,"heardBoth"+suffix,True)
+            ui("recovery_audio_stop")
+            stage("Resumed speaker PCM "+json.dumps(dict(seconds=pcm,node1TimingError=error,stages=stages,ui=reconnect_seconds)))
+            assert max(pcm.values()) + error < 60, "Audio recovery exceeded one minute"
+            resumed_rx,resumed_tx,resumed_socket=measure_call(ui,cfg,address,"Resume"+suffix)
+            assert prior_socket!=resumed_socket
+            stage("Automatic resume: "+json.dumps({"secondsAfterRestore":reconnect_seconds,"signalAtNode1":resumed_tx["Hz880"],
+                                                "signalAtRunner":resumed_rx["Hz440"]}))
+            return ({"node1_to_actions":resumed_rx,"actions_to_node1":resumed_tx,
+                     "secondsAfterRestore":reconnect_seconds,"firstSpeakerPCM":pcm,"node1TimingError":error,
+                     "routeTiming":stages,"sameRoom":True,"sameProcess":True,"freshMediaSocket":True,
+                     "verifiedRoute":route},outage,resumed_socket)
+        automatic, outage, resumed_socket = interrupt("",first_socket)
+        repeated, repeated_outage, second_socket = interrupt("Again",resumed_socket)
+        assert len({first_socket,resumed_socket,second_socket}) == 3
         stage("Duplex audio resumed in the same room; verifying separate restart/redial scenario")
         exchange(cfg,"restored",True)
         ui("restart")
@@ -251,15 +272,13 @@ def call(cfg):
         assert not ui("has_capture")
         ui("airclick",selector='[data-air-action="create"]')
         measured,verdict,new_socket=measure_call(ui,cfg,address,"2")
-        assert len({new_socket,resumed_socket,first_socket})==3
+        assert len({new_socket,second_socket,resumed_socket,first_socket})==4
         if ui("airview")["phase"]!="closed":
             ui("airclick",selector='[data-air-action="leave"]')
         wait(lambda:ui("has_capture"),lambda active:not active,"release microphone")
         exchange(cfg,"left",True)
         data={"node1_to_actions":measured,"actions_to_node1":verdict,"installedArchiveSHA256":DIGEST,
-              "automaticResume":{"node1_to_actions":resumed_rx,"actions_to_node1":resumed_tx,
-                                 "secondsAfterRestore":reconnect_seconds,"firstSpeakerPCM":pcm,"node1TimingError":error,"routeTiming":stages,"sameRoom":True,"sameProcess":True,
-                                 "freshMediaSocket":True,"verifiedRoute":route},
+              "automaticResume":automatic,"secondAutomaticResume":repeated,"secondOutage":repeated_outage,
               "initialAudio":{"node1_to_actions":first_rx,"actions_to_node1":first_tx},"outage":outage,
               "freshMediaSocket":True,"sameAccount":True,"sameMembership":True,"redialFromSavedContact":True,
               "zeroInitialPeers":True,"desktopInvitation":True,"torRendezvous":True,

@@ -16,7 +16,7 @@ def check(e,slot,wait,provision,decode,mark):
         wait(lambda:slot("recording"+suffix),bool,"guest recording")
         slot("play"+suffix,True)
         wait(lambda:e.cmd("airview"),lambda s:any(p["name"]=="Эфир Стриж" and p["speaking"] for p in s["people"]),"remote speaker",80)
-        time.sleep(2)
+        wait(lambda:e.cmd("marker",hz=880),lambda level:level>700,"remote speech marker on the node1 speaker",65)
         heard=e.cmd("measure")
         assert heard["Hz880"]>700 and heard["Hz880"]>5*heard["Hz440"] and heard["samples"]>=16000
         mark("Remote Ubuntu -> node1 "+str(heard))
@@ -48,26 +48,30 @@ def check(e,slot,wait,provision,decode,mark):
     initial=audio_round("",accept=True)
     room=e.cmd("air_room")
     worker,=e.cmd("air_workers")
-    wait(lambda:slot("armed"),bool,"external caller is still connected")
-    assert e.cmd("has_capture") and e.cmd("airview")["phase"]=="connected"
-    # Снятие правил на Ubuntu выполняется локально и не зависит от управляющего канала.
-    slot("cut",True)
-    lost=wait(lambda:e.cmd("airview"),lambda s:s["phase"]=="waiting" and len(s["people"])==1
-              and not s["people"][0]["speaking"],"node1 saw the caller go offline",65)
-    wait(lambda:e.cmd("has_capture"),lambda active:not active,"node1 released capture during outage",12)
-    e.cmd("recovery_audio_start")
-    mark("node1 observed the interrupted call and released its microphone")
-    wait(lambda:e.cmd("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,
-         "node1 automatically reconnected to the existing room",180)
-    assert e.cmd("air_room")==room and e.cmd("browser_pid")==pid
-    wait(lambda:e.cmd("has_capture"),bool,"node1 microphone resumed",10)
-    heard = wait(lambda:e.cmd("recovery_heard"),bool,"resumed PCM on node1",60)
-    slot("node1Heard",heard)
-    wait(lambda:slot("heardBoth"),bool,"resumed PCM on both endpoints",120)
-    e.cmd("recovery_audio_stop")
-    resumed=audio_round("Resume",accept=False)
-    assert resumed[2]!=initial[2]
-    mark("Existing room resumed duplex audio without user interaction")
+    def interrupt(suffix,previous):
+        wait(lambda:slot("armed"+suffix),bool,"external caller is still connected")
+        assert e.cmd("has_capture") and e.cmd("airview")["phase"]=="connected"
+        # Снятие правил на Ubuntu выполняется локально и не зависит от управляющего канала.
+        slot("cut"+suffix,True)
+        lost=wait(lambda:e.cmd("airview"),lambda s:s["phase"]=="waiting" and len(s["people"])==1
+                  and not s["people"][0]["speaking"],"node1 saw the caller go offline",65)
+        wait(lambda:e.cmd("has_capture"),lambda active:not active,"node1 released capture during outage",12)
+        e.cmd("recovery_audio_start")
+        mark("node1 observed the interrupted call and released its microphone")
+        wait(lambda:e.cmd("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,
+             "node1 automatically reconnected to the existing room",180)
+        assert e.cmd("air_room")==room and e.cmd("browser_pid")==pid
+        wait(lambda:e.cmd("has_capture"),bool,"node1 microphone resumed",10)
+        heard = wait(lambda:e.cmd("recovery_heard"),bool,"resumed PCM on node1",60)
+        slot("node1Heard"+suffix,heard)
+        wait(lambda:slot("heardBoth"+suffix),bool,"resumed PCM on both endpoints",120)
+        e.cmd("recovery_audio_stop")
+        resumed=audio_round("Resume"+suffix,accept=False)
+        assert resumed[2]!=previous
+        mark("Existing room resumed duplex audio without user interaction")
+        return resumed,lost
+    resumed,lost = interrupt("",initial[2])
+    second,_ = interrupt("Again",resumed[2])
     wait(lambda:slot("restored"),bool,"remote completed automatic resume",120)
     saved=wait(lambda:e.cmd("contact_labels"),lambda v:len(v)==1 and any("Эфир Стриж" in label for label in v.values()),"original trusted contact")
     e.cmd("restart")
@@ -80,7 +84,7 @@ def check(e,slot,wait,provision,decode,mark):
     slot("redial",True)
     mark("Both clients are using their saved contact for the second call")
     repeated=audio_round("2",accept=True)
-    assert len({initial[2],resumed[2],repeated[2]})==3
+    assert len({initial[2],resumed[2],second[2],repeated[2]})==4
     wait(lambda:slot("left"),bool,"remote capture released",90)
     view=e.cmd("airview")
     if view["phase"]!="closed":
@@ -88,6 +92,7 @@ def check(e,slot,wait,provision,decode,mark):
     wait(lambda:e.cmd("has_capture"),lambda active:not active,"local capture released",30)
     return dict(audio={"node1_to_actions":repeated[1],"actions_to_node1":repeated[0]},
                 automaticResumeAudio={"node1_to_actions":resumed[1],"actions_to_node1":resumed[0]},
+                secondAutomaticResumeAudio={"node1_to_actions":second[1],"actions_to_node1":second[0]},
                 hostResumedSameRoom=True,hostResumedSameProcess=True,hostResumedOnNewSocket=True,
                 initialAudio={"node1_to_actions":initial[1],"actions_to_node1":initial[0]},
                 hostLostPhase=lost["phase"],hostMicrophoneReleasedOffline=True,
