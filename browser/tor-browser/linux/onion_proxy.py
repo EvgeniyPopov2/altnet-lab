@@ -58,6 +58,36 @@ class OnionProxy:
             writer.close()
             raise
 
+    async def dial_for_room(self, host):
+        # Длинная попытка нужна для медленной цепочки. Вторая проверяет тот же
+        # разрешённый адрес через тот же изолированный сеанс после возврата сети.
+        async def retry():
+            for _ in range(7):
+                await asyncio.sleep(1.5)
+                try:
+                    return await asyncio.wait_for(self.dial(host), 3)
+                except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError):
+                    continue
+            raise TimeoutError()
+        tasks = {asyncio.create_task(self.dial(host)), asyncio.create_task(retry())}
+        winner = None
+        try:
+            pending = tasks.copy()
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    if not task.cancelled() and task.exception() is None:
+                        winner = task
+                        return task.result()
+            raise ConnectionError("Точка входа голосовой комнаты пока недоступна.")
+        finally:
+            unused = tasks - {winner}
+            for task in unused:
+                task.cancel()
+            for result in await asyncio.gather(*unused, return_exceptions=True):
+                if isinstance(result, tuple):
+                    result[1].close()
+
     async def request(self, reader, writer):
         version, size = await reader.readexactly(2)
         if version != 5 or b"\x02" not in await reader.readexactly(size):

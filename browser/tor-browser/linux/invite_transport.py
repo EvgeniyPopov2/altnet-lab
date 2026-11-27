@@ -155,7 +155,7 @@ class Transport:
         isolation = self.onion.user.decode("ascii") + ":x@" if authenticated else ""
         return f"socks://{isolation}127.0.0.1:{self.proxy_port}/" + uri[len("onion://"):]
 
-    async def update(self, entries):
+    async def update(self, entries, *, warm_entry=None):
         if self.process and self.process.returncode is None and self.entries == entries:
             return
         if self.priming is not None and self.entries == entries:
@@ -194,7 +194,12 @@ class Transport:
             seed = key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw, serialization.NoEncryption())
             public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
             self.config.update(PrivateKey=(seed+public).hex(), PublicKey=public.hex())
-            self.priming = asyncio.create_task(self.onion.ready())
+            if warm_entry is None:
+                self.priming = asyncio.create_task(self.onion.ready())
+            else:
+                assert warm_entry in entries
+                host = urlsplit(warm_entry).hostname.encode("ascii")
+                self.priming = self.onion.prepare(host)
         else:
             await self.launch()
 
@@ -214,7 +219,7 @@ class Transport:
             if isinstance(result, tuple):
                 result[1].close()
 
-    async def recover_call(self, waiting):
+    async def recover_call(self, waiting, *, paced=False):
         # A dial to the same authorised onion can complete while Yggdrasil 0.4
         # is between its fixed one-minute attempts. Leave every live path in place
         # until Tor has a usable replacement and there is still no incoming traffic.
@@ -228,7 +233,8 @@ class Transport:
                 return
             host = urlsplit(self.entries[self.call_entry % len(self.entries)]).hostname.encode("ascii")
             self.call_entry += 1
-            task = asyncio.create_task(asyncio.wait_for(self.onion.dial(host), 45))
+            dial = self.onion.dial_for_room if paced else self.onion.dial
+            task = asyncio.create_task(asyncio.wait_for(dial(host), 45))
             self.call_probe = host, task
             return
         host, task = self.call_probe
@@ -246,7 +252,7 @@ class Transport:
             return
         transferred = False
         try:
-            await self.stop_worker()
+            await self.stop_worker(grace=.35)
             previous = self.onion.pending.pop(host, None)
             if previous is not None:
                 previous.cancel()
@@ -292,11 +298,11 @@ class Transport:
             if writer:
                 writer.close()
 
-    async def stop_worker(self):
+    async def stop_worker(self, grace=3):
         if self.process and self.process.returncode is None:
             try:
                 self.process.terminate()
-                await asyncio.wait_for(self.process.wait(), 3)
+                await asyncio.wait_for(self.process.wait(), grace)
             except asyncio.TimeoutError:
                 self.process.kill()
                 await self.process.wait()
@@ -320,6 +326,100 @@ class Transport:
             self.directory.cleanup()
             self.directory = None
         self.entries = []
+
+
+class CallRoutes:
+    """Резерв одного принятого звонка. Профиль владеет обоими маршрутами."""
+
+    def __init__(self):
+        self.current = Transport()
+        self.reserve = None
+        self.warm_after = 0
+        self.verify_after = 0
+        self.promote_after = None
+        self.engaged = False
+
+    async def release_reserve(self):
+        reserve, self.reserve = self.reserve, None
+        self.engaged = False
+        self.promote_after = None
+        if reserve:
+            await reserve.close()
+
+    async def update(self, entries):
+        if entries != self.current.entries:
+            await self.release_reserve()
+            self.warm_after = 0
+        await self.current.update(entries)
+
+    async def connected(self):
+        return await self.current.connected()
+
+    async def recover_call(self, waiting, connected=False):
+        if not (waiting or connected) or not self.current.onion:
+            await self.release_reserve()
+            await self.current.discard_call_probe()
+            self.warm_after = 0
+            return
+        now = time.monotonic()
+        await self.current.recover_call(waiting)
+        if self.reserve is None:
+            if connected and now >= self.warm_after:
+                self.warm_after = now + 30
+                active = await self.current.connected()
+                if active:
+                    self.reserve = Transport()
+                    try:
+                        await self.reserve.update(self.current.entries, warm_entry=active[0])
+                    except (OSError, ValueError):
+                        await self.release_reserve()
+            return
+        spare = self.reserve
+        if not self.engaged:
+            task = spare.priming
+            if not task.done():
+                return
+            if task.cancelled() or task.exception() is not None or task.result()[0].at_eof():
+                await self.release_reserve()
+                self.warm_after = now + 5
+                return
+            if waiting:
+                # Отдельный промежуточный ключ позволяет проверить новый путь,
+                # пока исходный пир всё ещё может восстановить связь.
+                try:
+                    await spare.update(self.current.entries)
+                except (OSError, ValueError):
+                    await self.release_reserve()
+                    self.warm_after = now + 5
+                    return
+                self.engaged = True
+                self.verify_after = 0
+            return
+        await spare.recover_call(waiting, paced=True)
+        if now < self.verify_after:
+            return
+        self.verify_after = now + 1
+        matched = await spare.connected()
+        old_receiving = any(now-stamp < 5 for stamp in self.current.onion.last_receive.values())
+        if matched and connected:
+            if self.promote_after is None:
+                self.promote_after = now + 5
+        else:
+            self.promote_after = None
+        if self.promote_after is not None and (not old_receiving or now >= self.promote_after or not await self.current.connected()):
+            old, self.current = self.current, spare
+            self.promote_after = None
+            self.reserve = None
+            self.engaged = False
+            await old.close()
+            self.warm_after = 0
+        elif connected and not matched:
+            await self.release_reserve()
+            self.warm_after = 0
+
+    async def close(self):
+        await self.release_reserve()
+        await self.current.close()
 
 
 if __name__ == "__main__" and len(sys.argv) == 3 and sys.argv[1] == "worker":

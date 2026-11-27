@@ -300,6 +300,88 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         client.stop_worker.assert_not_awaited()
         client.launch.assert_not_awaited()
 
+    async def test_call_reserve_is_scoped_to_the_active_pinned_entry(self):
+        routes = api["bootstrap"]["CallRoutes"]()
+        primary = routes.current = Mock()
+        primary.entries = ["first","active"]
+        primary.connected = AsyncMock(return_value=["active"])
+        primary.recover_call = AsyncMock()
+        primary.discard_call_probe = AsyncMock()
+        primary.close = AsyncMock()
+        primary.onion.last_receive = {}
+        spare = Mock()
+        spare.priming = asyncio.get_running_loop().create_future()
+        spare.update = AsyncMock()
+        spare.close = AsyncMock()
+        spare.recover_call = AsyncMock()
+        spare.connected = AsyncMock(return_value=[])
+        with patch.dict(routes.recover_call.__globals__, Transport=Mock(return_value=spare)):
+            await routes.recover_call(False)
+            self.assertIsNone(routes.reserve)
+            await routes.recover_call(False, connected=True)
+            spare.update.assert_awaited_once_with(primary.entries,warm_entry="active")
+            await routes.recover_call(True)
+            primary.close.assert_not_awaited()
+            reader = Mock()
+            reader.at_eof.return_value = False
+            spare.priming.set_result((reader,Mock()))
+            await routes.recover_call(True)
+            spare.update.assert_awaited_with(primary.entries)
+            await routes.recover_call(True)
+            self.assertIs(routes.current,primary)
+            primary.close.assert_not_awaited()
+            spare.connected.return_value = ["active"]
+            routes.verify_after = 0
+            await routes.recover_call(False,connected=True)
+            self.assertIs(routes.current,spare)
+            primary.close.assert_awaited_once()
+
+    async def test_failed_reserve_launch_keeps_current_transport(self):
+        routes = api["bootstrap"]["CallRoutes"]()
+        primary = routes.current = Mock()
+        primary.recover_call = AsyncMock()
+        spare = routes.reserve = Mock()
+        spare.priming = asyncio.get_running_loop().create_future()
+        reader = Mock()
+        reader.at_eof.return_value = False
+        spare.priming.set_result((reader,Mock()))
+        spare.update = AsyncMock(side_effect=OSError())
+        spare.close = AsyncMock()
+        await routes.recover_call(True)
+        spare.close.assert_awaited_once()
+        self.assertIsNone(routes.reserve)
+        self.assertIs(routes.current,primary)
+
+    async def test_room_leave_releases_prepared_reserve(self):
+        routes = api["bootstrap"]["CallRoutes"]()
+        primary = routes.current = Mock()
+        primary.discard_call_probe = AsyncMock()
+        spare = routes.reserve = Mock()
+        spare.close = AsyncMock()
+        await routes.recover_call(False)
+        spare.close.assert_awaited_once()
+        self.assertIsNone(routes.reserve)
+        self.assertIs(routes.current,primary)
+
+    async def test_fresh_stream_can_win_while_earlier_tor_request_is_pending(self):
+        transport,host,_ = self.recovering_transport()
+        proxy = transport.onion
+        cancelled = asyncio.Event()
+        stream = Mock()
+        async def dial(destination):
+            self.assertEqual(destination,host)
+            if proxy.dial.await_count == 1:
+                try:
+                    await asyncio.Future()
+                finally:
+                    cancelled.set()
+            return object(),stream
+        proxy.dial.side_effect = dial
+        reader, writer = await asyncio.wait_for(proxy.dial_for_room(host),4)
+        self.assertIs(writer,stream)
+        self.assertTrue(cancelled.is_set())
+        stream.close.assert_not_called()
+
     async def test_first_ready_onion_is_reused_and_lock_closes_unused_stream(self):
         transport = api["bootstrap"]
         hosts = [transport["onion_host"](bytes([i])*32) for i in (1,2)]

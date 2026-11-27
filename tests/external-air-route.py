@@ -24,4 +24,8 @@ for row in pathlib.Path("/proc/net/unix").read_text().splitlines():
     peers=json.loads(proc.stdout)["peers"]
     matched |= any(p.get("key")==pin and p.get("remote","").split("?")[0].endswith("/"+authority)
                    for p in peers.values())
-print(json.dumps(dict(torStream=tor,rendezvous=rendezvous,pinnedYggdrasilPeer=matched)))
+if sys.argv[2:]==["--counts"]:
+    succeeded=[p for row in streams if len(p:=row.split())>=4 and p[1]=="SUCCEEDED" and p[3]==authority]
+    print(json.dumps(dict(streams=len(succeeded),circuits=len(ids))))
+else:
+    print(json.dumps(dict(torStream=tor,rendezvous=rendezvous,pinnedYggdrasilPeer=matched)))

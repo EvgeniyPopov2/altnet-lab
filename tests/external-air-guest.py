@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "7dc6e4a48b30da97d9597f9646fafc84c982b3714cd5b25d9b2743cacc2eb826"
+DIGEST = "37296735699ee5ab91868215cdceeeea6bba585ece57445710bf505b23dbcd3e"
 
 
 def stage(name):
@@ -199,6 +199,7 @@ def call(cfg):
             peer_workers = private_peer_workers()
             assert 1 <= len(peer_workers) <= 2
             offset, clock_error = clock_offset(cfg)
+            before_cut=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--counts"))
             exchange(cfg,"armed"+suffix,True)
             exchange(cfg,"cut"+suffix)
             stage("Interrupting all non-loopback traffic during the established call")
@@ -227,19 +228,20 @@ def call(cfg):
             remote_heard = exchange(cfg,"node1Heard"+suffix)
             pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
                    "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
+            stages["entryBeforeCut"] = before_cut
             stages["privatePeerRenewed"] = private_peer_workers() != peer_workers
             error = round(clock_error+restore["uncertainty"]+.05,2)
             assert min(pcm.values()) >= -error
             exchange(cfg,"heardBoth"+suffix,True)
             ui("recovery_audio_stop")
             stage("Resumed speaker PCM "+json.dumps(dict(seconds=pcm,node1TimingError=error,stages=stages,ui=reconnect_seconds)))
-            assert max(pcm.values()) + error < 60, "Audio recovery exceeded one minute"
             resumed_rx,resumed_tx,resumed_socket=measure_call(ui,cfg,address,"Resume"+suffix)
             assert prior_socket!=resumed_socket
             stage("Automatic resume: "+json.dumps({"secondsAfterRestore":reconnect_seconds,"signalAtNode1":resumed_tx["Hz880"],
                                                 "signalAtRunner":resumed_rx["Hz440"]}))
             return ({"node1_to_actions":resumed_rx,"actions_to_node1":resumed_tx,
                      "secondsAfterRestore":reconnect_seconds,"firstSpeakerPCM":pcm,"node1TimingError":error,
+                     "withinTenSeconds":max(pcm["node1_to_actions"]+.1,pcm["actions_to_node1"]+error)<=10,
                      "routeTiming":stages,"sameRoom":True,"sameProcess":True,"freshMediaSocket":True,
                      "verifiedRoute":route},outage,resumed_socket)
         automatic, outage, resumed_socket = interrupt("",first_socket,30)
@@ -289,9 +291,17 @@ def call(cfg):
               "freshMediaSocket":True,"sameAccount":True,"sameMembership":True,"redialFromSavedContact":True,
               "zeroInitialPeers":True,"desktopInvitation":True,"torRendezvous":True,
               "pinnedYggdrasilPeer":True,"speakerIndicatorsAtBothEnds":True}
+        rounds = (automatic,repeated,third)
+        data["tenSecondTarget"] = {"met":sum(row["withinTenSeconds"] for row in rounds),"tested":len(rounds)}
         stage(json.dumps(data))
         with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+            print("| Обрыв, с | Звук на node1, с | Звук на Ubuntu, с | В пределах 10 с с учётом погрешности |",file=out)
+            print("|---:|---:|---:|:---:|",file=out)
+            for fault, row in zip((outage,repeated_outage,third_outage),rounds):
+                audio=row["firstSpeakerPCM"]
+                print(f'| {fault["seconds"]} | {audio["actions_to_node1"]} | {audio["node1_to_actions"]} | {row["withinTenSeconds"]} |',file=out)
             print("### AltNet · external Ubuntu 22.04\n\n```json\n"+json.dumps(data,indent=2)+"\n```",file=out)
+        assert all(max(row["firstSpeakerPCM"].values())+row["node1TimingError"]<60 for row in rounds), "Audio recovery exceeded one minute"
 
 
 if __name__=="__main__":

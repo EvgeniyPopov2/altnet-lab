@@ -447,7 +447,7 @@ class Lobby:
             self.last_connected_room = self.room
         if self.links:
             waiting = bool(self.room and self.room == self.last_connected_room and state["phase"] == "waiting")
-            await self.links.transport.recover_call(waiting)
+            await self.links.transport.recover_call(waiting, connected=bool(self.room and state["phase"] == "connected"))
         inv=next(iter(self.pending.items()),None)
         update=self.sync.next_update() if self.sync else None
         return {"links":await self.links.status() if self.links else {}, "room":self.room,"host":self.host,"roster":[v["id"] for v in self.roster],"state":state,"delivery":self.delivery,
