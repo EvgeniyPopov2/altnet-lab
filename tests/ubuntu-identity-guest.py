@@ -236,6 +236,8 @@ class Panel:
         if op == "airclick":
             self.click(data["selector"])
             return True
+        if op == "air_health":
+            return self.b.panel('const s=await win.altNetVoice.air("airPoll","{}"); return {phase:s.state?.phase,room:!!s.room,offer:!!s.invite,delivery:Object.values(s.delivery??{}),entry:s.links?.entryConnected??null};')
         if op == "air_room":
             room=self.b.panel('return (await win.altNetVoice.air("airPoll","{}")).room;')
             if not isinstance(room,str) or not re.fullmatch(r"[0-9a-f]{64}",room):

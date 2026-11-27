@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import runpy
 import secrets
+import socket
 import subprocess
 import sys
 import tempfile
@@ -80,7 +81,11 @@ def wait(fn, accept, name, seconds=90):
 
 
 def measure_call(ui, cfg, address, suffix):
-    wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"joining Air",160)
+    try:
+        wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"joining Air",160)
+    except RuntimeError:
+        stage("Call status "+json.dumps(ui("air_health")))
+        raise
     routes=ui("air_routes")
     assert "17911" in routes
     assert any(("["+address+"]") in row and ":17911" in row for row in run("ss","-Ht6n","state","established").splitlines())
@@ -167,6 +172,8 @@ def call(cfg):
         assert route==dict(torStream=True,rendezvous=True,pinnedYggdrasilPeer=True)
         resumed_rx,resumed_tx,resumed_socket=measure_call(ui,cfg,address,"Resume")
         assert first_socket!=resumed_socket
+        stage("Automatic resume: "+json.dumps({"secondsAfterRestore":reconnect_seconds,"signalAtNode1":resumed_tx["Hz880"],
+                                            "signalAtRunner":resumed_rx["Hz440"]}))
         stage("Duplex audio resumed in the same room; verifying separate restart/redial scenario")
         exchange(cfg,"restored",True)
         ui("restart")
@@ -180,6 +187,16 @@ def call(cfg):
         wait(lambda:json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer)),
              lambda route:all(route.values()),"restored authenticated route",300)
         exchange(cfg,"redial")
+        # После полного перезапуска локальный пир может подняться раньше, чем построится
+        # сквозной маршрут до службы звонков собеседника. Проверка не передаёт приглашение.
+        def signalling_ready():
+            try:
+                with socket.create_connection((address,17910),timeout=2):
+                    return True
+            except OSError:
+                return False
+        wait(signalling_ready,bool,"node1 signalling service after restarting both apps",200)
+        stage("Saved route reaches node1 signalling service after restart")
         ui("air_server")
         if saved_id not in ui("airview")["selected"]:
             ui("airclick",selector='[data-air-contact="'+saved_id+'"]')
