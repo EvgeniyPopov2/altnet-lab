@@ -10,8 +10,11 @@ with socket.socket(socket.AF_UNIX) as sock:
         control(stream,b"AUTHENTICATE "+cookie.hex().encode())
         streams=control(stream,b"GETINFO stream-status").decode().splitlines()
         circuits=control(stream,b"GETINFO circuit-status").decode().splitlines()
-        tor=any(" SUCCEEDED " in row and authority in row.split() for row in streams)
-        rendezvous=any(" BUILT " in row and "PURPOSE=HS_CLIENT_REND" in row for row in circuits)
+        ids={parts[2] for row in streams if len(parts:=row.split())>=4
+             and parts[1]=="SUCCEEDED" and parts[3]==authority}
+        tor=bool(ids)
+        rendezvous=any(len(parts:=row.split())>=4 and parts[0] in ids and parts[1]=="BUILT"
+                       and "PURPOSE=HS_CLIENT_REND" in parts for row in circuits)
 matched=False
 for row in pathlib.Path("/proc/net/unix").read_text().splitlines():
     path=row.split()[-1]

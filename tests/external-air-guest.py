@@ -79,6 +79,26 @@ def wait(fn, accept, name, seconds=90):
     raise RuntimeError("Timed out: "+name)
 
 
+def measure_call(ui, cfg, address, suffix):
+    wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"joining Air",160)
+    routes=ui("air_routes")
+    assert "17911" in routes
+    assert any(("["+address+"]") in row and ":17911" in row for row in run("ss","-Ht6n","state","established").splitlines())
+    ui("record")
+    exchange(cfg,"recording"+suffix,True)
+    exchange(cfg,"play"+suffix)
+    ui("play_room")
+    wait(lambda:ui("airview"),lambda s:any(p["name"]=="Эфир Маяк" and p["speaking"] for p in s["people"]),"node1 speaking",65)
+    time.sleep(2)
+    measured=ui("measure")
+    assert measured["samples"]>=16000 and measured["Hz440"]>700 and measured["Hz440"]>5*measured["Hz880"]
+    exchange(cfg,"result"+suffix,measured)
+    verdict=exchange(cfg,"done"+suffix)
+    assert isinstance(verdict,dict) and verdict["Hz880"]>700 and verdict["Hz880"]>5*verdict["Hz440"] and verdict["samples"]>=16000
+    ui("stop")
+    return measured, verdict, routes["17911"]["inode"]
+
+
 def call(cfg):
     with tempfile.TemporaryDirectory(prefix="alt-air-") as tmp, ExitStack() as stack:
         proc=subprocess.Popen(["dbus-run-session","--","xvfb-run","-a","-s","-screen 0 1440x1000x24 -nolisten tcp",
@@ -102,41 +122,68 @@ def call(cfg):
         exchange(cfg,"ready",True)
         link=exchange(cfg,"invite")
         assert isinstance(link,str) and link.startswith("alt://join/v3/")
-        address,_,_,_,_,peers=runpy.run_path(str(LINUX/"join_link.py"))["decode"](link)
+        address,_,inviter_id,_,_,peers=runpy.run_path(str(LINUX/"join_link.py"))["decode"](link)
         peer,=peers
         assert peer.startswith("onion://")
         assert ui("before_register",link=link,desktop=True)
-        ui("register",name="Гость Стриж",callsign="Гость Стриж",fastName="Стриж",fastCallsign="Эфир Стриж",
-           deviceName="Ubuntu GitHub",password=secrets.token_urlsafe(24))
+        password=secrets.token_urlsafe(24)
+        first_pid=ui("browser_pid")
+        identity=ui("register",name="Гость Стриж",callsign="Гость Стриж",fastName="Стриж",fastCallsign="Эфир Стриж",
+           deviceName="Ubuntu GitHub",password=password)
+        del link
         ui("open_join",pending=True)
         claim=wait(lambda:ui("link_state"),lambda s:bool(s.get("code")),"guest confirmation",180)
         exchange(cfg,"claim",claim["code"])
         wait(lambda:ui("link_state"),lambda s:s.get("joined"),"host approval",300)
-        assert ui("network_storage")["localMemberships"]==1
+        membership=ui("network_storage")
+        assert membership["localMemberships"]==1
         evidence=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
         assert evidence==dict(torStream=True,rendezvous=True,pinnedYggdrasilPeer=True)
         stage("Admitted by node1; signed invitation, Tor rendezvous and live Yggdrasil peer verified")
         ui("airclick",selector="[data-network-call]")
-        wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"joining Air",160)
-        assert "17911" in ui("air_routes")
-        assert any(("["+address+"]") in row and ":17911" in row for row in run("ss","-Ht6n","state","established").splitlines())
-        ui("record")
-        exchange(cfg,"recording",True)
-        exchange(cfg,"play")
-        ui("play_room")
-        wait(lambda:ui("airview"),lambda s:any(p["name"]=="Эфир Маяк" and p["speaking"] for p in s["people"]),"node1 speaking",65)
-        time.sleep(2)
-        measured=ui("measure")
-        assert measured["samples"]>=16000 and measured["Hz440"]>700 and measured["Hz440"]>5*measured["Hz880"]
-        exchange(cfg,"result",measured)
-        verdict=exchange(cfg,"done")
-        assert isinstance(verdict,dict) and verdict["Hz880"]>700 and verdict["Hz880"]>5*verdict["Hz440"] and verdict["samples"]>=16000
-        ui("stop")
+        first_rx,first_tx,first_socket=measure_call(ui,cfg,address,"")
+        assert ui("has_capture") and ui("airview")["phase"]=="connected"
+        exchange(cfg,"armed",True)
+        exchange(cfg,"cut")
+        stage("Interrupting all non-loopback traffic during the established call")
+        with runpy.run_path(str(HERE/"external-air-outage.py"))["disconnected"]() as counters:
+            until=time.monotonic()+30
+            lost=wait(lambda:ui("airview"),lambda s:s["phase"]=="waiting" and len(s["people"])==1 and not s["people"][0]["speaking"],"peer loss",40)
+            wait(lambda:ui("has_capture"),lambda active:not active,"offline microphone release",8)
+            lost_at=counters()["seconds"]
+            time.sleep(max(0,until-time.monotonic()))
+            outage=counters()
+            assert outage["seconds"]>=29 and outage["droppedPackets"]["output"]>0 and outage["droppedPackets"]["input"]>0
+            assert ui("airview")["phase"]=="waiting" and not ui("has_capture")
+        outage.update(detectedAfterSeconds=lost_at,phase=lost["phase"],microphoneReleased=True)
+        stage("Network restored; restarting the native client with its existing profile")
+        exchange(cfg,"restored",True)
+        ui("restart")
+        assert ui("is_locked") and ui("browser_pid")!=first_pid
+        assert ui("unlock",password=password)==identity
+        assert ui("network_storage")==membership
+        ui("contact_home")
+        saved=wait(lambda:ui("contact_labels"),lambda v:"Эфир Маяк" in v.get(inviter_id,""),"saved inviter")
+        saved_id,=saved
+        assert saved_id==inviter_id
+        wait(lambda:json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer)),
+             lambda route:all(route.values()),"restored authenticated route",300)
+        exchange(cfg,"redial")
+        ui("air_server")
+        if saved_id not in ui("airview")["selected"]:
+            ui("airclick",selector='[data-air-contact="'+saved_id+'"]')
+        assert ui("airview")["selected"]==[saved_id]
+        assert not ui("has_capture")
+        ui("airclick",selector='[data-air-action="create"]')
+        measured,verdict,new_socket=measure_call(ui,cfg,address,"2")
+        assert new_socket!=first_socket
         if ui("airview")["phase"]!="closed":
             ui("airclick",selector='[data-air-action="leave"]')
         wait(lambda:ui("has_capture"),lambda active:not active,"release microphone")
         exchange(cfg,"left",True)
         data={"node1_to_actions":measured,"actions_to_node1":verdict,"installedArchiveSHA256":DIGEST,
+              "initialAudio":{"node1_to_actions":first_rx,"actions_to_node1":first_tx},"outage":outage,
+              "freshMediaSocket":True,"sameAccount":True,"sameMembership":True,"redialFromSavedContact":True,
               "zeroInitialPeers":True,"desktopInvitation":True,"torRendezvous":True,
               "pinnedYggdrasilPeer":True,"speakerIndicatorsAtBothEnds":True}
         stage(json.dumps(data))

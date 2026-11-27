@@ -10,8 +10,8 @@ import socket
 import sys
 import threading
 
-INCOMING = {"ready", "claim", "recording", "result", "left"}
-OUTGOING = {"invite", "play", "done"}
+INCOMING = {"ready", "claim", "recording", "result", "left", "armed", "restored", "recording2", "result2"}
+OUTGOING = {"invite", "play", "done", "cut", "redial", "play2", "done2"}
 state = {}
 lock = threading.Lock()
 token = secrets.token_urlsafe(32)
@@ -57,7 +57,7 @@ class Handler(BaseHTTPRequestHandler):
             value = json.loads(self.rfile.read(length))
             if key == "claim":
                 valid = isinstance(value, str) and re.fullmatch(r"[0-9]{6}",value)
-            elif key == "result":
+            elif key in ("result","result2"):
                 valid = isinstance(value, dict) and set(value)=={"Hz440","Hz880","Hz1220","samples"} and all(type(n) is int and 0<=n<=20000000 for n in value.values())
             else:
                 valid = value is True

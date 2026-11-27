@@ -141,6 +141,8 @@ class Panel:
             self.fast()
             self.contacts()
             return True
+        if op=="browser_pid":
+            return self.b.script("return Services.appinfo.processID;")
         if op=="contact_labels":
             return self.b.panel("""return Object.fromEntries([...win.document.querySelectorAll('button[data-identity-contact]')].map(e=>[e.dataset.identityContact,e.innerText]));""")
         if op=="missed":
