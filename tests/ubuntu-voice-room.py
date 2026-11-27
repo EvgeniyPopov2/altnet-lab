@@ -54,6 +54,56 @@ def sound(root):
         yield
 
 
+class RecoveryAudio:
+    """Feed the private mic and timestamp remote PCM at the private speaker."""
+    def __init__(self, stack, name):
+        import threading
+        self.heard = None
+        own, other = (625, 1075) if name == "node1" else (1075, 625)
+        rate, size = 16000, 640
+        args = ["--raw", "--rate=16000", "--channels=1", "--format=s16le", "--latency-msec=25"]
+        self.monitor = child(stack, ["parec", "--device=speakers.monitor", *args], stdout=subprocess.PIPE)
+        self.player = child(stack, ["pacat", "--device=mic", *args], stdin=subprocess.PIPE)
+        signal = array.array("h", (round(5000*math.sin(2*math.pi*own*i/rate)) for i in range(size))).tobytes()
+        def feed():
+            try:
+                while self.player.poll() is None:
+                    self.player.stdin.write(signal)
+                    self.player.stdin.flush()
+            except (OSError, ValueError):
+                pass
+        def listen():
+            def basis(hz):
+                return [(math.cos(2*math.pi*hz*i/rate), math.sin(2*math.pi*hz*i/rate)) for i in range(size)]
+            target, local = basis(other), basis(own)
+            def amplitude(pcm, wave):
+                return 2 * math.hypot(sum(p*c for p,(c,s) in zip(pcm,wave)),
+                                      sum(p*s for p,(c,s) in zip(pcm,wave))) / size
+            hits = 0
+            while len(block := self.monitor.stdout.read(size*2)) == size*2:
+                end = time.time()
+                pcm = array.array("h", block)
+                level = amplitude(pcm, target)
+                if level > 700 and level > 5*amplitude(pcm, local):
+                    if hits == 0:
+                        first = end
+                    hits += 1
+                    if hits == 3 and self.heard is None:
+                        self.heard = first
+                else:
+                    hits = 0
+        self.threads = [threading.Thread(target=f, daemon=True) for f in (feed, listen)]
+        for thread in self.threads:
+            thread.start()
+
+    def close(self):
+        for process in (self.player, self.monitor):
+            process.terminate()
+            process.wait(timeout=4)
+        for thread in self.threads:
+            thread.join(timeout=2)
+
+
 def wave_data(name):
     hz, phrase = {"node1": (440, "Первый узел. Приём, как слышно?"),
                   "node2": (880, "Второй узел. Слышу вас хорошо."),

@@ -9,9 +9,10 @@ import secrets
 import socket
 import sys
 import threading
+import time
 
-INCOMING = {"ready", "claim", "recording", "result", "left", "armed", "restored", "recording2", "result2", "recordingResume", "resultResume"}
-OUTGOING = {"invite", "play", "done", "cut", "redial", "play2", "done2", "playResume", "doneResume"}
+INCOMING = {"ready", "claim", "recording", "result", "left", "armed", "restored", "recording2", "result2", "recordingResume", "resultResume", "heardBoth"}
+OUTGOING = {"invite", "play", "done", "cut", "redial", "play2", "done2", "playResume", "doneResume", "clock", "node1Heard"}
 state = {}
 lock = threading.Lock()
 token = secrets.token_urlsafe(32)
@@ -43,7 +44,7 @@ class Handler(BaseHTTPRequestHandler):
         key = self.request_slot(OUTGOING)
         if key:
             with lock:
-                data = state.get(key)
+                data = time.time() if key == "clock" else state.get(key)
             self.reply(204 if data is None else 200, b"" if data is None else json.dumps(data).encode())
 
     def do_POST(self):

@@ -55,11 +55,16 @@ def check(e,slot,wait,provision,decode,mark):
     lost=wait(lambda:e.cmd("airview"),lambda s:s["phase"]=="waiting" and len(s["people"])==1
               and not s["people"][0]["speaking"],"node1 saw the caller go offline",65)
     wait(lambda:e.cmd("has_capture"),lambda active:not active,"node1 released capture during outage",12)
+    e.cmd("recovery_audio_start")
     mark("node1 observed the interrupted call and released its microphone")
     wait(lambda:e.cmd("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,
          "node1 automatically reconnected to the existing room",180)
     assert e.cmd("air_room")==room and e.cmd("browser_pid")==pid
     wait(lambda:e.cmd("has_capture"),bool,"node1 microphone resumed",10)
+    heard = wait(lambda:e.cmd("recovery_heard"),bool,"resumed PCM on node1",60)
+    slot("node1Heard",heard)
+    wait(lambda:slot("heardBoth"),bool,"resumed PCM on both endpoints",120)
+    e.cmd("recovery_audio_stop")
     resumed=audio_round("Resume",accept=False)
     assert resumed[2]!=initial[2]
     mark("Existing room resumed duplex audio without user interaction")

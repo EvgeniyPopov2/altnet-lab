@@ -11,6 +11,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from urllib.parse import urlparse
 from urllib.request import urlopen
@@ -78,6 +79,37 @@ def wait(fn, accept, name, seconds=90):
             return value
         time.sleep(.4)
     raise RuntimeError("Timed out: "+name)
+
+
+def clock_offset(cfg):
+    intervals = []
+    for _ in range(6):
+        start = time.time()
+        remote = exchange(cfg,"clock")
+        end = time.time()
+        intervals.append((remote-end,remote-start))
+    lower, upper = max(a for a,b in intervals), min(b for a,b in intervals)
+    assert lower <= upper
+    return (lower+upper)/2, (upper-lower)/2
+
+
+def trace_route(cfg, address, restored):
+    results = {}
+    def sample(label, probe):
+        start = time.monotonic()
+        while time.monotonic()-start < 140:
+            try:
+                probe()
+                results[label] = round(time.monotonic()-restored,2)
+                return
+            except (OSError,RuntimeError):
+                time.sleep(.4)
+    def signalling():
+        with socket.create_connection((address,17910),timeout=1.5):
+            pass
+    for label, probe in (("torMailbox", lambda:exchange(cfg,"clock",timeout=1)), ("meshSignallingTcp", signalling)):
+        threading.Thread(target=sample,args=(label,probe),daemon=True).start()
+    return results
 
 
 def measure_call(ui, cfg, address, suffix):
@@ -150,6 +182,7 @@ def call(cfg):
         original_room=ui("air_room")
         original_worker,=ui("air_workers")
         assert ui("has_capture") and ui("airview")["phase"]=="connected"
+        offset, clock_error = clock_offset(cfg)
         exchange(cfg,"armed",True)
         exchange(cfg,"cut")
         stage("Interrupting all non-loopback traffic during the established call")
@@ -158,12 +191,15 @@ def call(cfg):
             lost=wait(lambda:ui("airview"),lambda s:s["phase"]=="waiting" and len(s["people"])==1 and not s["people"][0]["speaking"],"peer loss",40)
             wait(lambda:ui("has_capture"),lambda active:not active,"offline microphone release",8)
             lost_at=counters()["seconds"]
+            ui("recovery_audio_start")
             time.sleep(max(0,until-time.monotonic()))
             outage=counters()
             assert outage["seconds"]>=29 and outage["droppedPackets"]["output"]>0 and outage["droppedPackets"]["input"]>0
-            assert ui("airview")["phase"]=="waiting" and not ui("has_capture")
+            assert ui("airview")["phase"]=="waiting" and not ui("has_capture") and ui("recovery_heard") is None
         outage.update(detectedAfterSeconds=lost_at,phase=lost["phase"],microphoneReleased=True)
-        restored_at=time.monotonic()
+        restore = counters.restoration
+        restored_at = restore["mono"]
+        stages = trace_route(cfg,address,restored_at)
         stage("Network restored; waiting for the existing room without user interaction")
         wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"automatic reconnection",120)
         reconnect_seconds=round(time.monotonic()-restored_at,1)
@@ -171,6 +207,15 @@ def call(cfg):
         wait(lambda:ui("has_capture"),bool,"automatic capture resume",10)
         route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
         assert route==dict(torStream=True,rendezvous=True,pinnedYggdrasilPeer=True)
+        local_heard = wait(lambda:ui("recovery_heard"),bool,"resumed PCM on runner",60)
+        remote_heard = exchange(cfg,"node1Heard")
+        pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
+               "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
+        error = round(clock_error+restore["uncertainty"]+.05,2)
+        assert min(pcm.values()) >= -error
+        exchange(cfg,"heardBoth",True)
+        ui("recovery_audio_stop")
+        stage("Resumed speaker PCM "+json.dumps(dict(seconds=pcm,node1TimingError=error,stages=stages,ui=reconnect_seconds)))
         resumed_rx,resumed_tx,resumed_socket=measure_call(ui,cfg,address,"Resume")
         assert first_socket!=resumed_socket
         stage("Automatic resume: "+json.dumps({"secondsAfterRestore":reconnect_seconds,"signalAtNode1":resumed_tx["Hz880"],
@@ -213,7 +258,7 @@ def call(cfg):
         exchange(cfg,"left",True)
         data={"node1_to_actions":measured,"actions_to_node1":verdict,"installedArchiveSHA256":DIGEST,
               "automaticResume":{"node1_to_actions":resumed_rx,"actions_to_node1":resumed_tx,
-                                 "secondsAfterRestore":reconnect_seconds,"sameRoom":True,"sameProcess":True,
+                                 "secondsAfterRestore":reconnect_seconds,"firstSpeakerPCM":pcm,"node1TimingError":error,"routeTiming":stages,"sameRoom":True,"sameProcess":True,
                                  "freshMediaSocket":True,"verifiedRoute":route},
               "initialAudio":{"node1_to_actions":first_rx,"actions_to_node1":first_tx},"outage":outage,
               "freshMediaSocket":True,"sameAccount":True,"sameMembership":True,"redialFromSavedContact":True,

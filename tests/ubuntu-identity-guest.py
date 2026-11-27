@@ -386,7 +386,7 @@ def serve(args, root, stack):
         return Panel(profile.enter_context(native["session"](root,executable=args.browser,headless=False,require_tor_status=False)))
     ui = start()
     ui.home()
-    recorder, player = None, None
+    recorder, player, recovery = None, None, None
     print(json.dumps({"ready":args.name}),flush=True)
     for line in sys.stdin:
         cmd = json.loads(line)
@@ -462,6 +462,16 @@ def serve(args, root, stack):
                 ui.home()
                 ui.wait('[data-identity-state="locked"]')
                 result=True
+            elif op == "recovery_audio_start":
+                assert recovery is None
+                recovery = media["RecoveryAudio"](stack, args.name)
+                result = True
+            elif op == "recovery_heard":
+                result = recovery.heard
+            elif op == "recovery_audio_stop":
+                recovery.close()
+                recovery = None
+                result = True
             elif op == "record":
                 with (root/"received.raw").open("wb") as out:
                     recorder=media["child"](stack,["parec","--device=speakers.monitor","--raw","--rate=16000","--channels=1","--format=s16le"],stdout=out)
@@ -520,7 +530,10 @@ def serve(args, root, stack):
                     except OSError:
                         continue
             elif op == "has_capture":
-                result=bool(subprocess.check_output(["pactl","list","short","source-outputs"],text=True).strip())
+                sources = subprocess.check_output(["pactl","list","short","sources"],text=True).splitlines()
+                mic, = [row.split()[0] for row in sources if row.split()[1] == "mic.monitor"]
+                outputs = subprocess.check_output(["pactl","list","short","source-outputs"],text=True).splitlines()
+                result = any(row.split()[1] == mic for row in outputs)
             elif op == "air_screen":
                 media["screen"](ui.b,root/"air.png")
                 result=True

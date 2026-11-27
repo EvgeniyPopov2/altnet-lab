@@ -31,9 +31,14 @@ def disconnected():
             counts = {v["rule"]["chain"]:next(e["counter"]["packets"] for e in v["rule"]["expr"] if "counter" in e)
                       for v in data["nftables"] if "rule" in v}
             return dict(seconds=round(time.monotonic()-start,1),droppedPackets=counts)
+        evidence.restoration = {}
         yield evidence
     finally:
         if applied:
+            before = time.monotonic()
             subprocess.run(["sudo","-n",*remove], check=True)
+            after = time.monotonic()
+            evidence.restoration.update(mono=(before+after)/2, epoch=time.time()-(after-before)/2,
+                                        uncertainty=(after-before)/2)
         subprocess.run(["sudo","-n","systemctl","stop",unit+".timer"],check=False)
 
