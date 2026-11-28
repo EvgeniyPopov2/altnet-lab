@@ -200,6 +200,7 @@ class Transport:
             else:
                 assert warm_entry in entries
                 host = urlsplit(warm_entry).hostname.encode("ascii")
+                self.onion.independent(host)
                 self.priming = self.onion.prepare(host)
         else:
             await self.launch()
@@ -441,7 +442,9 @@ class CallRoutes:
         primary, matched = await asyncio.gather(self.current.connected(), spare.connected())
         if matched:
             self.last_entry = matched[0]
-        if connected and matched and not primary:
+        if spare.onion:
+            spare.onion.interruption(waiting)
+        if connected and matched and not primary and spare.onion.lease is None:
             # Звук уже вернулся через резерв. Сохраняем его, а прежний
             # основной пир ремонтируем на месте, пока разговор продолжается.
             self.current, self.reserve = spare, self.current

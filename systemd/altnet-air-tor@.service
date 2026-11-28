@@ -1,0 +1,23 @@
+[Unit]
+Description=Изолированный Tor принятой комнаты Эфира
+After=tor@default.service
+BindsTo=tor@default.service
+
+[Service]
+User=debian-tor
+ExecStart=/usr/bin/python3 -IB /opt/altnet-browser/Browser/altnet-linux/air_tor.py
+StandardInput=socket
+StandardOutput=null
+StandardError=null
+RuntimeDirectory=altnet-air-tor-%i
+RuntimeDirectoryMode=0700
+UMask=0077
+KillMode=control-group
+TimeoutStopSec=4
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

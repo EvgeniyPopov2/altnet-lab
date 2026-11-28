@@ -68,7 +68,7 @@ def add(out, name, data, mode):
     out.addfile(info, io.BytesIO(data))
 
 
-def build(source, target, dist):
+def build(source, target, dist, transport_peers=None):
     with source.open("rb") as stream:
         digest = hashlib.sha256()
         for part in iter(lambda: stream.read(1024 * 1024), b""):
@@ -96,13 +96,35 @@ def build(source, target, dist):
                 out.addfile(info, src)
             if len(seen) != 2:
                 raise ValueError("Отсутствуют ресурсы браузера")
+            for name in ("altnet-meeting-catalog.service", "altnet-meeting-net.service", "altnet-meeting-router.service", "altnet-meeting.service"):
+                add(out, "meeting/" + name, (ROOT / "systemd" / name).read_bytes().replace(b"\r\n", b"\n"), 0o644)
+            add(out, "meeting/meeting-network.sh", (ROOT / "scripts/meeting-network.sh").read_bytes().replace(b"\r\n", b"\n"), 0o755)
+            add(out, "Browser/altnet-linux/meeting-enrollment.py", (ROOT / "scripts/meeting-enrollment.py").read_bytes(), 0o644)
             linux = ROOT / "browser/tor-browser/linux"
             add(out,"Browser/defaults/pref/altnet-locale.js",b'pref("intl.locale.requested","ru");\n',0o644)
+            if transport_peers is not None:
+                import json
+                entries=runpy.run_path(str(linux / "transport_peers.py"))["peers"](transport_peers)
+                add(out, "network/transport-peers.json", json.dumps(entries).encode("ascii"), 0o644)
+            # An invitation can supply the first public peer even on a seedless installation.
+            add(out,"network/fast-ingress.py",(ROOT / "scripts/fast-ingress.py").read_bytes(),0o644)
+            add(out,"network/install-fast-ingress.sh",(ROOT / "scripts/install-fast-ingress.sh").read_bytes().replace(b"\r\n",b"\n"),0o755)
+            unit="altnet-fast-ingress.service"
+            add(out,"network/"+unit,(ROOT / "systemd" / unit).read_bytes().replace(b"\r\n",b"\n"),0o644)
+            add(out,"Browser/altnet-linux/invite_transport.py",(linux/"invite_transport.py").read_bytes(),0o644)
+            add(out,"Browser/altnet-linux/onion_entry.py",(linux/"onion_entry.py").read_bytes(),0o644)
+            add(out,"Browser/altnet-linux/air_tor.py",(linux/"air_tor.py").read_bytes(),0o644)
+            add(out,"Browser/altnet-linux/onion_proxy.py",(linux/"onion_proxy.py").read_bytes(),0o644)
+            add(out,"Browser/altnet-linux/bridge_tor.py",(ROOT/"scripts/bridge_tor.py").read_bytes(),0o644)
+            add(out,"Browser/altnet-linux/entry_control.py",(linux/"entry_control.py").read_bytes(),0o644)
+            add(out,"Browser/altnet-linux/check_transport.py",(linux/"check_transport.py").read_bytes(),0o644)
+            for unit in ("altnet-onion-entry.service","altnet-entry-control.socket","altnet-entry-control@.service","altnet-air-tor.socket","altnet-air-tor@.service"):
+                add(out,"network/"+unit,(ROOT/"systemd"/unit).read_bytes().replace(b"\r\n",b"\n"),0o644)
             add(out,"altnet-logo.png",(dist / "altnet-logo.png").read_bytes(),0o644)
             for name in ("altnet-browser", "altnet-browser.desktop", "start-console"):
                 add(out, name, (linux / name).read_bytes().replace(b"\r\n", b"\n"), 0o644 if name.endswith(".desktop") else 0o755)
-            for name in ("site_transport.py", "site_mesh.py", "site_onion.py", "bridge_route.py"):
-                path = linux / name if name == "site_transport.py" else ROOT / "scripts" / name
+            for name in ("site_transport.py", "voice_transport.py", "contact_air.py", "contact_sync.py", "join_link.py", "open_address.py", "transport_peers.py", "meeting_directory.py", "meeting_catalog.py", "site_mesh.py", "site_onion.py", "bridge_route.py"):
+                path = linux / name if name in ("site_transport.py", "voice_transport.py", "contact_air.py", "contact_sync.py", "join_link.py", "open_address.py", "transport_peers.py", "meeting_directory.py", "meeting_catalog.py") else ROOT / "scripts" / name
                 add(out, "Browser/altnet-linux/" + name, path.read_bytes(), 0o644)
 
 
@@ -111,11 +133,12 @@ if __name__ == "__main__":
     ap.add_argument("--source", type=Path, required=True)
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--dist", type=Path, default=ROOT / "ui/altnet-ui/dist")
+    ap.add_argument("--transport-peers", type=Path, help="JSON со входными TLS-пирами дистрибутива и закреплёнными ключами Yggdrasil")
     args = ap.parse_args()
     with tempfile.NamedTemporaryFile(dir=args.output.parent, delete=False) as tmp:
         stage = Path(tmp.name)
     try:
-        build(args.source, stage, args.dist)
+        build(args.source, stage, args.dist, args.transport_peers)
         stage.replace(args.output)
     finally:
         stage.unlink(missing_ok=True)

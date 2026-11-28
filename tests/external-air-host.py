@@ -19,8 +19,8 @@ def check(e,slot,wait,provision,decode,mark):
         wait(lambda:e.cmd("marker",hz=880),lambda level:level>700,"remote speech marker on the node1 speaker",65)
         media=e.cmd("air_routes")["17911"]["inode"]
         heard=e.cmd("measure")
-        assert heard["Hz880"]>700 and heard["Hz880"]>5*heard["Hz440"] and heard["samples"]>=16000
         mark("Remote Ubuntu -> node1 "+str(heard))
+        assert heard["Hz880"]>700 and heard["Hz880"]>5*heard["Hz440"] and heard["samples"]>=16000
         other=wait(lambda:slot("result"+suffix),bool,"remote audio",100)
         assert other["Hz440"]>700 and other["Hz440"]>5*other["Hz880"] and other["samples"]>=16000
         mark("node1 -> remote Ubuntu "+str(other))

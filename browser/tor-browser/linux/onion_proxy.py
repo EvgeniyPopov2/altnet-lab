@@ -1,5 +1,6 @@
 """Сохраняет незавершённое соединение Tor между короткими попытками Yggdrasil 0.4."""
 import asyncio
+import re
 import secrets
 import time
 from urllib.parse import urlsplit
@@ -67,6 +68,32 @@ class EntryGateway:
             await asyncio.gather(*copies, return_exceptions=True)
 
 
+async def tor_stream(host, user, connection):
+    reader, writer = await connection
+    try:
+        writer.write(b"\x05\x01\x02")
+        if await reader.readexactly(2) != b"\x05\x02":
+            raise ConnectionError("Tor не поддерживает изоляцию соединения.")
+        writer.write(b"\x01" + bytes([len(user)]) + user + b"\x01x")
+        if await reader.readexactly(2) != b"\x01\x00":
+            raise ConnectionError("Tor отклонил изоляцию соединения.")
+        writer.write(b"\x05\x01\x00\x03" + bytes([len(host)]) + host + (17907).to_bytes(2, "big"))
+        header = await reader.readexactly(4)
+        if header[:3] != b"\x05\x00\x00":
+            raise ConnectionError("Tor не соединился с точкой входа.")
+        if header[3] == 3:
+            size = (await reader.readexactly(1))[0]
+        elif header[3] in (1, 4):
+            size = 4 if header[3] == 1 else 16
+        else:
+            raise ConnectionError("Tor вернул неизвестный тип адреса.")
+        await reader.readexactly(size + 2)
+        return reader, writer
+    except BaseException:
+        writer.close()
+        raise
+
+
 class OnionProxy:
     HEDGE_DELAY = 1.25
     ISOLATION_INTERVAL = 16
@@ -78,6 +105,8 @@ class OnionProxy:
         self.pending = {}
         self.standby = None
         self.standby_after = 0
+        self.lease = self.lease_writer = None
+        self.down = False
         self.clients = set()
         self.last_receive = {}
         self.server = None
@@ -103,29 +132,50 @@ class OnionProxy:
 
     async def dial(self, host, isolation=None):
         user = self.user if isolation is None else isolation
-        reader, writer = await asyncio.open_connection("127.0.0.1", 9050)
+        if self.lease is not None:
+            if host != self.lease_host:
+                raise ConnectionError("Адрес отсутствует в резерве комнаты.")
+            lease = await asyncio.shield(self.lease)
+            if lease:
+                reader, writer = await asyncio.open_unix_connection("\0"+lease[0])
+                try:
+                    writer.write(bytes([len(user)])+user)
+                    await writer.drain()
+                    if await reader.readexactly(1) != b"+":
+                        raise ConnectionError("Резервная цепочка недоступна.")
+                    return reader, writer
+                except BaseException:
+                    writer.close()
+                    raise
+        return await tor_stream(host, user, asyncio.open_connection("127.0.0.1", 9050))
+
+    def independent(self, host):
+        if host not in self.allowed:
+            raise ValueError("Адрес отсутствует в приглашении.")
+        self.lease_host = host
+        self.lease = asyncio.create_task(self.open_lease(host))
+
+    async def open_lease(self, host):
+        writer = None
         try:
-            writer.write(b"\x05\x01\x02")
-            if await reader.readexactly(2) != b"\x05\x02":
-                raise ConnectionError("Tor не поддерживает изоляцию соединения.")
-            writer.write(b"\x01" + bytes([len(user)]) + user + b"\x01x")
-            if await reader.readexactly(2) != b"\x01\x00":
-                raise ConnectionError("Tor отклонил изоляцию соединения.")
-            writer.write(b"\x05\x01\x00\x03" + bytes([len(host)]) + host + (17907).to_bytes(2, "big"))
-            header = await reader.readexactly(4)
-            if header[:3] != b"\x05\x00\x00":
-                raise ConnectionError("Tor не соединился с точкой входа.")
-            if header[3] == 3:
-                size = (await reader.readexactly(1))[0]
-            elif header[3] in (1, 4):
-                size = 4 if header[3] == 1 else 16
-            else:
-                raise ConnectionError("Tor вернул неизвестный тип адреса.")
-            await reader.readexactly(size + 2)
-            return reader, writer
-        except BaseException:
-            writer.close()
-            raise
+            reader, writer = await asyncio.open_unix_connection("/run/altnet-air-tor.sock")
+            writer.write(host+b"\n")
+            await writer.drain()
+            name = (await asyncio.wait_for(reader.readline(), 18)).strip()
+            if not re.fullmatch(rb"altnet-air-[0-9a-f]{48}",name):
+                return None
+            self.lease_writer = writer
+            return name.decode("ascii"), reader
+        except (OSError, asyncio.TimeoutError):
+            return None
+        finally:
+            if writer and self.lease_writer is not writer:
+                writer.close()
+
+    def interruption(self, down):
+        if self.lease_writer is not None and self.down != down and not self.lease_writer.is_closing():
+            self.lease_writer.write(b"D" if down else b"U")
+            self.down = down
 
     async def park(self, host):
         reader, writer = await self.dial(host, b"air-standby-" + secrets.token_hex(24).encode("ascii"))
@@ -306,6 +356,11 @@ class OnionProxy:
                 self.last_receive.pop(current, None)
 
     async def close(self):
+        if self.lease is not None:
+            self.lease.cancel()
+            await asyncio.gather(self.lease,return_exceptions=True)
+        if self.lease_writer:
+            self.lease_writer.close()
         standby = self.standby
         self.clear_standby()
         if standby:

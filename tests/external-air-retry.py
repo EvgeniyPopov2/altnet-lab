@@ -149,6 +149,9 @@ class StandbyMedia(unittest.IsolatedAsyncioTestCase):
         with patch.dict(channel.acquire.__globals__,wait_mesh_echo=echo):
             task = asyncio.create_task(channel.acquire())
             try:
+                self.assertEqual(await asyncio.wait_for(remote[0].readexactly(1), 2), b"?")
+                self.assertFalse(task.done())
+                remote[1].write(b"!")
                 self.assertEqual(await asyncio.wait_for(remote[0].readexactly(1), 2), b"C")
                 self.assertFalse(task.done())
                 remote[1].write(b"A")

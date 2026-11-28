@@ -117,6 +117,23 @@ def voice_identity(route):
             for key, field in (("localCert", "cert"), ("peerCert", "peerCert"))}
 
 
+def media_diagnostic(writer):
+    """Необязательный локальный счётчик активных сокетов для диагностики звука."""
+    location = os.environ.get("ALTNET_AIR_DIAGNOSTICS")
+    if location:
+        try:
+            directory = Path(location)
+            info = directory.lstat()
+            if stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and not info.st_mode & 0o077:
+                inode = os.fstat(writer.get_extra_info("socket").fileno()).st_ino
+                path = directory / str(inode)
+                path.touch(mode=0o600, exist_ok=False)
+                return path
+        except OSError:
+            pass
+    return None
+
+
 class RoomDial:
     """Бюджет TCP только для повторного соединения с принятым собеседником."""
 
@@ -213,7 +230,7 @@ async def wait_mesh_echo(route):
                         return True
                 except (OSError, asyncio.TimeoutError):
                     pass
-                period = 1.25 if sent - started < 90 else 5
+                period = .5 if sent - started < 90 else 5
                 await asyncio.sleep(max(.1, period - (loop.time() - sent)))
     except OSError:
         # В системах без непривилегированного ICMP продолжают работать TLS и уведомление пира.
@@ -274,15 +291,6 @@ class RoomChannels:
 
     async def signal_route(self, writer):
         await self.wake.wait()
-        if self.route and not self.echo.is_set():
-            # Данные на входной цепочке Tor могут появиться раньше, чем
-            # дойдёт пакет до собеседника. Не занимать тихий TCP преждевременно.
-            try:
-                await asyncio.wait_for(self.echo.wait(), 1.5)
-            except asyncio.TimeoutError:
-                pass
-        if not self.server and self.echo.is_set():
-            return
         writer.write(b"!" if self.server else b"?")
         await writer.drain()
 
@@ -304,18 +312,10 @@ class RoomChannels:
                     if command != b"C":
                         raise VoiceError("Неверное подтверждение канала Эфира.")
                 elif warm:
-                    # После ответа именно этого mesh-адреса можно сразу послать
-                    # C. Подтверждение A внутри TLS всё ещё обязательно.
-                    response = asyncio.create_task(reader.readexactly(1))
-                    echo = asyncio.create_task(self.echo.wait())
-                    try:
-                        done, _ = await asyncio.wait((response, echo), return_when=asyncio.FIRST_COMPLETED)
-                        if response in done and response.result() != b"!":
-                            raise VoiceError("Неверный ответ резервного канала.")
-                    finally:
-                        for task in (response, echo):
-                            task.cancel()
-                        await asyncio.gather(response, echo, return_exceptions=True)
+                    # Эхо от mesh-узла запускает пробу. Резерв может победить
+                    # только после ответа на самом TLS-соединении.
+                    if await reader.readexactly(1) != b"!":
+                        raise VoiceError("Неверный ответ резервного канала.")
             keep = True
             return reader, writer
         finally:
@@ -721,8 +721,10 @@ class Room:
         while True:
             writer = codec = output = None
             pumps = []
+            marker = None
             try:
                 reader, writer = await channels.acquire()
+                marker = media_diagnostic(writer)
                 output, codec = Pulse(), Opus()
                 meter, queue = Meter(), asyncio.Queue(maxsize=6)
                 self.members[identity] = (route["peerName"], meter, queue)
@@ -741,6 +743,8 @@ class Room:
                                        errno.EHOSTDOWN, errno.ENODEV, errno.EADDRNOTAVAIL):
                     raise
             finally:
+                if marker:
+                    marker.unlink(missing_ok=True)
                 if writer:
                     writer.transport.abort()
                 for pump in pumps:

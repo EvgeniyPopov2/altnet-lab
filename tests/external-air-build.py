@@ -8,7 +8,7 @@ import tarfile
 
 
 BASE_SHA256 = "b134fc2e47fe3771ab8683762ec8457e51611238bc49e4a51c0d238987bbed50"
-NATIVE = ("invite_transport.py", "onion_proxy.py", "onion_entry.py")
+NATIVE = ("invite_transport.py", "onion_proxy.py", "onion_entry.py", "voice_transport.py")
 
 
 def sha256(path):
@@ -25,6 +25,9 @@ def build(base, destination, native, unit):
     patches = {"altnet-browser/Browser/altnet-linux/" + name:
                (native / name).read_bytes().replace(b"\r\n", b"\n") for name in NATIVE}
     patches["altnet-browser/network/altnet-onion-entry.service"] = unit.read_bytes().replace(b"\r\n", b"\n")
+    additions={"altnet-browser/Browser/altnet-linux/air_tor.py":native/"air_tor.py"}
+    for name in ("altnet-air-tor.socket","altnet-air-tor@.service"):
+        additions["altnet-browser/network/"+name]=unit.parent/name
     with tarfile.open(base, "r|gz") as previous, destination.open("xb") as output:
         with gzip.GzipFile(filename="", mode="wb", compresslevel=1, fileobj=output, mtime=0) as zipped:
             with tarfile.open(fileobj=zipped, mode="w|") as updated:
@@ -37,6 +40,12 @@ def build(base, destination, native, unit):
                         stream = io.BytesIO(patches.pop(member.name))
                         header.size = stream.getbuffer().nbytes
                     updated.addfile(header, stream)
+                for name, path in additions.items():
+                    contents=path.read_bytes().replace(b"\r\n",b"\n")
+                    header=tarfile.TarInfo(name)
+                    header.size=len(contents)
+                    header.mode=0o644
+                    updated.addfile(header,io.BytesIO(contents))
     if patches:
         raise ValueError("Candidate is missing native modules")
     return sha256(destination)

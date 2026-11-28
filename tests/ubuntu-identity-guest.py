@@ -380,6 +380,10 @@ class Panel:
 
 
 def serve(args, root, stack):
+    import os
+    diag = root/"active-media"
+    diag.mkdir(mode=0o700,exist_ok=True)
+    os.environ["ALTNET_AIR_DIAGNOSTICS"] = str(diag)
     profile = ExitStack()
     stack.callback(profile.close)
     def start():
@@ -526,10 +530,19 @@ def serve(args, root, stack):
                     result=[k for k,v in counters().items() if v[0]=="17911"]
                 else:
                     links={}
+                    # Сверить выбранный приложением сокет с живым TCP в ядре и TUN.
+                    # Для предыдущих сборок доступно измерение потока по счётчикам.
+                    active_ids={p.name for p in diag.iterdir() if p.name.isdecimal()}
+                    for inode,(port,local,peer,_) in counters().items():
+                        if inode in active_ids:
+                            assert port not in links
+                            route=json.loads(subprocess.check_output(["ip","-j","-6","route","get",peer,"from",local]))
+                            assert Path("/sys/class/net",route[0]["dev"],"tun_flags").exists()
+                            links[port]={"inode":inode,"interface":route[0]["dev"]}
                     previous=counters()
                     streak=0
                     last_ids=None
-                    for _ in range(24):
+                    for _ in range(0 if links else 24):
                         time.sleep(.5)
                         current=counters()
                         live={}

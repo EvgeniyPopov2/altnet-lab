@@ -124,9 +124,18 @@ if [ -f /opt/altnet-browser/network/altnet-onion-entry.service ]; then
                fi ;;
         esac
     fi
+    if [ -f /opt/altnet-browser/network/altnet-air-tor.socket ]; then
+        for unit in altnet-air-tor.socket altnet-air-tor@.service; do
+            install -m644 "/opt/altnet-browser/network/$unit" "/etc/systemd/system/$unit"
+        done
+        if [ -f "$owner_conf" ]; then
+            install -D -m644 "$owner_conf" /etc/systemd/system/altnet-air-tor.socket.d/40-install-owner.conf
+        fi
+    fi
     systemctl daemon-reload
     if [ -f /opt/altnet-browser/network/altnet-entry-control.socket ]; then
         systemctl enable --now altnet-entry-control.socket
+        if [ -f /opt/altnet-browser/network/altnet-air-tor.socket ]; then systemctl enable --now altnet-air-tor.socket; fi
     fi
 fi
 peers=/opt/altnet-browser/network/transport-peers.json

@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "4f24dbf5c8209062a389985bd9cfa93b245664b412556494c8ff04ea0358668f"
+DIGEST = "1e83c1de2e490b10863834595af898a53f3a001e1393f903582c319bae4d0e90"
 
 
 def stage(name):
@@ -283,7 +283,7 @@ def call(cfg):
             # Prove both authenticated paths before the first cut. Subsequent
             # cuts use whatever path the client rebuilt in ordinary operation.
             before_cut = route_counts() if suffix else wait(
-                route_counts, lambda v:v["pinnedWorkers"]==2 and v["circuits"]>=2, "two authenticated call paths", 65)
+                route_counts, lambda v:v["pinnedWorkers"]==2 and v["independentTor"], "two independent authenticated Tor processes", 140)
             peer_workers = private_peer_workers()
             assert 1 <= len(peer_workers) <= 2
             guards=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
@@ -416,7 +416,7 @@ def call(cfg):
         rounds = (automatic,repeated,third)
         data["tenSecondTarget"] = {"met":sum(row["withinTenSeconds"] for row in rounds),"tested":len(rounds)}
         reserve_ready = all(row["routeTiming"]["entryBeforeCut"]["pinnedWorkers"]==2
-                            and row["routeTiming"]["entryBeforeCut"]["circuits"]>=2 for row in rounds)
+                            and row["routeTiming"]["entryBeforeCut"]["independentTor"] for row in rounds)
         data["reserveReadyAtEveryCut"] = reserve_ready
         stage(json.dumps(data))
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf8") as out:
