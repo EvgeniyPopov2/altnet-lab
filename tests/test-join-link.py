@@ -379,7 +379,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         spare.update = AsyncMock()
         spare.close = AsyncMock()
         spare.recover_call = AsyncMock()
-        spare.onion.lease = None
+        spare.onion.lease_writer = None
         spare.connected = AsyncMock(return_value=[])
         with patch.dict(routes.recover_call.__globals__, Transport=Mock(return_value=spare)):
             await routes.recover_call(False)
@@ -432,7 +432,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         primary.close = AsyncMock()
         primary.connected = AsyncMock(return_value=["active"])
         spare = routes.reserve = Mock()
-        spare.onion.lease = None
+        spare.onion.lease_writer = None
         spare.connected = AsyncMock(return_value=[])
         spare.recover_call = AsyncMock()
         spare.close = AsyncMock()

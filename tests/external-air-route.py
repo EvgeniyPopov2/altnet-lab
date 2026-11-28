@@ -70,8 +70,13 @@ def sample(root,watch=False):
             listing=subprocess.check_output(["ss","-Htnep","state","established"],text=True)
             sockets=[int(m[1]) for row in listing.splitlines() if len(row.split())>=4 and row.split()[3] in endpoints
                      and ('("tor",pid='+pid+',') in row and (m:=re.search(r"\bino:(\d+)",row))]
+            bootstrap=control(stream,b"GETINFO status/bootstrap-phase")
+            progress=re.search(rb"\bPROGRESS=(\d+)\b",bootstrap)
+            guards_up=control(stream,b"GETINFO orconn-status")
             return dict(pid=pid,guards=guards,inodes=sockets,streams=sum(1 for l in streams if len(p:=l.split())>=4 and p[1]=="SUCCEEDED" and p[3]==authority),
-                        circuits=len(ids),standbys=len(standby_streams),rend=rendezvous)
+                        circuits=len(ids),standbys=len(standby_streams),rend=rendezvous,
+                        progress=int(progress[1]) if progress else 0,
+                        orConnected=sum(row.split()[-1:]==[b"CONNECTED"] for row in guards_up.splitlines()))
 peer_io = {}
 for path in {row.split()[-1] for row in pathlib.Path("/proc/net/unix").read_text().splitlines()}:
     if "/altnet-invite-" not in path or not path.endswith("/admin.sock"):continue
@@ -96,9 +101,12 @@ if sys.argv[2:]==["--peer-io"]:
 system=pathlib.Path("/run/tor")
 others=sorted(p for p in pathlib.Path("/run").glob("altnet-air-tor-*") if (p/"control").is_socket())
 snapshots=[]
+private=[]
 for root in [system,*others]:
     try:
         m=sample(root)
+        if root!=system:
+            private.append(m)
         if m["rend"]:
             snapshots.append((root,m))
     except (OSError,RuntimeError,ValueError):
@@ -126,6 +134,8 @@ if sys.argv[2:]==["--guards"]:
 elif sys.argv[2:]==["--counts"]:
     print(json.dumps(dict(streams=sum(m["streams"] for m in storage),circuits=sum(m["circuits"] for m in storage),
                           pinnedWorkers=len(peer_io),standbyOnionStreams=sum(m["standbys"] for m in storage),
-                          independentTor=bool(independent),torProcesses=len(connected),guardRelays=len(guards))))
+                          independentTor=bool(independent),torProcesses=len(connected),guardRelays=len(guards),
+                          privateInstances=len(others),privateBootstrap=max((m["progress"] for m in private),default=0),
+                          privateOrConnections=sum(m["orConnected"] for m in private))))
 else:
     print(json.dumps(dict(torStream=bool(storage),rendezvous=bool(storage),pinnedYggdrasilPeer=bool(peer_io))))

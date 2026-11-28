@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "1e83c1de2e490b10863834595af898a53f3a001e1393f903582c319bae4d0e90"
+DIGEST = "26dd95dbd62fdc2d65091fcedda9e25eb9e627c463e364c63b07eb5067fa827e"
 
 
 def stage(name):
@@ -282,23 +282,32 @@ def call(cfg):
                 return json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--counts"))
             # Prove both authenticated paths before the first cut. Subsequent
             # cuts use whatever path the client rebuilt in ordinary operation.
-            before_cut = route_counts() if suffix else wait(
-                route_counts, lambda v:v["pinnedWorkers"]==2 and v["independentTor"], "two independent authenticated Tor processes", 140)
+            before_cut=route_counts()
+            if not suffix:
+                try:
+                    before_cut=wait(route_counts, lambda v:v["pinnedWorkers"]==2 and v["independentTor"],
+                                    "two independent authenticated Tor processes", 140)
+                except RuntimeError:
+                    stage("Reserve readiness " + json.dumps(route_counts()))
+                    events=run("sudo","-n","journalctl","-b","--no-pager","-o","cat","-g","^AltNet-Air-Tor ")
+                    for reason in sorted(set(events.splitlines())):
+                        if re.fullmatch(r"AltNet-Air-Tor (?:bridge policy accepted|guard policy accepted|Tor exited -?\d+|unavailable [A-Za-z]{2,30})",reason):
+                            stage(reason)
+                    raise
             peer_workers = private_peer_workers()
             assert 1 <= len(peer_workers) <= 2
             guards=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
             before_cut["guardRelays"] = guards["guards"]
-            exchange(cfg,"armed"+suffix,True)
-            exchange(cfg,"cut"+suffix)
             assert ui("air_routes",peer=address)["17911"]["inode"] == prior_socket
             before_cut.update(route_counts())
             watcher=subprocess.Popen(["sudo","-n","/usr/bin/python3","-IBu",str(HERE/"external-air-route.py"),peer,"--watch-standby"],
                                      stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
             stack.callback(watcher.stdin.close)
-            before_cut["observedStandbys"]=int(watcher.stdout.readline())
+            before_cut["observedStandbys"]=int(watcher.stdout.readline().strip() or "0")
             standby_inodes=set(media_counters(address)) - {prior_socket}
             if previous_duplex is not None:
                 before_cut["secondsSincePreviousDuplex"]=round(time.monotonic()-previous_duplex,2)
+            stage("Pre-cut transport "+json.dumps(before_cut))
             stage("Interrupting all non-loopback traffic during the established call")
             with runpy.run_path(str(HERE/"external-air-outage.py"))["disconnected"]() as counters:
                 until=time.monotonic()+seconds

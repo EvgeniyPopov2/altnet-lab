@@ -444,7 +444,7 @@ class CallRoutes:
             self.last_entry = matched[0]
         if spare.onion:
             spare.onion.interruption(waiting)
-        if connected and matched and not primary and spare.onion.lease is None:
+        if connected and matched and not primary and spare.onion.lease_writer is None:
             # Звук уже вернулся через резерв. Сохраняем его, а прежний
             # основной пир ремонтируем на месте, пока разговор продолжается.
             self.current, self.reserve = spare, self.current
