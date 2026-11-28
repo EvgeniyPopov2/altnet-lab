@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "8a645875d09aefe630e46d03707f80b25a2b6f083e09d7584f707b33c54d152f"
+DIGEST = "1dba13272536eee9969d784a24683fcff5341678107129a4d9705d8bbdfcff24"
 
 
 def stage(name):
@@ -166,7 +166,14 @@ def trace_route(address, peer, restored, workers, old_guards, old_peer_io, old_m
         previous=set()
         timeline=results["authenticatedMediaChanges"]=[]
         while not finished.is_set() and len(timeline)<25:
-            current={path.name for path in markers.iterdir() if path.name.isdecimal()}
+            files=[path.name for path in markers.iterdir()]
+            current={name for name in files if name.isdecimal()}
+            for name in files:
+                event, _, timestamp=name.partition("-")
+                if event in ("meshEcho","freshDial") and timestamp.isdecimal():
+                    age=int(timestamp)/1e9-restored
+                    if age>=0:
+                        results[event]=min(results.get(event,float("inf")),round(age,2))
             if previous!=current:
                 timeline.append({"seconds":round(time.monotonic()-restored,2),"active":len(current)})
                 previous=current

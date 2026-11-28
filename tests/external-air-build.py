@@ -8,7 +8,7 @@ import tarfile
 
 
 BASE_SHA256 = "b134fc2e47fe3771ab8683762ec8457e51611238bc49e4a51c0d238987bbed50"
-NATIVE = ("invite_transport.py", "onion_proxy.py", "onion_entry.py", "voice_transport.py")
+NATIVE = ("invite_transport.py", "onion_proxy.py", "onion_entry.py", "voice_transport.py", "contact_air.py")
 
 
 def sha256(path):

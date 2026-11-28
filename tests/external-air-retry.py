@@ -185,6 +185,32 @@ class StandbyMedia(unittest.IsolatedAsyncioTestCase):
                 task.cancel()
                 await asyncio.gather(task,return_exceptions=True)
 
+    async def test_one_way_return_starts_new_tcp_before_echo_without_committing_audio(self):
+        channel = self.channels[0]
+        channel.ever_connected = True
+        channel.route = {"peer":"200::1", "source":"200::2", "interface":"test"}
+        calls = []
+        second_dial = asyncio.Event()
+        async def dial():
+            calls.append(True)
+            if len(calls) == 2:
+                second_dial.set()
+            await asyncio.Future()
+        async def silent_echo(route):
+            await asyncio.Future()
+        channel.dial = dial
+        with patch.dict(channel.acquire.__globals__,wait_mesh_echo=silent_echo):
+            task = asyncio.create_task(channel.acquire())
+            try:
+                await asyncio.sleep(0)
+                channel.mesh_hint.set()
+                await asyncio.wait_for(second_dial.wait(),1)
+                self.assertFalse(task.done())
+                self.assertFalse(channel.wake.is_set())
+            finally:
+                task.cancel()
+                await asyncio.gather(task,return_exceptions=True)
+
     async def test_leave_while_waiting_closes_spares(self):
         warm, tasks = await self.recovery()
         for task in tasks:

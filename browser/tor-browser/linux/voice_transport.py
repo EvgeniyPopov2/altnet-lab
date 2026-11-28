@@ -117,16 +117,16 @@ def voice_identity(route):
             for key, field in (("localCert", "cert"), ("peerCert", "peerCert"))}
 
 
-def media_diagnostic(writer):
-    """Необязательный локальный счётчик активных сокетов для диагностики звука."""
+def media_diagnostic(writer=None, *, event=None):
+    """Owner-only local observations of recovery and authenticated media."""
     location = os.environ.get("ALTNET_AIR_DIAGNOSTICS")
     if location:
         try:
             directory = Path(location)
             info = directory.lstat()
             if stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and not info.st_mode & 0o077:
-                inode = os.fstat(writer.get_extra_info("socket").fileno()).st_ino
-                path = directory / str(inode)
+                name = f"{event}-{time.monotonic_ns()}" if event else str(os.fstat(writer.get_extra_info("socket").fileno()).st_ino)
+                path = directory / name
                 path.touch(mode=0o600, exist_ok=False)
                 return path
         except OSError:
@@ -434,11 +434,17 @@ class RoomChannels:
                 # Systems without ping sockets can still test a warm TLS stream
                 # when the private mesh worker receives new data.
                 await self.mesh_hint.wait()
+            else:
+                media_diagnostic(event="meshEcho")
             self.wake.set()
+            self.mesh_hint.set()
         hedge=self.ever_connected and not self.server and self.route is not None
         if hedge:
             async def dial_after_return():
-                await self.wake.wait()
+                # An incoming packet can start a new TCP socket immediately.
+                # Keep the parked stream quiet until the round trip is verified.
+                await self.mesh_hint.wait()
+                media_diagnostic(event="freshDial")
                 return await self.propose()
             candidates.add(asyncio.create_task(dial_after_return()))
         probe = asyncio.create_task(wake_on_echo()) if self.route and (warm or hedge) else None

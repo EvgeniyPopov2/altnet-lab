@@ -445,19 +445,49 @@ class Lobby:
                 raise ValueError("Локальный маршрут изменился.")
         else:raise ValueError("Неизвестное действие.")
         state=self.session.state()
-        if state["phase"] == "connected" or not self.room:
-            self.last_connected_room = self.room
-        if self.links:
-            waiting = bool(self.room and self.room == self.last_connected_room and state["phase"] == "waiting")
-            await self.links.transport.recover_call(waiting, connected=bool(self.room and state["phase"] == "connected"))
-            if self.session.room:
-                self.session.room.route_received(self.links.transport.last_incoming())
+        await self.advance_call(state["phase"])
         inv=next(iter(self.pending.items()),None)
         update=self.sync.next_update() if self.sync else None
         return {"links":await self.links.status() if self.links else {}, "room":self.room,"host":self.host,"roster":[v["id"] for v in self.roster],"state":state,"delivery":self.delivery,
                 "update":update,"missed":self.sync.missed() if self.sync else [],
                 "networkInvites":self.sync.network.pending() if self.sync else [],
                 "invite":({"room":inv[0],"group":inv[1][4],"sender":inv[1][1],"cards":inv[1][2]} if inv else None)}
+
+
+    async def advance_call(self, phase):
+        if phase == "connected" or not self.room:
+            self.last_connected_room = self.room
+        if self.links:
+            waiting = bool(self.room and self.room == self.last_connected_room and phase == "waiting")
+            await self.links.transport.recover_call(waiting, connected=bool(self.room and phase == "connected"))
+            if self.session.room:
+                self.session.room.route_received(self.links.transport.last_incoming())
+
+    async def commands(self, reader):
+        # Keep recovery and UI commands serialized. A background window can
+        # throttle its timers, so an accepted call owns its own wakeup.
+        while True:
+            pending = asyncio.create_task(reader.readline())
+            try:
+                while self.room and self.links:
+                    recovering = self.last_connected_room == self.room and self.session.phase == "waiting"
+                    done, _ = await asyncio.wait([pending], timeout=.35 if recovering else 1)
+                    if done:
+                        break
+                    if not self.route_current():
+                        await self.shutdown()
+                        break
+                    try:
+                        await self.advance_call(self.session.phase)
+                    except OSError:
+                        continue
+                line = await pending
+            finally:
+                pending.cancel()
+                await asyncio.gather(pending, return_exceptions=True)
+            if not line:
+                return
+            yield line
 
 
 async def serve(voice):
@@ -468,7 +498,7 @@ async def serve(voice):
     task=asyncio.current_task()
     for sig in (signal.SIGINT,signal.SIGTERM):loop.add_signal_handler(sig,task.cancel)
     try:
-        while line:=await reader.readline():
+        async for line in lobby.commands(reader):
             try:
                 cmd=json.loads(line)
                 value=await lobby.command(cmd["op"],cmd["arg"])

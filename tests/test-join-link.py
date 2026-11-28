@@ -35,6 +35,39 @@ def identity():
 
 
 class LinkTests(unittest.IsolatedAsyncioTestCase):
+    async def test_native_recovery_runs_without_window_poll_and_stops_on_eof(self):
+        lobby_type=runpy.run_path(str(linux/"contact_air.py"))["Lobby"]
+        tick=asyncio.Event()
+        async def advance(phase):
+            self.assertEqual(phase,"waiting")
+            tick.set()
+        lobby=SimpleNamespace(room="accepted",last_connected_room="accepted",links=True,session=SimpleNamespace(phase="waiting"),
+                              route_current=lambda:True,advance_call=advance)
+        reader=asyncio.StreamReader()
+        stream=lobby_type.commands(lobby,reader)
+        task=asyncio.create_task(anext(stream))
+        try:
+            marker = asyncio.create_task(tick.wait())
+            try:
+                done, _ = await asyncio.wait([task, marker],timeout=3,return_when=asyncio.FIRST_COMPLETED)
+                if task in done:
+                    task.result()
+                self.assertIn(marker,done)
+            finally:
+                marker.cancel()
+                await asyncio.gather(marker,return_exceptions=True)
+            self.assertFalse(task.done())
+            reader.feed_data(b"command\n")
+            self.assertEqual(await task,b"command\n")
+            lobby.room=None
+            reader.feed_eof()
+            with self.assertRaises(StopAsyncIteration):
+                await anext(stream)
+        finally:
+            task.cancel()
+            await asyncio.gather(task,return_exceptions=True)
+            await stream.aclose()
+
     def setUp(self):
         temp=tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -734,7 +767,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         proxy = runpy.run_path(str(linux/"onion_proxy.py"))["OnionProxy"](entries)
         from unittest.mock import Mock
         stream = Mock()
-        async def dial(host):
+        async def dial(host, isolation=None):
             if host == hosts[0].encode():
                 raise ConnectionRefusedError()
             return object(),stream

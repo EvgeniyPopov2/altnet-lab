@@ -119,15 +119,16 @@ class OnionProxy:
         self.server = await asyncio.start_server(self.handle, "127.0.0.1", 0)
         return self.server.sockets[0].getsockname()[1]
 
-    def prepare(self, host):
+    def prepare(self, host, *, cold_start=False):
         task = self.pending.get(host)
         if task is None:
-            task = asyncio.create_task(asyncio.wait_for(self.dial(host),100))
+            dial = self.dial_on_new_circuits(host, first_delay=12) if cold_start else self.dial(host)
+            task = asyncio.create_task(asyncio.wait_for(dial,100))
             self.pending[host] = task
         return task
 
     async def ready(self):
-        waiting = {self.prepare(host) for host in self.allowed}
+        waiting = {self.prepare(host,cold_start=True) for host in self.allowed}
         while waiting:
             done, waiting = await asyncio.wait(waiting,return_when=asyncio.FIRST_COMPLETED)
             if any(not task.cancelled() and task.exception() is None for task in done):
@@ -282,7 +283,7 @@ class OnionProxy:
             return await asyncio.wait_for(standby, self.RECOVERY_WINDOW)
         return await self.dial_on_new_circuits(host)
 
-    async def dial_on_new_circuits(self, host, *, standby=None, confirm=False):
+    async def dial_on_new_circuits(self, host, *, standby=None, confirm=False, first_delay=None):
         # Keep a request in flight while a second Tor rendezvous is being built.
         # The normal stream keeps its profile isolation. A replacement gets its
         # own isolation so Tor need not attach it to the stalled rendezvous.
@@ -304,7 +305,7 @@ class OnionProxy:
                     raise
             return await self.dial(host,isolation)
         pending = [standby if standby is not None else asyncio.create_task(connect())]
-        next_attempt = loop.time() + self.HEDGE_DELAY
+        next_attempt = loop.time() + (self.HEDGE_DELAY if first_delay is None else first_delay)
         winner = None
         notice=asyncio.create_task(self.guard_ready.wait()) if self.lease_writer is not None else None
 
