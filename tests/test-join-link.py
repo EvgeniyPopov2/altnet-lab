@@ -249,6 +249,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         client.process = Mock()
         proxy = runpy.run_path(str(linux/"onion_proxy.py"))["OnionProxy"](client.entries)
         client.onion = proxy
+        client.connected = AsyncMock(return_value=[])
         client.stop_worker = AsyncMock()
         client.launch = AsyncMock()
         stream = Mock()
@@ -427,6 +428,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         primary = routes.current = Mock()
         primary.recover_call = AsyncMock()
         primary.close = AsyncMock()
+        primary.connected = AsyncMock(return_value=["active"])
         spare = routes.reserve = Mock()
         spare.connected = AsyncMock(return_value=[])
         spare.recover_call = AsyncMock()
@@ -446,6 +448,32 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(routes.reserve, spare)
         spare.recover_call.assert_awaited_with(True, paced=True)
         primary.close.assert_not_awaited()
+
+    async def test_both_absent_pins_recover_without_displacing_a_live_peer(self):
+        routes = api["bootstrap"]["CallRoutes"]()
+        primary, spare = Mock(), Mock()
+        # The manager owns these two paths for the already accepted room.
+        routes.current, routes.reserve = primary, spare
+        routes.engaged = True
+        for peer in (primary, spare):
+            peer.connected = AsyncMock(return_value=[])
+            peer.recover_call = AsyncMock()
+        await routes.recover_call(True)
+        primary.recover_call.assert_awaited_once_with(True)
+        spare.recover_call.assert_awaited_once_with(True, paced=True)
+        primary.connected.return_value = ["active"]
+        routes.verify_after = 0
+        await routes.recover_call(True)
+        primary.recover_call.assert_awaited_with(False)
+
+    async def test_waiting_primary_does_not_restart_a_peer_that_recovered_during_the_dial(self):
+        client, _, stream = self.recovering_transport()
+        await client.recover_call(True)
+        await client.call_probe[1]
+        client.connected.return_value = client.entries
+        await client.recover_call(True)
+        client.stop_worker.assert_not_awaited()
+        stream.close.assert_called_once()
 
     async def test_room_leave_releases_prepared_reserve(self):
         routes = api["bootstrap"]["CallRoutes"]()

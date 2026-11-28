@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "7ae0c43560d447eb774d339c339297b49d26932e299ff1b92f884f21fcd8c1da"
+DIGEST = "b134fc2e47fe3771ab8683762ec8457e51611238bc49e4a51c0d238987bbed50"
 
 
 def stage(name):
@@ -383,11 +383,11 @@ def call(cfg):
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf8") as out:
             print("ten_seconds=" + str(reserve_ready and all(row["withinTenSeconds"] for row in rounds)).lower(), file=out)
         with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
-            print("| Обрыв, с | Звук на node1, с | Звук на Ubuntu, с | В пределах 10 с с учётом погрешности |",file=out)
-            print("|---:|---:|---:|:---:|",file=out)
+            print("| Обрыв, с | Звук на node1, с | Звук на Ubuntu, с | Проверенные пиры до обрыва | Использован запасной TLS | В пределах 10 с с учётом погрешности |",file=out)
+            print("|---:|---:|---:|---:|:---:|:---:|",file=out)
             for fault, row in zip((outage,repeated_outage,third_outage),rounds):
                 audio=row["firstSpeakerPCM"]
-                print(f'| {fault["seconds"]} | {audio["actions_to_node1"]} | {audio["node1_to_actions"]} | {row["withinTenSeconds"]} |',file=out)
+                print(f'| {fault["seconds"]} | {audio["actions_to_node1"]} | {audio["node1_to_actions"]} | {row["routeTiming"]["entryBeforeCut"]["pinnedWorkers"]} | {row["routeTiming"]["usedWarmMedia"]} | {row["withinTenSeconds"]} |',file=out)
             print("### AltNet · external Ubuntu 22.04\n\n```json\n"+json.dumps(data,indent=2)+"\n```",file=out)
         assert all(max(row["firstSpeakerPCM"].values())+row["node1TimingError"]<60 for row in rounds), "Audio recovery exceeded one minute"
 

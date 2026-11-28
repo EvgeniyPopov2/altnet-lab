@@ -231,7 +231,14 @@ class RoomChannels:
         self.server = server
         self.spare = None
         self.wake = asyncio.Event()
+        self.echo = asyncio.Event()
         self.waiting_since = None
+
+    @staticmethod
+    def recoverable(exc):
+        return isinstance(exc, (ConnectionError, asyncio.IncompleteReadError, asyncio.TimeoutError)) or (
+            isinstance(exc, OSError) and exc.errno in (errno.ENETUNREACH, errno.EHOSTUNREACH, errno.ENETDOWN,
+                                                       errno.EHOSTDOWN, errno.ENODEV, errno.EADDRNOTAVAIL))
 
     @classmethod
     def negotiated(cls, writer):
@@ -267,6 +274,15 @@ class RoomChannels:
 
     async def signal_route(self, writer):
         await self.wake.wait()
+        if self.route and not self.echo.is_set():
+            # Данные на входной цепочке Tor могут появиться раньше, чем
+            # дойдёт пакет до собеседника. Не занимать тихий TCP преждевременно.
+            try:
+                await asyncio.wait_for(self.echo.wait(), 1.5)
+            except asyncio.TimeoutError:
+                pass
+        if not self.server and self.echo.is_set():
+            return
         writer.write(b"!" if self.server else b"?")
         await writer.drain()
 
@@ -287,8 +303,19 @@ class RoomChannels:
                         command = await reader.readexactly(1)
                     if command != b"C":
                         raise VoiceError("Неверное подтверждение канала Эфира.")
-                elif warm and await reader.readexactly(1) != b"!":
-                    raise VoiceError("Неверный ответ резервного канала.")
+                elif warm:
+                    # После ответа именно этого mesh-адреса можно сразу послать
+                    # C. Подтверждение A внутри TLS всё ещё обязательно.
+                    response = asyncio.create_task(reader.readexactly(1))
+                    echo = asyncio.create_task(self.echo.wait())
+                    try:
+                        done, _ = await asyncio.wait((response, echo), return_when=asyncio.FIRST_COMPLETED)
+                        if response in done and response.result() != b"!":
+                            raise VoiceError("Неверный ответ резервного канала.")
+                    finally:
+                        for task in (response, echo):
+                            task.cancel()
+                        await asyncio.gather(response, echo, return_exceptions=True)
             keep = True
             return reader, writer
         finally:
@@ -309,13 +336,14 @@ class RoomChannels:
             else:
                 await self.close()
         self.wake.clear()
+        self.echo.clear()
         self.waiting_since = time.monotonic()
         async def fresh():
             while True:
                 try:
                     return await self.propose()
-                except (ConnectionError, asyncio.IncompleteReadError, asyncio.TimeoutError):
-                    if not warm:
+                except (OSError, asyncio.IncompleteReadError, asyncio.TimeoutError) as exc:
+                    if not warm or not self.recoverable(exc):
                         raise
                     await asyncio.sleep(.35)
         candidates = {asyncio.create_task(fresh())}
@@ -323,6 +351,7 @@ class RoomChannels:
             candidates.add(asyncio.create_task(self.propose(warm)))
         async def wake_on_echo():
             if await wait_mesh_echo(self.route):
+                self.echo.set()
                 self.wake.set()
         probe = asyncio.create_task(wake_on_echo()) if warm and self.route else None
         pending = candidates.copy()
@@ -335,7 +364,9 @@ class RoomChannels:
                 for task in done:
                     try:
                         reader, writer = task.result()
-                    except (OSError, asyncio.IncompleteReadError, asyncio.TimeoutError):
+                    except (OSError, asyncio.IncompleteReadError, asyncio.TimeoutError) as exc:
+                        if not self.recoverable(exc):
+                            raise
                         if pending or any(other is not task and other.exception() is None for other in done):
                             continue
                         raise

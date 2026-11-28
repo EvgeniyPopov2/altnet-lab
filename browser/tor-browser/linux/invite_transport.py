@@ -274,6 +274,8 @@ class Transport:
             return
         transferred = False
         try:
+            if not paced and await self.connected():
+                return
             await self.stop_worker(grace=.35)
             previous = self.onion.pending.pop(host, None)
             if previous is not None:
@@ -391,9 +393,8 @@ class CallRoutes:
             self.last_entry = None
             return
         now = time.monotonic()
-        # Keep one established local adjacency while the spare retries. Losing
-        # both at once makes Yggdrasil rebuild its routes from scratch.
-        await self.current.recover_call(waiting and not self.engaged)
+        if not self.engaged:
+            await self.current.recover_call(waiting)
         if self.reserve is None:
             if now >= self.warm_after:
                 self.warm_after = now + 3
@@ -430,14 +431,17 @@ class CallRoutes:
         if now < self.verify_after:
             return
         self.verify_after = now + .5
-        matched = await spare.connected()
+        primary, matched = await asyncio.gather(self.current.connected(), spare.connected())
         if matched:
             self.last_entry = matched[0]
-        if connected and matched and not await self.current.connected():
+        if connected and matched and not primary:
             # Звук уже вернулся через резерв. Сохраняем его, а прежний
             # основной пир ремонтируем на месте, пока разговор продолжается.
             self.current, self.reserve = spare, self.current
-            spare, matched = self.reserve, []
+            spare, primary, matched = self.reserve, matched, []
+        # Если закреплённый пир исчез на обоих путях, используем обе уже
+        # разрешённые цепочки. У живого основного пира сохраняем его соединение.
+        await self.current.recover_call(waiting and not primary)
         if spare.process is None or isinstance(spare.process.returncode, int):
             await self.release_reserve()
             self.warm_after = 0
