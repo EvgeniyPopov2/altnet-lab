@@ -4,6 +4,64 @@ import secrets
 import time
 from urllib.parse import urlsplit
 
+STANDBY = b"ALTNET-ONION-STANDBY\x01"
+
+
+class EntryGateway:
+    """One signed onion port. Ordinary TLS and deferred TLS use the same local peer."""
+
+    def __init__(self, peer_port=17910):
+        self.peer_port = peer_port
+        self.clients = 0
+        self.parked = 0
+
+    async def handle(self, reader, writer):
+        if self.clients >= 24:
+            writer.close()
+            return
+        self.clients += 1
+        upstream = None
+        copies = []
+        try:
+            first = await asyncio.wait_for(reader.readexactly(1), 30)
+            if first == STANDBY[:1]:
+                rest = await asyncio.wait_for(reader.readexactly(len(STANDBY)-1), 4)
+                if first + rest != STANDBY or self.parked >= 4:
+                    return
+                self.parked += 1
+                try:
+                    writer.write(b"P")
+                    await writer.drain()
+                    if await asyncio.wait_for(reader.readexactly(1), 180) != b"G":
+                        return
+                finally:
+                    self.parked -= 1
+            elif first != b"\x16":  # TLS handshake record from a normal Yggdrasil client
+                return
+            source, upstream = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", self.peer_port), 3)
+            if first == STANDBY[:1]:
+                writer.write(b"R")
+                await writer.drain()
+            else:
+                upstream.write(first)
+                await upstream.drain()
+            async def forward(input_stream, output):
+                while data := await input_stream.read(65536):
+                    output.write(data)
+                    await output.drain()
+            copies = [asyncio.create_task(forward(reader, upstream)), asyncio.create_task(forward(source, writer))]
+            await asyncio.wait(copies, return_when=asyncio.FIRST_COMPLETED)
+        except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError):
+            pass
+        finally:
+            self.clients -= 1
+            writer.close()
+            if upstream is not None:
+                upstream.close()
+            for task in copies:
+                task.cancel()
+            await asyncio.gather(*copies, return_exceptions=True)
+
 
 class OnionProxy:
     HEDGE_DELAY = 1.25
@@ -14,6 +72,8 @@ class OnionProxy:
         self.allowed = {urlsplit(entry).hostname.encode("ascii") for entry in entries}
         self.user = secrets.token_hex(24).encode("ascii")
         self.pending = {}
+        self.standby = None
+        self.standby_after = 0
         self.clients = set()
         self.last_receive = {}
         self.server = None
@@ -63,6 +123,67 @@ class OnionProxy:
             writer.close()
             raise
 
+    async def park(self, host):
+        reader, writer = await self.dial(host, b"air-standby-" + secrets.token_hex(24).encode("ascii"))
+        try:
+            writer.write(STANDBY)
+            await writer.drain()
+            if await reader.readexactly(1) != b"P":
+                raise ConnectionError("Точка входа не поддерживает резерв.")
+            return reader, writer
+        except BaseException:
+            writer.close()
+            raise
+
+    def clear_standby(self):
+        if self.standby is None:
+            return
+        _, task = self.standby
+        self.standby = None
+        if not task.done():
+            task.cancel()
+        elif not task.cancelled() and task.exception() is None:
+            task.result()[1].close()
+
+    def warm_standby(self, host):
+        if host not in self.allowed:
+            return
+        if self.standby:
+            name, task = self.standby
+            if name == host and (not task.done() or (not task.cancelled() and task.exception() is None
+                                                     and not task.result()[0].at_eof())):
+                return
+            self.clear_standby()
+        now = time.monotonic()
+        if now >= self.standby_after:
+            self.standby_after = now + 45
+            self.standby = host, asyncio.create_task(asyncio.wait_for(self.park(host), 35))
+
+    def take_standby(self, host):
+        if self.standby is None or self.standby[0] != host:
+            return None
+        task = self.standby[1]
+        if not task.done() or task.cancelled() or task.exception() is not None:
+            return None
+        reader, writer = task.result()
+        self.standby = None
+        self.standby_after = 0
+        if reader.at_eof():
+            writer.close()
+            return None
+        async def activate():
+            writer.write(b"G")
+            await writer.drain()
+            if await reader.readexactly(1) != b"R":
+                raise ConnectionError("Точка входа не подтвердила соединение.")
+            return reader, writer
+        activation = asyncio.create_task(activate())
+        def close_on_failure(done):
+            if done.cancelled() or done.exception() is not None:
+                writer.close()
+        activation.add_done_callback(close_on_failure)
+        return activation
+
     async def dial_for_room(self, host):
         # Keep a request in flight while a second Tor rendezvous is being built.
         # The normal stream keeps its profile isolation. A replacement gets its
@@ -70,6 +191,7 @@ class OnionProxy:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self.RECOVERY_WINDOW
         pending = [asyncio.create_task(self.dial(host))]
+        standby = self.take_standby(host)
         next_attempt = loop.time() + self.HEDGE_DELAY
         winner = None
 
@@ -82,14 +204,18 @@ class OnionProxy:
         try:
             while loop.time() < deadline:
                 delay = max(0, min(next_attempt, deadline) - loop.time())
-                if pending:
-                    done, _ = await asyncio.wait(pending, timeout=delay,
+                candidates = pending + ([standby] if standby else [])
+                if candidates:
+                    done, _ = await asyncio.wait(candidates, timeout=delay,
                                                  return_when=asyncio.FIRST_COMPLETED)
-                    for task in done:
+                    for task in sorted(done, key=lambda t: t is not standby):
                         if not task.cancelled() and task.exception() is None:
                             winner = task
                             return task.result()
-                        pending.remove(task)
+                        if task is standby:
+                            standby = None
+                        else:
+                            pending.remove(task)
                 elif delay:
                     await asyncio.sleep(delay)
                 if loop.time() >= deadline:
@@ -103,6 +229,8 @@ class OnionProxy:
                     next_attempt = loop.time() + self.ISOLATION_INTERVAL
             raise TimeoutError("Не удалось восстановить цепочку Tor.")
         finally:
+            if standby:
+                pending.append(standby)
             await asyncio.gather(*(release(task) for task in pending if task is not winner))
 
     async def request(self, reader, writer):
@@ -173,6 +301,10 @@ class OnionProxy:
                 self.last_receive.pop(current, None)
 
     async def close(self):
+        standby = self.standby
+        self.clear_standby()
+        if standby:
+            await asyncio.gather(standby[1], return_exceptions=True)
         if self.server:
             self.server.close()
             await self.server.wait_closed()

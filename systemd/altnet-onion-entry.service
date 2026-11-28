@@ -1,0 +1,24 @@
+[Unit]
+Description=Временная точка входа AltNet через Tor
+BindsTo=altnet-fast-ingress.service yggdrasil.service tor@default.service
+After=altnet-fast-ingress.service yggdrasil.service tor@default.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+DynamicUser=yes
+SupplementaryGroups=debian-tor
+RuntimeDirectory=altnet-onion-entry
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/python3 -IB /opt/altnet-browser/Browser/altnet-linux/onion_entry.py
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=127.0.0.1/32

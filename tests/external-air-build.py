@@ -8,7 +8,7 @@ import tarfile
 
 
 BASE_SHA256 = "b134fc2e47fe3771ab8683762ec8457e51611238bc49e4a51c0d238987bbed50"
-NATIVE = ("invite_transport.py", "onion_proxy.py")
+NATIVE = ("invite_transport.py", "onion_proxy.py", "onion_entry.py")
 
 
 def sha256(path):
@@ -19,11 +19,12 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def build(base, destination, native):
+def build(base, destination, native, unit):
     if sha256(base) != BASE_SHA256:
         raise ValueError("Unexpected base archive")
     patches = {"altnet-browser/Browser/altnet-linux/" + name:
                (native / name).read_bytes().replace(b"\r\n", b"\n") for name in NATIVE}
+    patches["altnet-browser/network/altnet-onion-entry.service"] = unit.read_bytes().replace(b"\r\n", b"\n")
     with tarfile.open(base, "r|gz") as previous, destination.open("xb") as output:
         with gzip.GzipFile(filename="", mode="wb", compresslevel=1, fileobj=output, mtime=0) as zipped:
             with tarfile.open(fileobj=zipped, mode="w|") as updated:

@@ -390,6 +390,8 @@ class CallRoutes:
         if not (waiting or connected) or not self.current.onion:
             await self.release_reserve()
             await self.current.discard_call_probe()
+            if self.current.onion:
+                self.current.onion.clear_standby()
             self.warm_after = 0
             self.last_entry = None
             return
@@ -439,6 +441,7 @@ class CallRoutes:
             # Звук уже вернулся через резерв. Сохраняем его, а прежний
             # основной пир ремонтируем на месте, пока разговор продолжается.
             self.current, self.reserve = spare, self.current
+            self.current.onion.clear_standby()
             spare, primary, matched = self.reserve, matched, []
         # Если закреплённый пир исчез на обоих путях, используем обе уже
         # разрешённые цепочки. У живого основного пира сохраняем его соединение.
@@ -447,6 +450,8 @@ class CallRoutes:
             await self.release_reserve()
             self.warm_after = 0
             return
+        if connected and not waiting and matched:
+            spare.onion.warm_standby(urlsplit(matched[0]).hostname.encode("ascii"))
         await spare.recover_call(waiting or not matched, paced=True)
 
     async def close(self):

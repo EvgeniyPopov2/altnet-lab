@@ -15,6 +15,24 @@ with socket.socket(socket.AF_UNIX) as sock:
         tor=bool(ids)
         rendezvous=any(len(parts:=row.split())>=4 and parts[0] in ids and parts[1]=="BUILT"
                        and "PURPOSE=HS_CLIENT_REND" in parts for row in circuits)
+        standby_circuits={row.split()[0] for row in circuits if row.split() and row.split()[0] in ids
+                          and re.search(r'\bSOCKS_USERNAME="?air-standby-[0-9a-f]{48}"?(?: |$)',row)}
+        standby_streams={p[0] for row in streams if len(p:=row.split())>=4 and p[1]=="SUCCEEDED"
+                         and p[2] in standby_circuits and p[3]==authority}
+        if sys.argv[2:]==["--watch-standby"]:
+            # Subscribe locally before the cut. Only a stream parked before it can
+            # count here. Its single-byte G/R exchange is too small to pass.
+            control(stream,b"SETEVENTS STREAM_BW")
+            print(len(standby_streams),flush=True)
+            if standby_streams:
+                sock.settimeout(220)
+                while line:=stream.readline(8192):
+                    p=line.split()
+                    if len(p)>=5 and p[:2]==[b"650",b"STREAM_BW"] and p[2].decode() in standby_streams:
+                        if int(p[3])>=256 or int(p[4])>=256:
+                            print("forwarded",flush=True)
+                            break
+            sys.exit(0)
         if sys.argv[2:] == ["--guards"]:
             # Сопоставить только первый релей цепочек проверяемого onion.
             guards={parts[2].split(",")[0][1:41] for row in circuits if len(parts:=row.split())>=4
@@ -62,6 +80,7 @@ if sys.argv[2:]==["--peer-io"]:
     sys.exit(0)
 if sys.argv[2:]==["--counts"]:
     succeeded=[p for row in streams if len(p:=row.split())>=4 and p[1]=="SUCCEEDED" and p[3]==authority]
-    print(json.dumps(dict(streams=len(succeeded),circuits=len(ids),pinnedWorkers=len(peer_io))))
+    print(json.dumps(dict(streams=len(succeeded),circuits=len(ids),pinnedWorkers=len(peer_io),
+                          standbyOnionStreams=len(standby_streams))))
 else:
     print(json.dumps(dict(torStream=tor,rendezvous=rendezvous,pinnedYggdrasilPeer=bool(peer_io))))

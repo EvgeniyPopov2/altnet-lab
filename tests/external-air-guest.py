@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "17ec2c3fda1d49d98a2527c7dd337e45fda20795bf490ddbc4c58cf67f9d5c62"
+DIGEST = "b78757a8cc76f30edf2bf9ae842f57369fc8775d12007439244f96d46c30bfef"
 
 
 def stage(name):
@@ -49,7 +49,8 @@ def install(cfg):
         builder = runpy.run_path(str(HERE/"external-air-build.py"))
         assert digest.hexdigest() == builder["BASE_SHA256"]
         candidate = Path(tmp)/"candidate.tar.gz"
-        assert builder["build"](file, candidate, HERE.parent/"browser/tor-browser/linux") == DIGEST
+        assert builder["build"](file, candidate, HERE.parent/"browser/tor-browser/linux",
+                                HERE.parent/"systemd/altnet-onion-entry.service") == DIGEST
         file = candidate
         subprocess.run(["sudo","-n","sh",str(HERE.parent/"scripts/install-ubuntu-browser.sh"),str(file),DIGEST],check=True)
     assert Path("/opt/altnet-browser/BUILD-SHA256").read_text().strip() == DIGEST
@@ -291,6 +292,10 @@ def call(cfg):
             exchange(cfg,"cut"+suffix)
             assert ui("air_routes",peer=address)["17911"]["inode"] == prior_socket
             before_cut.update(route_counts())
+            watcher=subprocess.Popen(["sudo","-n","/usr/bin/python3","-IBu",str(HERE/"external-air-route.py"),peer,"--watch-standby"],
+                                     stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
+            stack.callback(watcher.terminate)
+            before_cut["observedStandbys"]=int(watcher.stdout.readline())
             standby_inodes=set(media_counters(address)) - {prior_socket}
             if previous_duplex is not None:
                 before_cut["secondsSincePreviousDuplex"]=round(time.monotonic()-previous_duplex,2)
@@ -326,6 +331,11 @@ def call(cfg):
             pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
                    "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
             previous_duplex = restored_at + max(pcm.values())
+            stages["preCutStandbyForwarded"]=watcher.poll()==0 and watcher.stdout.readline().strip()=="forwarded"
+            if watcher.poll() is None:
+                watcher.terminate()
+            watcher.wait(timeout=3)
+            watcher.stdout.close()
             stop_trace.set()
             after=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
             stages["retainedGuardSockets"] = len(set(guards["inodes"]) & set(after["inodes"]))

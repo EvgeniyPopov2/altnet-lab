@@ -366,9 +366,10 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_call_reserve_is_scoped_to_the_active_pinned_entry(self):
         routes = api["bootstrap"]["CallRoutes"]()
+        active = self.recovering_transport()[0].entries[0]
         primary = routes.current = Mock()
-        primary.entries = ["first","active"]
-        primary.connected = AsyncMock(return_value=["active"])
+        primary.entries = ["first",active]
+        primary.connected = AsyncMock(return_value=[active])
         primary.recover_call = AsyncMock()
         primary.discard_call_probe = AsyncMock()
         primary.close = AsyncMock()
@@ -383,7 +384,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
             await routes.recover_call(False)
             self.assertIsNone(routes.reserve)
             await routes.recover_call(False, connected=True)
-            spare.update.assert_awaited_once_with(primary.entries,warm_entry="active")
+            spare.update.assert_awaited_once_with(primary.entries,warm_entry=active)
             await routes.recover_call(True)
             primary.close.assert_not_awaited()
             reader = Mock()
@@ -394,7 +395,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
             await routes.recover_call(True)
             self.assertIs(routes.current,primary)
             primary.close.assert_not_awaited()
-            spare.connected.return_value = ["active"]
+            spare.connected.return_value = [active]
             routes.verify_after = 0
             await routes.recover_call(False,connected=True)
             self.assertIs(routes.current,primary)
@@ -558,6 +559,72 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(set(users)), 4)
         self.assertFalse(active)
         writer.close.assert_not_called()
+
+    async def test_signed_entry_preserves_legacy_tls_and_parks_until_commit(self):
+        module = runpy.run_path(str(linux/"onion_proxy.py"))
+        upstream = asyncio.Queue()
+        async def accept(reader, writer):
+            await upstream.put((reader, writer))
+        async with await asyncio.start_server(accept, "127.0.0.1", 0) as peer:
+            gate = module["EntryGateway"](peer.sockets[0].getsockname()[1])
+            async with await asyncio.start_server(gate.handle, "127.0.0.1", 0) as service:
+                port = service.sockets[0].getsockname()[1]
+                source, client = await asyncio.open_connection("127.0.0.1", port)
+                data = bytes.fromhex("1603010004aabbccdd")
+                client.write(data)
+                remote, target = await asyncio.wait_for(upstream.get(),1)
+                self.assertEqual(await remote.readexactly(len(data)), data)
+                target.write(b"reply")
+                self.assertEqual(await source.readexactly(5), b"reply")
+                client.close()
+                target.close()
+
+                transport, host, _ = self.recovering_transport()
+                proxy = transport.onion
+                async def parked_dial(*args):
+                    return await asyncio.open_connection("127.0.0.1", port)
+                proxy.dial = AsyncMock(side_effect=parked_dial)
+                proxy.warm_standby(host)
+                await proxy.standby[1]
+                self.assertTrue(upstream.empty())
+                self.assertEqual(gate.parked, 1)
+                proxy.dial = AsyncMock(side_effect=ConnectionError())
+                source, client = await asyncio.wait_for(proxy.dial_for_room(host),1)
+                remote, target = await asyncio.wait_for(upstream.get(),1)
+                self.assertEqual(gate.parked, 0)
+                client.write(data)
+                self.assertEqual(await remote.readexactly(len(data)), data)
+                target.write(b"authenticated-by-yggdrasil")
+                self.assertEqual(await source.readexactly(len(b"authenticated-by-yggdrasil")), b"authenticated-by-yggdrasil")
+                client.close()
+                target.close()
+                await proxy.close()
+
+    async def test_lock_releases_parked_entry_and_refusal_keeps_normal_dial(self):
+        transport, host, _ = self.recovering_transport()
+        proxy = transport.onion
+        reader, writer = asyncio.StreamReader(), Mock()
+        writer.drain = AsyncMock()
+        reader.feed_data(b"P")
+        proxy.dial = AsyncMock(return_value=(reader,writer))
+        proxy.warm_standby(host)
+        await proxy.standby[1]
+        await proxy.close()
+        writer.close.assert_called_once()
+        self.assertIsNone(proxy.standby)
+        reader, writer = asyncio.StreamReader(), Mock()
+        writer.drain = AsyncMock()
+        reader.feed_eof()
+        proxy.dial = AsyncMock(return_value=(reader,writer))
+        proxy.standby_after = 0
+        proxy.warm_standby(host)
+        with self.assertRaises(asyncio.IncompleteReadError):
+            await proxy.standby[1]
+        writer.close.assert_called_once()
+        fresh = (Mock(),Mock())
+        proxy.dial = AsyncMock(return_value=fresh)
+        self.assertEqual(await proxy.dial_for_room(host), fresh)
+        await proxy.close()
 
     async def test_first_ready_onion_is_reused_and_lock_closes_unused_stream(self):
         transport = api["bootstrap"]
