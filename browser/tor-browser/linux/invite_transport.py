@@ -248,7 +248,8 @@ class Transport:
             host = urlsplit(self.entries[self.call_entry % len(self.entries)]).hostname.encode("ascii")
             self.call_entry += 1
             dial = self.onion.dial_for_room if paced else self.onion.dial
-            task = asyncio.create_task(asyncio.wait_for(dial(host), 45))
+            task = (asyncio.create_task(dial(host)) if paced else
+                    asyncio.create_task(asyncio.wait_for(dial(host), 45)))
             # Let the running worker consume this same dial if its own retry
             # arrives first. A successful hand-off preserves its local peering.
             self.call_shared = host not in self.onion.pending

@@ -6,10 +6,13 @@ from urllib.parse import urlsplit
 
 
 class OnionProxy:
+    HEDGE_DELAY = 1.25
+    ISOLATION_INTERVAL = 16
+    RECOVERY_WINDOW = 90
+
     def __init__(self, entries):
         self.allowed = {urlsplit(entry).hostname.encode("ascii") for entry in entries}
         self.user = secrets.token_hex(24).encode("ascii")
-        self.recovery_user = secrets.token_hex(24).encode("ascii")
         self.pending = {}
         self.clients = set()
         self.last_receive = {}
@@ -61,44 +64,46 @@ class OnionProxy:
             raise
 
     async def dial_for_room(self, host):
-        # Длинная попытка нужна для медленной цепочки. Вторая проверяет тот же
-        # разрешённый адрес через тот же изолированный сеанс после возврата сети.
-        async def retry():
-            loop = asyncio.get_running_loop()
-            deadline = loop.time() + 45
-            await asyncio.sleep(1.25)
-            budget = 8
-            while (remaining := deadline - loop.time()) > 0:
-                started = loop.time()
-                try:
-                    # Один изолированный сеанс для всех повторов этого резерва.
-                    # Устаревшая цепочка исходного потока может ещё числиться рабочей.
-                    return await asyncio.wait_for(self.dial(host, self.recovery_user), min(budget, remaining))
-                except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError):
-                    # Allow rebuilt rendezvous circuits to finish, including late
-                    # in the outage. Pace fast refusals throughout the same window.
-                    budget = 4 if budget == 8 else 8
-                    await asyncio.sleep(min(max(.25, 6 - (loop.time() - started)),
-                                            max(0, deadline - loop.time())))
-            raise TimeoutError()
-        tasks = {asyncio.create_task(self.dial(host)), asyncio.create_task(retry())}
+        # Keep a request in flight while a second Tor rendezvous is being built.
+        # The normal stream keeps its profile isolation. A replacement gets its
+        # own isolation so Tor need not attach it to the stalled rendezvous.
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self.RECOVERY_WINDOW
+        pending = [asyncio.create_task(self.dial(host))]
+        next_attempt = loop.time() + self.HEDGE_DELAY
         winner = None
+
+        async def release(task):
+            task.cancel()
+            result, = await asyncio.gather(task, return_exceptions=True)
+            if isinstance(result, tuple):
+                result[1].close()
+
         try:
-            pending = tasks.copy()
-            while pending:
-                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
-                for task in done:
-                    if not task.cancelled() and task.exception() is None:
-                        winner = task
-                        return task.result()
-            raise ConnectionError("Точка входа голосовой комнаты пока недоступна.")
+            while loop.time() < deadline:
+                delay = max(0, min(next_attempt, deadline) - loop.time())
+                if pending:
+                    done, _ = await asyncio.wait(pending, timeout=delay,
+                                                 return_when=asyncio.FIRST_COMPLETED)
+                    for task in done:
+                        if not task.cancelled() and task.exception() is None:
+                            winner = task
+                            return task.result()
+                        pending.remove(task)
+                elif delay:
+                    await asyncio.sleep(delay)
+                if loop.time() >= deadline:
+                    break
+                if loop.time() >= next_attempt:
+                    if len(pending) == 2:
+                        await release(pending[0])
+                        pending.pop(0)
+                    isolation = secrets.token_hex(24).encode("ascii")
+                    pending.append(asyncio.create_task(self.dial(host, isolation)))
+                    next_attempt = loop.time() + self.ISOLATION_INTERVAL
+            raise TimeoutError("Не удалось восстановить цепочку Tor.")
         finally:
-            unused = tasks - {winner}
-            for task in unused:
-                task.cancel()
-            for result in await asyncio.gather(*unused, return_exceptions=True):
-                if isinstance(result, tuple):
-                    result[1].close()
+            await asyncio.gather(*(release(task) for task in pending if task is not winner))
 
     async def request(self, reader, writer):
         version, size = await reader.readexactly(2)

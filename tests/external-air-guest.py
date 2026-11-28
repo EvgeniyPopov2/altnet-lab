@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "b134fc2e47fe3771ab8683762ec8457e51611238bc49e4a51c0d238987bbed50"
+DIGEST = "17ec2c3fda1d49d98a2527c7dd337e45fda20795bf490ddbc4c58cf67f9d5c62"
 
 
 def stage(name):
@@ -46,7 +46,11 @@ def install(cfg):
             while data := remote.read(1024*1024):
                 digest.update(data)
                 out.write(data)
-        assert digest.hexdigest() == DIGEST
+        builder = runpy.run_path(str(HERE/"external-air-build.py"))
+        assert digest.hexdigest() == builder["BASE_SHA256"]
+        candidate = Path(tmp)/"candidate.tar.gz"
+        assert builder["build"](file, candidate, HERE.parent/"browser/tor-browser/linux") == DIGEST
+        file = candidate
         subprocess.run(["sudo","-n","sh",str(HERE.parent/"scripts/install-ubuntu-browser.sh"),str(file),DIGEST],check=True)
     assert Path("/opt/altnet-browser/BUILD-SHA256").read_text().strip() == DIGEST
     for unit in ("tor@default","yggdrasil","altnet-fast-ingress","altnet-entry-control.socket"):
@@ -98,13 +102,16 @@ def private_peer_workers():
 
 
 def guard_counters(inodes):
-    lines=run("sudo","-n","ss","-Htinpe","state","established").splitlines()
+    lines=run("sudo","-n","ss","-Htinope","state","established").splitlines()
     result={}
     for row,info in zip(lines,lines[1:]):
         inode=re.search(r"\bino:(\d+)",row)
         if not inode or int(inode[1]) not in inodes:
             continue
-        values={k:int(v) for k,v in re.findall(r"\b(bytes_received|bytes_acked|backoff|rto):(\d+)",info)}
+        values={k:int(v) for k,v in re.findall(r"\b(bytes_received|bytes_acked|backoff|rto|unacked|lost|segs_in|segs_out|bytes_retrans):(\d+)",info)}
+        timer=re.search(r"timer:\(on,([\d.]+)(ms|sec|min),",row)
+        if timer:
+            values["retryDueMs"]=round(float(timer[1])*{"ms":1,"sec":1000,"min":60000}[timer[2]])
         result[int(inode[1])] = values
     return result
 
@@ -143,6 +150,11 @@ def trace_route(address, peer, restored, workers, old_guards, old_peer_io, old_m
             return
         results["guardBackoffBeforeRestore"]=max(s.get("backoff",0) for s in old_guards.values())
         results["guardRtoMsBeforeRestore"]=max(s.get("rto",0) for s in old_guards.values())
+        # Stable per-test labels only. Relay addresses, fingerprints and socket IDs
+        # must stay out of public logs. Track ACKs and payload on the *same* socket.
+        traces={ino:{key:old[key] for key in ("rto","backoff","retryDueMs","unacked","lost") if key in old}
+                for ino,old in old_guards.items()}
+        results["guardTimeline"]=list(traces.values())
         while not finished.is_set() and time.monotonic()-start < 120:
             current = guard_counters(old_guards)
             elapsed = round(time.monotonic()-restored,2)
@@ -150,9 +162,11 @@ def trace_route(address, peer, restored, workers, old_guards, old_peer_io, old_m
                 results["guardSocketsClosed"]=elapsed
                 return
             for key,label in (("bytes_received","firstGuardPayload"),("bytes_acked","firstGuardAck")):
-                if any(fields.get(key,0)>old_guards[ino].get(key,0) for ino,fields in current.items()):
-                    results.setdefault(label,elapsed)
-            if "firstGuardAck" in results and "firstGuardPayload" in results:
+                for ino,fields in current.items():
+                    if fields.get(key,0)>old_guards[ino].get(key,0):
+                        results.setdefault(label,elapsed)
+                        traces[ino].setdefault(label,elapsed)
+            if all("firstGuardAck" in item and "firstGuardPayload" in item for item in traces.values()):
                 return
             time.sleep(.2)
     threading.Thread(target=observe_guard,daemon=True).start()
@@ -253,6 +267,8 @@ def call(cfg):
         original_worker,=ui("air_workers")
         assert ui("has_capture") and ui("airview")["phase"]=="connected"
         previous_duplex = None
+        stage("Runner TCP capabilities "+json.dumps({"kernel":os.uname().release,
+              "perNetnsRtoMax":Path("/proc/sys/net/ipv4/tcp_rto_max_ms").is_file()}))
         def interrupt(suffix,prior_socket,seconds):
             nonlocal previous_duplex
             offset, clock_error = clock_offset(cfg)

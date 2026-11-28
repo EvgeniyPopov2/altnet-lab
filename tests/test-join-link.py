@@ -493,8 +493,11 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         stream = Mock()
         async def dial(destination, isolation=None):
             self.assertEqual(destination,host)
-            self.assertEqual(isolation, None if proxy.dial.await_count==1 else proxy.recovery_user)
-            self.assertNotEqual(proxy.user, proxy.recovery_user)
+            if proxy.dial.await_count == 1:
+                self.assertIsNone(isolation)
+            else:
+                self.assertRegex(isolation, rb"^[0-9a-f]{48}$")
+                self.assertNotEqual(proxy.user, isolation)
             if proxy.dial.await_count == 1:
                 try:
                     await asyncio.Future()
@@ -530,6 +533,31 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         _, winner = await asyncio.wait_for(proxy.dial_for_room(host), 7)
         self.assertIs(winner, stream)
         self.assertEqual((attempts, peak, active), (2, 2, 0))
+
+    async def test_expires_old_circuit_without_cancelling_its_replacement(self):
+        transport, host, stream = self.recovering_transport()
+        proxy = transport.onion
+        proxy.HEDGE_DELAY, proxy.ISOLATION_INTERVAL, proxy.RECOVERY_WINDOW = .01, .025, 2
+        users = []
+        active = set()
+        async def dial(destination, isolation=None):
+            self.assertEqual(destination, host)
+            users.append(isolation)
+            active.add(isolation)
+            try:
+                self.assertLessEqual(len(active), 2)
+                if len(users) < 4:
+                    await asyncio.Future()
+                self.assertIn(users[-2], active)
+                return object(), stream
+            finally:
+                active.remove(isolation)
+        proxy.dial.side_effect = dial
+        _, writer = await proxy.dial_for_room(host)
+        self.assertIs(writer, stream)
+        self.assertEqual(len(set(users)), 4)
+        self.assertFalse(active)
+        writer.close.assert_not_called()
 
     async def test_first_ready_onion_is_reused_and_lock_closes_unused_stream(self):
         transport = api["bootstrap"]
