@@ -39,17 +39,16 @@ with socket.socket(socket.AF_UNIX) as sock:
                      and '("tor",' in row and (m:=re.search(r"\bino:(\d+)",row))]
             print(json.dumps(dict(guards=len(guards),inodes=sockets)))
             sys.exit(0)
-matched=False
-for row in pathlib.Path("/proc/net/unix").read_text().splitlines():
-    path=row.split()[-1]
+pinned_workers=0
+for path in {row.split()[-1] for row in pathlib.Path("/proc/net/unix").read_text().splitlines()}:
     if "/altnet-invite-" not in path or not path.endswith("/admin.sock"):continue
     proc=subprocess.run(["yggdrasilctl","-endpoint=unix://"+path,"-json","getpeers"],capture_output=True,timeout=3)
     if proc.returncode:continue
     peers=json.loads(proc.stdout)["peers"]
-    matched |= any(p.get("key")==pin and p.get("remote","").split("?")[0].endswith("/"+authority)
+    pinned_workers += any(p.get("key")==pin and p.get("remote","").split("?")[0].endswith("/"+authority)
                    for p in peers.values())
 if sys.argv[2:]==["--counts"]:
     succeeded=[p for row in streams if len(p:=row.split())>=4 and p[1]=="SUCCEEDED" and p[3]==authority]
-    print(json.dumps(dict(streams=len(succeeded),circuits=len(ids))))
+    print(json.dumps(dict(streams=len(succeeded),circuits=len(ids),pinnedWorkers=pinned_workers)))
 else:
-    print(json.dumps(dict(torStream=tor,rendezvous=rendezvous,pinnedYggdrasilPeer=matched)))
+    print(json.dumps(dict(torStream=tor,rendezvous=rendezvous,pinnedYggdrasilPeer=bool(pinned_workers))))

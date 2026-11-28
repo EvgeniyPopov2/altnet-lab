@@ -337,6 +337,7 @@ class CallRoutes:
         self.warm_after = 0
         self.verify_after = 0
         self.promote_after = None
+        self.warm_deadline = 0
         self.engaged = False
 
     async def release_reserve(self):
@@ -383,38 +384,43 @@ class CallRoutes:
                 await self.release_reserve()
                 self.warm_after = now + 5
                 return
-            if waiting:
-                # Отдельный промежуточный ключ позволяет проверить новый путь,
-                # пока исходный пир всё ещё может восстановить связь.
-                try:
-                    await spare.update(self.current.entries)
-                except (OSError, ValueError):
-                    await self.release_reserve()
-                    self.warm_after = now + 5
-                    return
-                self.engaged = True
-                self.verify_after = 0
+            # Finish the pinned Yggdrasil handshake while the accepted call is
+            # healthy, so two independent paths can carry the room after a cut.
+            try:
+                await spare.update(self.current.entries)
+            except (OSError, ValueError):
+                await self.release_reserve()
+                self.warm_after = now + 5
+                return
+            self.engaged = True
+            self.warm_deadline = now + 30
+            self.verify_after = 0
             return
         await spare.recover_call(waiting, paced=True)
         if now < self.verify_after:
             return
         self.verify_after = now + 1
         matched = await spare.connected()
-        old_receiving = any(now-stamp < 5 for stamp in self.current.onion.last_receive.values())
-        if matched and connected:
-            if self.promote_after is None:
-                self.promote_after = now + 5
-        else:
+        if matched:
+            self.warm_deadline = now + 30
+        elif connected and now >= self.warm_deadline:
+            await self.release_reserve()
+            self.warm_after = now + 5
+            return
+
+        # A warm path does not displace a working primary. Retire the primary
+        # only after audio has resumed and its pinned peer stays absent.
+        if not (matched and connected) or await self.current.connected():
             self.promote_after = None
-        if self.promote_after is not None and (not old_receiving or now >= self.promote_after or not await self.current.connected()):
+            return
+        if self.promote_after is None:
+            self.promote_after = now + 5
+        elif now >= self.promote_after:
             old, self.current = self.current, spare
-            self.promote_after = None
             self.reserve = None
             self.engaged = False
+            self.promote_after = None
             await old.close()
-            self.warm_after = 0
-        elif connected and not matched:
-            await self.release_reserve()
             self.warm_after = 0
 
     async def close(self):

@@ -325,7 +325,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
             reader = Mock()
             reader.at_eof.return_value = False
             spare.priming.set_result((reader,Mock()))
-            await routes.recover_call(True)
+            await routes.recover_call(False, connected=True)
             spare.update.assert_awaited_with(primary.entries)
             await routes.recover_call(True)
             self.assertIs(routes.current,primary)
@@ -333,8 +333,19 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
             spare.connected.return_value = ["active"]
             routes.verify_after = 0
             await routes.recover_call(False,connected=True)
+            self.assertIs(routes.current,primary)
+            self.assertIs(routes.reserve,spare)
+            self.assertIsNone(routes.promote_after)
+            primary.connected.return_value = []
+            routes.verify_after = 0
+            await routes.recover_call(False,connected=True)
+            self.assertIs(routes.current,primary)
+            self.assertIsNotNone(routes.promote_after)
+            routes.promote_after = routes.verify_after = 0
+            await routes.recover_call(False,connected=True)
             self.assertIs(routes.current,spare)
             primary.close.assert_awaited_once()
+            self.assertIsNone(routes.reserve)
 
     async def test_failed_reserve_launch_keeps_current_transport(self):
         routes = api["bootstrap"]["CallRoutes"]()
@@ -351,6 +362,30 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         spare.close.assert_awaited_once()
         self.assertIsNone(routes.reserve)
         self.assertIs(routes.current,primary)
+
+    async def test_authenticated_standby_can_rejoin_without_interrupting_primary(self):
+        routes = api["bootstrap"]["CallRoutes"]()
+        primary = routes.current = Mock()
+        primary.recover_call = AsyncMock()
+        primary.close = AsyncMock()
+        spare = routes.reserve = Mock()
+        spare.connected = AsyncMock(return_value=[])
+        spare.recover_call = AsyncMock()
+        spare.close = AsyncMock()
+        routes.engaged = True
+        routes.warm_deadline = time.monotonic() + 30
+        await routes.recover_call(False, connected=True)
+        spare.close.assert_not_awaited()
+        routes.verify_after = routes.warm_deadline = 0
+        await routes.recover_call(True)
+        spare.recover_call.assert_awaited_with(True, paced=True)
+        self.assertIs(routes.reserve, spare)
+        routes.verify_after = 0
+        await routes.recover_call(False, connected=True)
+        spare.close.assert_awaited_once()
+        self.assertIsNone(routes.reserve)
+        self.assertGreater(routes.warm_after, time.monotonic())
+        primary.close.assert_not_awaited()
 
     async def test_room_leave_releases_prepared_reserve(self):
         routes = api["bootstrap"]["CallRoutes"]()

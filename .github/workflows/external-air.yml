@@ -37,7 +37,12 @@ jobs:
           sudo apt-get -o Acquire::Retries=2 update -qq
           sudo apt-get -o DPkg::Lock::Timeout=90 install -y --no-install-recommends xvfb xauth openbox xdotool pulseaudio espeak-ng dbus-x11
       - name: Verify automatic duplex audio recovery, then restart and call again
+        id: audio
         env:
           QA_TRANSFER: ${{ secrets.ALTNET_EXTERNAL_AIR_QA_20261127 }}
         run: /usr/bin/python3 -IBu tests/external-air-guest.py call
+      - name: Require duplex speaker audio within ten seconds of all three restorations
+        env:
+          TEN_SECONDS: ${{ steps.audio.outputs.ten_seconds }}
+        run: test "$TEN_SECONDS" = true
 

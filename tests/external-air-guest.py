@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "75eefaeb2eba6cd9726eefedb82f062d43c90c31c16410e04644c87f0d219bee"
+DIGEST = "ee5765dea35a1794f6be359cf20768bfdf123c024afc3d4c0e4b516b92974d83"
 
 
 def stage(name):
@@ -109,17 +109,18 @@ def guard_counters(inodes):
     return result
 
 
-def trace_route(cfg, address, peer, restored, workers, old_guards):
+def trace_route(address, peer, restored, workers, old_guards):
     results = {}
+    finished = threading.Event()
     def sample(label, probe):
         start = time.monotonic()
-        while time.monotonic()-start < 140:
+        while not finished.is_set() and time.monotonic()-start < 140:
             try:
                 probe()
                 results[label] = round(time.monotonic()-restored,2)
                 return
-            except (OSError,RuntimeError):
-                time.sleep(.4)
+            except (OSError, RuntimeError, subprocess.SubprocessError):
+                finished.wait(.4)
     def observe_guard():
         start = time.monotonic()
         results["guardSocketsObserved"]=len(old_guards)
@@ -127,7 +128,7 @@ def trace_route(cfg, address, peer, restored, workers, old_guards):
             return
         results["guardBackoffBeforeRestore"]=max(s.get("backoff",0) for s in old_guards.values())
         results["guardRtoMsBeforeRestore"]=max(s.get("rto",0) for s in old_guards.values())
-        while time.monotonic()-start < 120:
+        while not finished.is_set() and time.monotonic()-start < 120:
             current = guard_counters(old_guards)
             elapsed = round(time.monotonic()-restored,2)
             if not current:
@@ -140,9 +141,6 @@ def trace_route(cfg, address, peer, restored, workers, old_guards):
                 return
             time.sleep(.2)
     threading.Thread(target=observe_guard,daemon=True).start()
-    def signalling():
-        with socket.create_connection((address,17910),timeout=1.5):
-            pass
     def media_tcp():
         rows=run("ss","-Ht6ne","state","established","( sport = :17911 or dport = :17911 )")
         if "["+address+"]" not in rows:
@@ -155,10 +153,12 @@ def trace_route(cfg, address, peer, restored, workers, old_guards):
         current=set(subprocess.run(["pgrep","-u",str(os.getuid()),"-x","yggdrasil"],capture_output=True,text=True).stdout.split())
         if not current-workers:
             raise RuntimeError("Waiting for renewed mesh worker")
-    for label, probe in (("meshWorkerLaunched",worker_changed), ("torMailbox", lambda:exchange(cfg,"clock",timeout=1)),
-                         ("pinnedPeerObserved", pinned), ("meshSignallingTcp", signalling), ("mediaTcpEstablished",media_tcp)):
+    # Purely local observations: a test probe must not wake up Tor or prime
+    # Yggdrasil route discovery on behalf of the application.
+    for label, probe in (("meshWorkerLaunched", worker_changed),
+                         ("pinnedPeerObserved", pinned), ("mediaTcpEstablished", media_tcp)):
         threading.Thread(target=sample,args=(label,probe),daemon=True).start()
-    return results
+    return results, finished
 
 
 def measure_call(ui, cfg, address, suffix):
@@ -232,10 +232,15 @@ def call(cfg):
         original_worker,=ui("air_workers")
         assert ui("has_capture") and ui("airview")["phase"]=="connected"
         def interrupt(suffix,prior_socket,seconds):
+            offset, clock_error = clock_offset(cfg)
+            def route_counts():
+                return json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--counts"))
+            # Prove both authenticated paths before the first cut. Subsequent
+            # cuts use whatever path the client rebuilt in ordinary operation.
+            before_cut = route_counts() if suffix else wait(
+                route_counts, lambda v:v["pinnedWorkers"]==2 and v["circuits"]>=2, "two authenticated call paths", 65)
             peer_workers = private_peer_workers()
             assert 1 <= len(peer_workers) <= 2
-            offset, clock_error = clock_offset(cfg)
-            before_cut=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--counts"))
             guards=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
             before_cut["guardRelays"] = guards["guards"]
             exchange(cfg,"armed"+suffix,True)
@@ -255,7 +260,7 @@ def call(cfg):
             outage.update(detectedAfterSeconds=lost_at,phase=lost["phase"],microphoneReleased=True)
             restore = counters.restoration
             restored_at = restore["mono"]
-            stages = trace_route(cfg,address,peer,restored_at,peer_workers,old_guards)
+            stages, stop_trace = trace_route(address,peer,restored_at,peer_workers,old_guards)
             stage("Network restored; waiting for the existing room without user interaction")
             wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"automatic reconnection",120)
             reconnect_seconds=round(time.monotonic()-restored_at,1)
@@ -267,6 +272,7 @@ def call(cfg):
             remote_heard = exchange(cfg,"node1Heard"+suffix)
             pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
                    "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
+            stop_trace.set()
             after=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
             stages["retainedGuardSockets"] = len(set(guards["inodes"]) & set(after["inodes"]))
             stages["entryBeforeCut"] = before_cut
@@ -335,6 +341,8 @@ def call(cfg):
         rounds = (automatic,repeated,third)
         data["tenSecondTarget"] = {"met":sum(row["withinTenSeconds"] for row in rounds),"tested":len(rounds)}
         stage(json.dumps(data))
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf8") as out:
+            print("ten_seconds=" + str(all(row["withinTenSeconds"] for row in rounds)).lower(), file=out)
         with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
             print("| Обрыв, с | Звук на node1, с | Звук на Ubuntu, с | В пределах 10 с с учётом погрешности |",file=out)
             print("|---:|---:|---:|:---:|",file=out)
