@@ -70,10 +70,17 @@ def exchange(cfg, slot, value=None, timeout=180):
         opts += "data = "+json.dumps(json.dumps(value,separators=(",",":")))+"\n"
     until=time.monotonic()+timeout
     failures=0
+    codes={}
+    coordinated="coordinator" in cfg
     while time.monotonic()<until:
-        isolation=cfg.setdefault("control_isolation",secrets.token_hex(12))
-        reply=subprocess.run([*cmd,"--max-time",str(25 if failures%3==2 else 15)],
-                             input=opts+'proxy-user = "'+isolation+':x"\n',text=True,capture_output=True)
+        options=opts
+        if coordinated:
+            isolation=cfg.setdefault("control_isolation",secrets.token_hex(12))
+            options+='proxy-user = "'+isolation+':x"\n'
+        budget=25 if coordinated and failures%3==2 else 15
+        reply=subprocess.run([*cmd[:-2],"--max-time",str(budget),*cmd[-2:]],
+                             input=options,text=True,capture_output=True)
+        codes[reply.returncode]=codes.get(reply.returncode,0)+1
         if reply.returncode==0 and reply.stdout:
             return json.loads(reply.stdout)
         if reply.returncode:
@@ -83,6 +90,7 @@ def exchange(cfg, slot, value=None, timeout=180):
                 cfg["coordinator"].stdin.write("R")
                 cfg["coordinator"].stdin.flush()
         time.sleep(2)
+    stage("QA control timeout "+slot+" curl exit codes "+json.dumps(codes))
     raise RuntimeError("Timed out at "+slot)
 
 
@@ -269,7 +277,7 @@ def call(cfg):
             return reply["ok"]
         assert ui("network_storage")==dict(issuers=[],localMemberships=0,adminConfiguration=False)
         stage("Native browser ready; requesting a new invitation from node1")
-        exchange(cfg,"ready",True)
+        exchange(cfg,"ready",True,timeout=330)
         link=exchange(cfg,"invite")
         assert isinstance(link,str) and link.startswith("alt://join/v3/")
         address,_,inviter_id,_,_,peers=runpy.run_path(str(LINUX/"join_link.py"))["decode"](link)
