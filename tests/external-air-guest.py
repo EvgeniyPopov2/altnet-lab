@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "ee5765dea35a1794f6be359cf20768bfdf123c024afc3d4c0e4b516b92974d83"
+DIGEST = "5ab6fa523d0078f42db0a9ec0c0711b5aa7ac45701aa6b86dba3471f1e3093be"
 
 
 def stage(name):
@@ -276,7 +276,9 @@ def call(cfg):
             after=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
             stages["retainedGuardSockets"] = len(set(guards["inodes"]) & set(after["inodes"]))
             stages["entryBeforeCut"] = before_cut
-            stages["privatePeerRenewed"] = private_peer_workers() != peer_workers
+            after_workers = private_peer_workers()
+            stages["privatePeerRenewed"] = after_workers != peer_workers
+            stages["survivingPrivateWorkers"] = len(after_workers & peer_workers)
             error = round(clock_error+restore["uncertainty"]+.05,2)
             assert min(pcm.values()) >= -error
             exchange(cfg,"heardBoth"+suffix,True)

@@ -275,6 +275,64 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         await client.recover_call(True)
         self.assertIsNone(client.call_probe)
 
+    async def test_existing_worker_can_take_a_recovery_dial_without_a_restart(self):
+        for waiting in (True, False):
+            client, host, stream = self.recovering_transport()
+            await client.recover_call(True, paced=True)
+            opening = client.onion.pending[host]
+            await opening
+            # handle() removes the exact task once its authenticated local
+            # SOCKS client has taken the stream, before yielding to a poll.
+            self.assertIs(client.onion.pending.pop(host), opening)
+            await client.recover_call(waiting, paced=True)
+            self.assertIsNone(client.call_probe)
+            client.stop_worker.assert_not_awaited()
+            client.launch.assert_not_awaited()
+            stream.close.assert_not_called()
+            stream.close()
+
+    async def test_live_socks_connection_survives_room_recovery_poll(self):
+        client, host, _ = self.recovering_transport()
+        proxy = client.onion
+        port = await proxy.start()
+
+        async def echo(reader, writer):
+            try:
+                while data := await reader.read(1024):
+                    writer.write(data)
+                    await writer.drain()
+            finally:
+                writer.close()
+
+        async with await asyncio.start_server(echo, "127.0.0.1", 0) as upstream:
+            upstream_port = upstream.sockets[0].getsockname()[1]
+            proxy.dial = lambda _: asyncio.open_connection("127.0.0.1", upstream_port)
+            await client.recover_call(True)
+            await client.call_probe[1]
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            try:
+                writer.write(b"\x05\x01\x02" + b"\x01" + bytes([len(proxy.user)]) +
+                             proxy.user + b"\x01x" + b"\x05\x01\x00\x03" +
+                             bytes([len(host)]) + host + (17907).to_bytes(2, "big"))
+                self.assertEqual(await asyncio.wait_for(reader.readexactly(14), 2),
+                                 b"\x05\x02\x01\x00\x05\x00\x00\x01" + b"\x00" * 6)
+                await client.recover_call(True)
+                writer.write(b"same peering")
+                self.assertEqual(await asyncio.wait_for(reader.readexactly(12), 2), b"same peering")
+                client.stop_worker.assert_not_awaited()
+                client.launch.assert_not_awaited()
+            finally:
+                writer.close()
+                await writer.wait_closed()
+
+    async def test_silent_spare_retries_while_primary_keeps_its_adjacency(self):
+        client, host, _ = self.recovering_transport()
+        await client.recover_call(True, paced=True)
+        await client.call_probe[1]
+        await client.recover_call(True, paced=True)
+        self.assertTrue(0 < client.call_retry_at - time.monotonic() <= 6)
+        self.assertIn(host, client.onion.pending)
+
     async def test_healthy_or_closed_room_keeps_original_peer(self):
         for waiting in (True,False):
             client, _, stream = self.recovering_transport()
@@ -379,6 +437,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         routes.verify_after = routes.warm_deadline = 0
         await routes.recover_call(True)
         spare.recover_call.assert_awaited_with(True, paced=True)
+        primary.recover_call.assert_awaited_with(False)
         self.assertIs(routes.reserve, spare)
         routes.verify_after = 0
         await routes.recover_call(False, connected=True)

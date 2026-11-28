@@ -144,6 +144,7 @@ class Transport:
         self.priming = None
         self.config = None
         self.call_probe = None
+        self.call_shared = False
         self.call_retry_at = 0
         self.call_entry = 0
 
@@ -212,12 +213,25 @@ class Transport:
 
     async def discard_call_probe(self):
         if self.call_probe is not None:
-            _, task = self.call_probe
+            host, task = self.call_probe
             self.call_probe = None
+            if self.claimed_by_worker(host, task):
+                return
             task.cancel()
             result, = await asyncio.gather(task, return_exceptions=True)
             if isinstance(result, tuple):
                 result[1].close()
+
+    def claimed_by_worker(self, host, task):
+        if not self.call_shared:
+            return False
+        self.call_shared = False
+        if self.onion.pending.get(host) is not task:
+            # The local authenticated SOCKS client took ownership (or the
+            # failed request was cleared). Its live stream belongs to the worker.
+            return True
+        del self.onion.pending[host]
+        return False
 
     async def recover_call(self, waiting, *, paced=False):
         # A dial to the same authorised onion can complete while Yggdrasil 0.4
@@ -235,12 +249,20 @@ class Transport:
             self.call_entry += 1
             dial = self.onion.dial_for_room if paced else self.onion.dial
             task = asyncio.create_task(asyncio.wait_for(dial(host), 45))
+            # Let the running worker consume this same dial if its own retry
+            # arrives first. A successful hand-off preserves its local peering.
+            self.call_shared = host not in self.onion.pending
+            if self.call_shared:
+                self.onion.pending[host] = task
             self.call_probe = host, task
             return
         host, task = self.call_probe
         if not task.done():
             return
         self.call_probe = None
+        if self.claimed_by_worker(host, task):
+            self.call_retry_at = now + 5
+            return
         try:
             reader, writer = task.result()
         except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError):
@@ -265,7 +287,9 @@ class Transport:
         finally:
             if not transferred:
                 writer.close()
-            self.call_retry_at = time.monotonic() + 25
+            # A completed SOCKS request can still lead to a silent peering.
+            # Once incoming bytes arrive the check above suppresses all probes.
+            self.call_retry_at = time.monotonic() + (6 if paced else 25)
 
     async def connected(self):
         if not self.directory:
@@ -363,7 +387,9 @@ class CallRoutes:
             self.warm_after = 0
             return
         now = time.monotonic()
-        await self.current.recover_call(waiting)
+        # Keep one established local adjacency while the spare retries. Losing
+        # both at once makes Yggdrasil rebuild its routes from scratch.
+        await self.current.recover_call(waiting and not self.engaged)
         if self.reserve is None:
             if connected and now >= self.warm_after:
                 self.warm_after = now + 30
