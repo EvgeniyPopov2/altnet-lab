@@ -105,10 +105,12 @@ class OnionProxy:
         self.pending = {}
         self.standby = None
         self.standby_after = 0
+        self.supports_standby = False
         self.lease = self.lease_writer = None
         self.down = False
         self.clients = set()
         self.last_receive = {}
+        self.active_hosts = {}
         self.server = None
 
     async def start(self):
@@ -177,13 +179,29 @@ class OnionProxy:
             self.lease_writer.write(b"D" if down else b"U")
             self.down = down
 
-    async def park(self, host):
-        reader, writer = await self.dial(host, b"air-standby-" + secrets.token_hex(24).encode("ascii"))
+    def lost_lease(self):
+        if self.lease_writer is None or self.lease is None or not self.lease.done() or self.lease.cancelled():
+            return False
+        lease=self.lease.result()
+        return lease is not None and (lease[1].at_eof() or self.lease_writer.is_closing())
+
+    def retire_stale(self, host, cutoff):
+        for client,stamp in tuple(self.last_receive.items()):
+            if self.active_hosts.get(client)==host and stamp<cutoff:
+                client.cancel()
+
+    def received_on(self, host):
+        return max((stamp for client,stamp in self.last_receive.items()
+                    if self.active_hosts.get(client)==host),default=0)
+
+    async def park(self, host, isolation=None):
+        reader, writer = await self.dial(host,isolation or b"air-standby-" + secrets.token_hex(24).encode("ascii"))
         try:
             writer.write(STANDBY)
             await writer.drain()
             if await reader.readexactly(1) != b"P":
                 raise ConnectionError("Точка входа не поддерживает резерв.")
+            self.supports_standby = True
             return reader, writer
         except BaseException:
             writer.close()
@@ -225,34 +243,46 @@ class OnionProxy:
         if reader.at_eof():
             writer.close()
             return None
-        async def activate():
-            writer.write(b"G")
-            await writer.drain()
-            if await reader.readexactly(1) != b"R":
-                raise ConnectionError("Точка входа не подтвердила соединение.")
-            return reader, writer
-        activation = asyncio.create_task(activate())
+        activation = asyncio.create_task(self.activate(reader,writer))
         def close_on_failure(done):
             if done.cancelled() or done.exception() is not None:
                 writer.close()
         activation.add_done_callback(close_on_failure)
         return activation
 
+    @staticmethod
+    async def activate(reader,writer):
+        try:
+            writer.write(b"G")
+            await writer.drain()
+            if await reader.readexactly(1) != b"R":
+                raise ConnectionError("Точка входа не подтвердила соединение.")
+            return reader,writer
+        except BaseException:
+            writer.close()
+            raise
+
     async def dial_for_room(self, host):
         standby = self.take_standby(host)
+        if self.lease_writer is not None and self.supports_standby:
+            return await self.dial_on_new_circuits(host,standby=standby,confirm=True)
         if standby is not None:
             # The primary is already building fresh circuits. On the reserve,
             # keep the pre-outage rendezvous until the entry replies end to end.
             return await asyncio.wait_for(standby, self.RECOVERY_WINDOW)
         return await self.dial_on_new_circuits(host)
 
-    async def dial_on_new_circuits(self, host):
+    async def dial_on_new_circuits(self, host, *, standby=None, confirm=False):
         # Keep a request in flight while a second Tor rendezvous is being built.
         # The normal stream keeps its profile isolation. A replacement gets its
         # own isolation so Tor need not attach it to the stalled rendezvous.
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self.RECOVERY_WINDOW
-        pending = [asyncio.create_task(self.dial(host))]
+        async def connect(isolation=None):
+            if confirm:
+                return await self.activate(*await self.park(host,isolation))
+            return await self.dial(host,isolation)
+        pending = [standby if standby is not None else asyncio.create_task(connect())]
         next_attempt = loop.time() + self.HEDGE_DELAY
         winner = None
 
@@ -273,16 +303,19 @@ class OnionProxy:
                             winner = task
                             return task.result()
                         pending.remove(task)
+                    if not pending and self.lease_writer is not None:
+                        next_attempt=min(next_attempt,loop.time()+1.5)
                 elif delay:
                     await asyncio.sleep(delay)
                 if loop.time() >= deadline:
                     break
                 if loop.time() >= next_attempt:
                     if len(pending) == 2:
-                        await release(pending[0])
-                        pending.pop(0)
+                        # Keep the already parked circuit in the race. Replace
+                        # only the unconfirmed fresh request on this same Tor.
+                        await release(pending.pop(1 if pending[0] is standby else 0))
                     isolation = secrets.token_hex(24).encode("ascii")
-                    pending.append(asyncio.create_task(self.dial(host, isolation)))
+                    pending.append(asyncio.create_task(connect(isolation)))
                     next_attempt = loop.time() + self.ISOLATION_INTERVAL
             raise TimeoutError("Не удалось восстановить цепочку Tor.")
         finally:
@@ -330,6 +363,7 @@ class OnionProxy:
                 return
             del self.pending[host]
             remote = outbound
+            self.active_hosts[current] = host
             writer.write(b"\x05\x00\x00\x01" + b"\x00"*6)
             async def copy(source, dest):
                 while data := await source.read(65536):
@@ -353,6 +387,7 @@ class OnionProxy:
                 await asyncio.gather(*copies, return_exceptions=True)
             finally:
                 self.clients.discard(current)
+                self.active_hosts.pop(current,None)
                 self.last_receive.pop(current, None)
 
     async def close(self):

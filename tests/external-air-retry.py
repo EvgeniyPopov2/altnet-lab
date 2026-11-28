@@ -160,6 +160,31 @@ class StandbyMedia(unittest.IsolatedAsyncioTestCase):
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
 
+    async def test_one_way_mesh_hint_keeps_idle_tls_quiet_until_round_trip(self):
+        channel=self.channels[0]
+        channel.route={"peer":"200::1","source":"200::2","interface":"test"}
+        local,remote=await self.pair()
+        self.queues[0].put_nowait(local)
+        channel.prepare(local[1])
+        await channel.spare
+        verified=asyncio.Event()
+        async def echo(route):
+            await verified.wait()
+            return True
+        with patch.dict(channel.acquire.__globals__,wait_mesh_echo=echo):
+            task=asyncio.create_task(channel.acquire())
+            try:
+                await asyncio.sleep(0)
+                channel.mesh_hint.set()
+                with self.assertRaises(asyncio.TimeoutError):
+                    await asyncio.wait_for(remote[0].readexactly(1),.06)
+                verified.set()
+                self.assertEqual(await asyncio.wait_for(remote[0].readexactly(1),1),b"?")
+                self.assertFalse(task.done())
+            finally:
+                task.cancel()
+                await asyncio.gather(task,return_exceptions=True)
+
     async def test_leave_while_waiting_closes_spares(self):
         warm, tasks = await self.recovery()
         for task in tasks:

@@ -219,19 +219,24 @@ async def wait_mesh_echo(route):
             sock.connect((route["peer"], 0))
             sock.setblocking(False)
             seq = 0
+            recent = {}
             while True:
                 sent = loop.time()
+                period = .5 if sent - started < 90 else 5
+                recent={proof:t for proof,t in recent.items() if sent-t<3}
                 seq = (seq + 1) & 65535
                 proof = struct.pack("!H", seq) + secrets.token_bytes(16)
                 try:
                     await loop.sock_sendall(sock, b"\x80\0\0\0\0\0" + proof)
-                    reply = await asyncio.wait_for(loop.sock_recv(sock, 128), 1)
-                    if reply[:2] == b"\x81\0" and hmac.compare_digest(reply[6:], proof):
-                        return True
+                    recent[proof]=sent
+                    while (remaining:=sent+period-loop.time())>0:
+                        reply = await asyncio.wait_for(loop.sock_recv(sock,128),remaining)
+                        stamp=recent.get(reply[6:])
+                        if reply[:2]==b"\x81\0" and stamp is not None and loop.time()-stamp<3:
+                            return True
                 except (OSError, asyncio.TimeoutError):
                     pass
-                period = .5 if sent - started < 90 else 5
-                await asyncio.sleep(max(.1, period - (loop.time() - sent)))
+                await asyncio.sleep(max(0,period-(loop.time()-sent)))
     except OSError:
         # В системах без непривилегированного ICMP продолжают работать TLS и уведомление пира.
         return False
@@ -248,7 +253,7 @@ class RoomChannels:
         self.server = server
         self.spare = None
         self.wake = asyncio.Event()
-        self.echo = asyncio.Event()
+        self.mesh_hint = asyncio.Event()
         self.waiting_since = None
 
     @staticmethod
@@ -336,7 +341,7 @@ class RoomChannels:
             else:
                 await self.close()
         self.wake.clear()
-        self.echo.clear()
+        self.mesh_hint.clear()
         self.waiting_since = time.monotonic()
         async def fresh():
             while True:
@@ -350,9 +355,11 @@ class RoomChannels:
         if warm:
             candidates.add(asyncio.create_task(self.propose(warm)))
         async def wake_on_echo():
-            if await wait_mesh_echo(self.route):
-                self.echo.set()
-                self.wake.set()
+            if not await wait_mesh_echo(self.route):
+                # Systems without ping sockets can still test a warm TLS stream
+                # when the private mesh worker receives new data.
+                await self.mesh_hint.wait()
+            self.wake.set()
         probe = asyncio.create_task(wake_on_echo()) if warm and self.route else None
         pending = candidates.copy()
         winner = None
@@ -715,7 +722,7 @@ class Room:
         for channel in self.channels:
             channel.refresh()
             if channel.waiting_since is not None and stamp > channel.waiting_since:
-                channel.wake.set()
+                channel.mesh_hint.set()
 
     async def media_loop(self, route, identity, channels):
         while True:

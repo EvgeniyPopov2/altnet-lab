@@ -379,6 +379,8 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         spare.update = AsyncMock()
         spare.close = AsyncMock()
         spare.recover_call = AsyncMock()
+        spare.onion.received_on.return_value = 0
+        spare.onion.lost_lease.return_value = False
         spare.onion.lease_writer = None
         spare.connected = AsyncMock(return_value=[])
         with patch.dict(routes.recover_call.__globals__, Transport=Mock(return_value=spare)):
@@ -432,6 +434,8 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         primary.close = AsyncMock()
         primary.connected = AsyncMock(return_value=["active"])
         spare = routes.reserve = Mock()
+        spare.onion.received_on.return_value = 0
+        spare.onion.lost_lease.return_value = False
         spare.onion.lease_writer = None
         spare.connected = AsyncMock(return_value=[])
         spare.recover_call = AsyncMock()
@@ -459,6 +463,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         routes.current, routes.reserve = primary, spare
         routes.engaged = True
         for peer in (primary, spare):
+            peer.onion.received_on.return_value = 0
             peer.connected = AsyncMock(return_value=[])
             peer.recover_call = AsyncMock()
         await routes.recover_call(True)
@@ -468,6 +473,39 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         routes.verify_after = 0
         await routes.recover_call(True)
         primary.recover_call.assert_awaited_with(False)
+
+    async def test_independent_reserve_rearms_missing_primary_during_call(self):
+        routes=api["bootstrap"]["CallRoutes"]()
+        primary,spare=Mock(),Mock()
+        active=self.recovering_transport()[0].entries[0]
+        routes.current,routes.reserve=primary,spare
+        routes.engaged=True
+        primary.connected=AsyncMock(return_value=[])
+        spare.connected=AsyncMock(return_value=[active])
+        spare.onion.lease_writer=object()
+        primary.recover_call,spare.recover_call=AsyncMock(),AsyncMock()
+        await routes.recover_call(False,connected=True)
+        primary.recover_call.assert_awaited_once_with(True,paced=True)
+        self.assertIs(routes.reserve,spare)
+        spare.recover_call.assert_awaited_once_with(False,paced=True)
+
+    async def test_recovered_reserve_is_preserved_while_media_negotiates(self):
+        routes = api["bootstrap"]["CallRoutes"]()
+        primary, spare = Mock(), Mock()
+        routes.current, routes.reserve = primary, spare
+        routes.engaged = True
+        active=self.recovering_transport()[0].entries[0]
+        for peer in (primary, spare):
+            peer.connected = AsyncMock(return_value=[active])
+            peer.recover_call = AsyncMock()
+        spare.onion.received_on.return_value = 0
+        await routes.recover_call(True)
+        spare.onion.interruption.assert_called_with(True)
+        spare.onion.received_on.return_value = routes.waiting_since
+        routes.verify_after = 0
+        await routes.recover_call(True)
+        spare.onion.interruption.assert_called_with(False)
+        primary.onion.retire_stale.assert_called_once()
 
     async def test_waiting_primary_does_not_restart_a_peer_that_recovered_during_the_dial(self):
         client, _, stream = self.recovering_transport()
@@ -512,6 +550,38 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(writer,stream)
         self.assertTrue(cancelled.is_set())
         stream.close.assert_not_called()
+
+    async def test_independent_reserve_selects_first_confirmed_onion_stream(self):
+        for fresh_wins in (False,True):
+            with self.subTest(fresh_wins=fresh_wins):
+                transport,host,_=self.recovering_transport()
+                proxy=transport.onion
+                proxy.lease_writer=Mock()
+                proxy.supports_standby=True
+                proxy.HEDGE_DELAY=.01
+                readers=[asyncio.StreamReader(),asyncio.StreamReader()]
+                writers=[Mock(),Mock()]
+                ready=asyncio.Event()
+                for writer in writers:
+                    writer.drain=AsyncMock()
+                writers[1].write.side_effect=lambda data: ready.set() if data==b"G" else None
+                parked=asyncio.get_running_loop().create_future()
+                parked.set_result((readers[0],writers[0]))
+                proxy.standby=host,parked
+                proxy.dial=AsyncMock(return_value=(readers[1],writers[1]))
+                readers[1].feed_data(b"P")
+                task=asyncio.create_task(proxy.dial_for_room(host))
+                try:
+                    await asyncio.wait_for(ready.wait(),1)
+                    self.assertFalse(task.done())
+                    selected=int(fresh_wins)
+                    readers[selected].feed_data(b"R")
+                    self.assertEqual(await asyncio.wait_for(task,1),(readers[selected],writers[selected]))
+                    self.assertTrue(writers[1-selected].close.called)
+                    writers[selected].close.assert_not_called()
+                finally:
+                    task.cancel()
+                    await asyncio.gather(task,return_exceptions=True)
 
     async def test_fresh_rendezvous_has_time_to_finish_during_a_long_outage(self):
         transport, host, stream = self.recovering_transport()

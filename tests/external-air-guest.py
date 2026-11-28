@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "26dd95dbd62fdc2d65091fcedda9e25eb9e627c463e364c63b07eb5067fa827e"
+DIGEST = "73b538f40a54905c5467de577113c389b49acd7d96ee1a3dd0e76db0cce9a28d"
 
 
 def stage(name):

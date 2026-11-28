@@ -6,7 +6,7 @@ import runpy
 import socket
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 
 api=runpy.run_path(str(Path(__file__).resolve().parents[1]/"browser/tor-browser/linux/air_tor.py"))
@@ -53,6 +53,18 @@ class Policy(unittest.TestCase):
 
 
 class RelayLease(unittest.IsolatedAsyncioTestCase):
+    def test_live_sibling_and_other_destinations_survive_withdrawal(self):
+        cls=runpy.run_path(str(Path(api["HERE"])/"onion_proxy.py"))["OnionProxy"]
+        proxy=cls([])
+        stale,active,other=Mock(),Mock(),Mock()
+        proxy.active_hosts={stale:b"first",active:b"first",other:b"elsewhere"}
+        proxy.last_receive={stale:5,active:20,other:4}
+        self.assertEqual(proxy.received_on(b"first"),20)
+        proxy.retire_stale(b"first",10)
+        stale.cancel.assert_called_once()
+        active.cancel.assert_not_called()
+        other.cancel.assert_not_called()
+
     async def test_departed_caller_releases_pending_tor_dial(self):
         async def pending(host, tag, connection):
             connection.close()

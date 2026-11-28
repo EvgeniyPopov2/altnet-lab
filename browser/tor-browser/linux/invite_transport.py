@@ -370,6 +370,7 @@ class CallRoutes:
         self.verify_after = 0
         self.last_entry = None
         self.engaged = False
+        self.waiting_since = None
 
     async def release_reserve(self):
         reserve, self.reserve = self.reserve, None
@@ -392,6 +393,11 @@ class CallRoutes:
                     for stamp in path.onion.last_receive.values()), default=0)
 
     async def recover_call(self, waiting, connected=False):
+        now = time.monotonic()
+        if not waiting:
+            self.waiting_since = None
+        elif self.waiting_since is None:
+            self.waiting_since = now
         if not (waiting or connected) or not self.current.onion:
             await self.release_reserve()
             await self.current.discard_call_probe()
@@ -400,7 +406,6 @@ class CallRoutes:
             self.warm_after = 0
             self.last_entry = None
             return
-        now = time.monotonic()
         if not self.engaged:
             await self.current.recover_call(waiting)
         if self.reserve is None:
@@ -442,8 +447,23 @@ class CallRoutes:
         primary, matched = await asyncio.gather(self.current.connected(), spare.connected())
         if matched:
             self.last_entry = matched[0]
+        if primary and connected and spare.onion and spare.onion.lost_lease():
+            await self.release_reserve()
+            self.warm_after = now + 3
+            return
         if spare.onion:
-            spare.onion.interruption(waiting)
+            # A pinned worker can already be receiving traffic while the media
+            # session is negotiating. Leave that recovered Tor connection alone.
+            name=urlsplit(self.last_entry).hostname if matched else None
+            host=name.encode("ascii") if name else None
+            received=spare.onion.received_on(host) if host and waiting else 0
+            live=host and self.waiting_since is not None and received>=self.waiting_since and now-received<4
+            spare.onion.interruption(waiting and not live)
+            if live and self.last_entry in primary:
+                # The old worker may still advertise the dead link into the
+                # local mesh. Withdraw only that silent connection to the same
+                # signed peer once the independent worker is receiving again.
+                self.current.onion.retire_stale(host,min(self.waiting_since,now-8))
         if connected and matched and not primary and spare.onion.lease_writer is None:
             # Звук уже вернулся через резерв. Сохраняем его, а прежний
             # основной пир ремонтируем на месте, пока разговор продолжается.
@@ -452,7 +472,11 @@ class CallRoutes:
             spare, primary, matched = self.reserve, matched, []
         # Если закреплённый пир исчез на обоих путях, используем обе уже
         # разрешённые цепочки. У живого основного пира сохраняем его соединение.
-        if waiting and not primary and not matched:
+        if connected and matched and not primary:
+            # The independent worker remains scoped to the room. Re-arm the
+            # original route while audio is flowing through the other worker.
+            await self.current.recover_call(True,paced=True)
+        elif waiting and not primary and not matched:
             await self.current.recover_call(True, fresh_circuits=True)
         else:
             await self.current.recover_call(waiting and not primary)
