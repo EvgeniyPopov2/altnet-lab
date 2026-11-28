@@ -62,12 +62,20 @@ class OnionProxy:
         # Длинная попытка нужна для медленной цепочки. Вторая проверяет тот же
         # разрешённый адрес через тот же изолированный сеанс после возврата сети.
         async def retry():
-            for _ in range(7):
-                await asyncio.sleep(1.5)
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 45
+            await asyncio.sleep(1.25)
+            budget = 8
+            while (remaining := deadline - loop.time()) > 0:
+                started = loop.time()
                 try:
-                    return await asyncio.wait_for(self.dial(host), 3)
+                    return await asyncio.wait_for(self.dial(host), min(budget, remaining))
                 except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError):
-                    continue
+                    # Allow rebuilt rendezvous circuits to finish, including late
+                    # in the outage. Pace fast refusals throughout the same window.
+                    budget = 4 if budget == 8 else 8
+                    await asyncio.sleep(min(max(.25, 6 - (loop.time() - started)),
+                                            max(0, deadline - loop.time())))
             raise TimeoutError()
         tasks = {asyncio.create_task(self.dial(host)), asyncio.create_task(retry())}
         winner = None
@@ -142,14 +150,18 @@ class OnionProxy:
         except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError, ValueError):
             pass
         finally:
-            for task in copies:
-                task.cancel()
-            await asyncio.gather(*copies,return_exceptions=True)
+            # A concurrent profile close may cancel this handler during cleanup.
+            # Release both sockets before the first cancellable wait.
             if remote:
                 remote.close()
             writer.close()
-            self.clients.discard(current)
-            self.last_receive.pop(current, None)
+            for task in copies:
+                task.cancel()
+            try:
+                await asyncio.gather(*copies, return_exceptions=True)
+            finally:
+                self.clients.discard(current)
+                self.last_receive.pop(current, None)
 
     async def close(self):
         if self.server:

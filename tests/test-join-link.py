@@ -295,6 +295,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         client, host, _ = self.recovering_transport()
         proxy = client.onion
         port = await proxy.start()
+        upstream_closed = asyncio.Event()
 
         async def echo(reader, writer):
             try:
@@ -303,6 +304,8 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
                     await writer.drain()
             finally:
                 writer.close()
+                await writer.wait_closed()
+                upstream_closed.set()
 
         async with await asyncio.start_server(echo, "127.0.0.1", 0) as upstream:
             upstream_port = upstream.sockets[0].getsockname()[1]
@@ -324,6 +327,8 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
             finally:
                 writer.close()
                 await writer.wait_closed()
+                await proxy.close()
+            await asyncio.wait_for(upstream_closed.wait(), 2)
 
     async def test_silent_spare_retries_while_primary_keeps_its_adjacency(self):
         client, host, _ = self.recovering_transport()
@@ -475,6 +480,30 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(writer,stream)
         self.assertTrue(cancelled.is_set())
         stream.close.assert_not_called()
+
+    async def test_fresh_rendezvous_has_time_to_finish_during_a_long_outage(self):
+        transport, host, stream = self.recovering_transport()
+        proxy = transport.onion
+        attempts = 0
+        active = 0
+        peak = 0
+        async def dial(destination):
+            nonlocal attempts, active, peak
+            self.assertEqual(destination, host)
+            attempts += 1
+            active += 1
+            peak = max(peak, active)
+            try:
+                if attempts == 1:
+                    await asyncio.Future()
+                await asyncio.sleep(3.4)
+                return object(), stream
+            finally:
+                active -= 1
+        proxy.dial.side_effect = dial
+        _, winner = await asyncio.wait_for(proxy.dial_for_room(host), 7)
+        self.assertIs(winner, stream)
+        self.assertEqual((attempts, peak, active), (2, 2, 0))
 
     async def test_first_ready_onion_is_reused_and_lock_closes_unused_stream(self):
         transport = api["bootstrap"]

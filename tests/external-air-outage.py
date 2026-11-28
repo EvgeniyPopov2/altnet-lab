@@ -23,9 +23,10 @@ def disconnected():
         for name, interface in (("input","iifname"),("output","oifname")):
             rules += [f"add chain inet {table} {name} {{ type filter hook {name} priority -250; policy accept; }}",
                       f'add rule inet {table} {name} {interface} != "lo" counter drop']
+        before_apply = time.monotonic()
         subprocess.run([*nft,"-f","-"],input="\n".join(rules)+"\n",text=True,check=True)
         applied = True
-        start = time.monotonic()
+        start = (before_apply + time.monotonic()) / 2
         def evidence():
             data=json.loads(subprocess.check_output([*nft,"-j","list","table","inet",table]))
             counts = {v["rule"]["chain"]:next(e["counter"]["packets"] for e in v["rule"]["expr"] if "counter" in e)
@@ -39,6 +40,6 @@ def disconnected():
             subprocess.run(["sudo","-n",*remove], check=True)
             after = time.monotonic()
             evidence.restoration.update(mono=(before+after)/2, epoch=time.time()-(after-before)/2,
-                                        uncertainty=(after-before)/2)
+                                        uncertainty=(after-before)/2, blackoutSeconds=round((before+after)/2-start,2))
         subprocess.run(["sudo","-n","systemctl","stop",unit+".timer"],check=False)
 

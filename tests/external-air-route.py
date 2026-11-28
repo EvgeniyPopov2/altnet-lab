@@ -39,16 +39,29 @@ with socket.socket(socket.AF_UNIX) as sock:
                      and '("tor",' in row and (m:=re.search(r"\bino:(\d+)",row))]
             print(json.dumps(dict(guards=len(guards),inodes=sockets)))
             sys.exit(0)
-pinned_workers=0
+peer_io = {}
 for path in {row.split()[-1] for row in pathlib.Path("/proc/net/unix").read_text().splitlines()}:
     if "/altnet-invite-" not in path or not path.endswith("/admin.sock"):continue
-    proc=subprocess.run(["yggdrasilctl","-endpoint=unix://"+path,"-json","getpeers"],capture_output=True,timeout=3)
-    if proc.returncode:continue
-    peers=json.loads(proc.stdout)["peers"]
-    pinned_workers += any(p.get("key")==pin and p.get("remote","").split("?")[0].endswith("/"+authority)
-                   for p in peers.values())
+    try:
+        worker = pathlib.Path(path).stat().st_ino
+    except FileNotFoundError:
+        continue
+    try:
+        proc=subprocess.run(["yggdrasilctl","-endpoint=unix://"+path,"-json","getpeers"],capture_output=True,timeout=2)
+        if proc.returncode:continue
+        peers=json.loads(proc.stdout)["peers"]
+    except (subprocess.TimeoutExpired, ValueError, KeyError):
+        # An ephemeral worker can disappear between the socket listing and its reply.
+        continue
+    for p in peers.values():
+        if p.get("key")==pin and p.get("remote","").split("?")[0].endswith("/"+authority):
+            peer_io[str(worker)] = [p["bytes_recvd"], p["uptime"]]
+            break
+if sys.argv[2:]==["--peer-io"]:
+    print(json.dumps(peer_io))
+    sys.exit(0)
 if sys.argv[2:]==["--counts"]:
     succeeded=[p for row in streams if len(p:=row.split())>=4 and p[1]=="SUCCEEDED" and p[3]==authority]
-    print(json.dumps(dict(streams=len(succeeded),circuits=len(ids),pinnedWorkers=pinned_workers)))
+    print(json.dumps(dict(streams=len(succeeded),circuits=len(ids),pinnedWorkers=len(peer_io))))
 else:
-    print(json.dumps(dict(torStream=tor,rendezvous=rendezvous,pinnedYggdrasilPeer=bool(pinned_workers))))
+    print(json.dumps(dict(torStream=tor,rendezvous=rendezvous,pinnedYggdrasilPeer=bool(peer_io))))

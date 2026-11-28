@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "5ab6fa523d0078f42db0a9ec0c0711b5aa7ac45701aa6b86dba3471f1e3093be"
+DIGEST = "d257c667bf452ac4b2e808498ae51f985ba5df700491f4394766f8e605db0e2a"
 
 
 def stage(name):
@@ -109,7 +109,11 @@ def guard_counters(inodes):
     return result
 
 
-def trace_route(address, peer, restored, workers, old_guards):
+def pinned_peer_io(peer):
+    return json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--peer-io"))
+
+
+def trace_route(address, peer, restored, workers, old_guards, old_peer_io):
     results = {}
     finished = threading.Event()
     def sample(label, probe):
@@ -149,6 +153,13 @@ def trace_route(address, peer, restored, workers, old_guards):
         route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
         if not all(route.values()):
             raise RuntimeError("Waiting for the pinned peer")
+    def inbound_mesh_bytes():
+        elapsed = time.monotonic() - restored
+        for key, (received, uptime) in pinned_peer_io(peer).items():
+            previous = old_peer_io.get(key)
+            if received and (previous is None or received > previous[0] or uptime + 1 < previous[1] + elapsed):
+                return
+        raise RuntimeError("Waiting for new bytes on the pinned Yggdrasil link")
     def worker_changed():
         current=set(subprocess.run(["pgrep","-u",str(os.getuid()),"-x","yggdrasil"],capture_output=True,text=True).stdout.split())
         if not current-workers:
@@ -156,7 +167,8 @@ def trace_route(address, peer, restored, workers, old_guards):
     # Purely local observations: a test probe must not wake up Tor or prime
     # Yggdrasil route discovery on behalf of the application.
     for label, probe in (("meshWorkerLaunched", worker_changed),
-                         ("pinnedPeerObserved", pinned), ("mediaTcpEstablished", media_tcp)):
+                         ("pinnedPeerObserved", pinned), ("firstPinnedPeerPayload", inbound_mesh_bytes),
+                         ("mediaTcpEstablished", media_tcp)):
         threading.Thread(target=sample,args=(label,probe),daemon=True).start()
     return results, finished
 
@@ -256,11 +268,13 @@ def call(cfg):
                 outage=counters()
                 assert outage["seconds"]>=seconds-.2 and outage["droppedPackets"]["output"]>0 and outage["droppedPackets"]["input"]>0
                 assert ui("airview")["phase"]=="waiting" and not ui("has_capture") and ui("recovery_heard") is None
+                old_peer_io = pinned_peer_io(peer)
                 old_guards = guard_counters(guards["inodes"])
             outage.update(detectedAfterSeconds=lost_at,phase=lost["phase"],microphoneReleased=True)
             restore = counters.restoration
+            outage["seconds"] = restore["blackoutSeconds"]
             restored_at = restore["mono"]
-            stages, stop_trace = trace_route(address,peer,restored_at,peer_workers,old_guards)
+            stages, stop_trace = trace_route(address,peer,restored_at,peer_workers,old_guards,old_peer_io)
             stage("Network restored; waiting for the existing room without user interaction")
             wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"automatic reconnection",120)
             reconnect_seconds=round(time.monotonic()-restored_at,1)
