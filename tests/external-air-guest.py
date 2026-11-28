@@ -285,9 +285,9 @@ def call(cfg):
                      "withinTenSeconds":max(pcm["node1_to_actions"]+.1,pcm["actions_to_node1"]+error)<=10,
                      "routeTiming":stages,"sameRoom":True,"sameProcess":True,"freshMediaSocket":True,
                      "verifiedRoute":route},outage,resumed_socket)
-        automatic, outage, resumed_socket = interrupt("",first_socket,30)
-        repeated, repeated_outage, second_socket = interrupt("Again",resumed_socket,18)
-        third, third_outage, third_socket = interrupt("Third",second_socket,42)
+        automatic, outage, resumed_socket = interrupt("",first_socket,42)
+        repeated, repeated_outage, second_socket = interrupt("Again",resumed_socket,54)
+        third, third_outage, third_socket = interrupt("Third",second_socket,66)
         assert len({first_socket,resumed_socket,second_socket,third_socket}) == 4
         stage("Duplex audio resumed in the same room; verifying separate restart/redial scenario")
         exchange(cfg,"restored",True)

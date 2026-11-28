@@ -16,7 +16,7 @@ def disconnected():
     nft = ["sudo", "-n", "/usr/sbin/nft"]
     remove = ["/usr/sbin/nft", "delete", "table", "inet", table]
     # Независимый таймер снимет фильтр, даже если клиент или процесс теста завершится.
-    subprocess.run(["sudo","-n","systemd-run","--quiet","--on-active=75s","--unit="+unit,*remove], check=True)
+    subprocess.run(["sudo","-n","systemd-run","--quiet","--on-active=100s","--unit="+unit,*remove], check=True)
     applied = False
     try:
         rules = [f"create table inet {table}"]
