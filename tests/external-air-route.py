@@ -1,4 +1,4 @@
-import json, pathlib, re, runpy, socket, subprocess, sys
+import json, pathlib, re, runpy, select, socket, subprocess, sys, time
 uri=sys.argv[1]
 authority,pin=uri.removeprefix("onion://").split("?key=")
 control=runpy.run_path("/opt/altnet-browser/Browser/altnet-linux/bridge_tor.py")["command"]
@@ -25,8 +25,16 @@ with socket.socket(socket.AF_UNIX) as sock:
             control(stream,b"SETEVENTS STREAM_BW")
             print(len(standby_streams),flush=True)
             if standby_streams:
-                sock.settimeout(220)
-                while line:=stream.readline(8192):
+                deadline=time.monotonic()+220
+                while time.monotonic()<deadline:
+                    ready,_,_=select.select([sock,sys.stdin.buffer],[],[],2)
+                    if sys.stdin.buffer in ready:
+                        break
+                    if sock not in ready:
+                        continue
+                    line=stream.readline(8192)
+                    if not line:
+                        break
                     p=line.split()
                     if len(p)>=5 and p[:2]==[b"650",b"STREAM_BW"] and p[2].decode() in standby_streams:
                         if int(p[3])>=256 or int(p[4])>=256:

@@ -12,14 +12,15 @@ class EntryGateway:
 
     def __init__(self, peer_port=17910):
         self.peer_port = peer_port
-        self.clients = 0
+        self.handshakes = 0
         self.parked = 0
 
     async def handle(self, reader, writer):
-        if self.clients >= 24:
+        if self.handshakes >= 24:
             writer.close()
             return
-        self.clients += 1
+        self.handshakes += 1
+        handshaking = True
         upstream = None
         copies = []
         try:
@@ -39,6 +40,8 @@ class EntryGateway:
             elif first != b"\x16":  # TLS handshake record from a normal Yggdrasil client
                 return
             source, upstream = await asyncio.wait_for(asyncio.open_connection("127.0.0.1", self.peer_port), 3)
+            self.handshakes -= 1
+            handshaking = False
             if first == STANDBY[:1]:
                 writer.write(b"R")
                 await writer.drain()
@@ -54,7 +57,8 @@ class EntryGateway:
         except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError):
             pass
         finally:
-            self.clients -= 1
+            if handshaking:
+                self.handshakes -= 1
             writer.close()
             if upstream is not None:
                 upstream.close()

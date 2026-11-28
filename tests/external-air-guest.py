@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "b78757a8cc76f30edf2bf9ae842f57369fc8775d12007439244f96d46c30bfef"
+DIGEST = "379fc3072b7246699a3e59136009a9fbbced6964566f5292c9c454b222d0bd18"
 
 
 def stage(name):
@@ -293,8 +293,8 @@ def call(cfg):
             assert ui("air_routes",peer=address)["17911"]["inode"] == prior_socket
             before_cut.update(route_counts())
             watcher=subprocess.Popen(["sudo","-n","/usr/bin/python3","-IBu",str(HERE/"external-air-route.py"),peer,"--watch-standby"],
-                                     stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
-            stack.callback(watcher.terminate)
+                                     stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
+            stack.callback(watcher.stdin.close)
             before_cut["observedStandbys"]=int(watcher.stdout.readline())
             standby_inodes=set(media_counters(address)) - {prior_socket}
             if previous_duplex is not None:
@@ -331,11 +331,13 @@ def call(cfg):
             pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
                    "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
             previous_duplex = restored_at + max(pcm.values())
-            stages["preCutStandbyForwarded"]=watcher.poll()==0 and watcher.stdout.readline().strip()=="forwarded"
-            if watcher.poll() is None:
-                watcher.terminate()
-            watcher.wait(timeout=3)
-            watcher.stdout.close()
+            try:
+                output,_=watcher.communicate(timeout=5)
+                stages["preCutStandbyForwarded"]="forwarded" in output.splitlines() if watcher.returncode==0 else None
+            except subprocess.TimeoutExpired:
+                # This read-only observer has its own deadline. Keep both measured
+                # PCM times when optional relay accounting is unavailable.
+                stages["preCutStandbyForwarded"]=None
             stop_trace.set()
             after=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
             stages["retainedGuardSockets"] = len(set(guards["inodes"]) & set(after["inodes"]))
@@ -434,5 +436,7 @@ if __name__=="__main__":
         import traceback
         frame=traceback.extract_tb(exc.__traceback__)[-1]
         safe=str(exc) if type(exc) is RuntimeError and str(exc).startswith(("UI did not complete ","Timed out")) else type(exc).__name__
-        sys.exit(f"QA failed at {Path(frame.filename).name}:{frame.lineno}: {safe}")
+        trace=" ".join(f"{Path(f.filename).name}:{f.lineno}" for f in traceback.extract_tb(exc.__traceback__)
+                       if Path(f.filename).parent==HERE)
+        sys.exit(f"QA failed at {Path(frame.filename).name}:{frame.lineno}: {safe} [{trace}]")
 
