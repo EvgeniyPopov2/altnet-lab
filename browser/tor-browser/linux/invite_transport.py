@@ -360,14 +360,12 @@ class CallRoutes:
         self.reserve = None
         self.warm_after = 0
         self.verify_after = 0
-        self.promote_after = None
-        self.warm_deadline = 0
+        self.last_entry = None
         self.engaged = False
 
     async def release_reserve(self):
         reserve, self.reserve = self.reserve, None
         self.engaged = False
-        self.promote_after = None
         if reserve:
             await reserve.close()
 
@@ -375,29 +373,37 @@ class CallRoutes:
         if entries != self.current.entries:
             await self.release_reserve()
             self.warm_after = 0
+            self.last_entry = None
         await self.current.update(entries)
 
     async def connected(self):
         return await self.current.connected()
+
+    def last_incoming(self):
+        return max((stamp for path in (self.current, self.reserve) if path and path.onion
+                    for stamp in path.onion.last_receive.values()), default=0)
 
     async def recover_call(self, waiting, connected=False):
         if not (waiting or connected) or not self.current.onion:
             await self.release_reserve()
             await self.current.discard_call_probe()
             self.warm_after = 0
+            self.last_entry = None
             return
         now = time.monotonic()
         # Keep one established local adjacency while the spare retries. Losing
         # both at once makes Yggdrasil rebuild its routes from scratch.
         await self.current.recover_call(waiting and not self.engaged)
         if self.reserve is None:
-            if connected and now >= self.warm_after:
-                self.warm_after = now + 30
+            if now >= self.warm_after:
+                self.warm_after = now + 3
                 active = await self.current.connected()
                 if active:
+                    self.last_entry = active[0]
+                if self.last_entry in self.current.entries:
                     self.reserve = Transport()
                     try:
-                        await self.reserve.update(self.current.entries, warm_entry=active[0])
+                        await self.reserve.update(self.current.entries, warm_entry=self.last_entry)
                     except (OSError, ValueError):
                         await self.release_reserve()
             return
@@ -419,35 +425,24 @@ class CallRoutes:
                 self.warm_after = now + 5
                 return
             self.engaged = True
-            self.warm_deadline = now + 30
             self.verify_after = 0
             return
-        await spare.recover_call(waiting, paced=True)
         if now < self.verify_after:
             return
-        self.verify_after = now + 1
+        self.verify_after = now + .5
         matched = await spare.connected()
         if matched:
-            self.warm_deadline = now + 30
-        elif connected and now >= self.warm_deadline:
+            self.last_entry = matched[0]
+        if connected and matched and not await self.current.connected():
+            # Звук уже вернулся через резерв. Сохраняем его, а прежний
+            # основной пир ремонтируем на месте, пока разговор продолжается.
+            self.current, self.reserve = spare, self.current
+            spare, matched = self.reserve, []
+        if spare.process is None or isinstance(spare.process.returncode, int):
             await self.release_reserve()
-            self.warm_after = now + 5
-            return
-
-        # A warm path does not displace a working primary. Retire the primary
-        # only after audio has resumed and its pinned peer stays absent.
-        if not (matched and connected) or await self.current.connected():
-            self.promote_after = None
-            return
-        if self.promote_after is None:
-            self.promote_after = now + 5
-        elif now >= self.promote_after:
-            old, self.current = self.current, spare
-            self.reserve = None
-            self.engaged = False
-            self.promote_after = None
-            await old.close()
             self.warm_after = 0
+            return
+        await spare.recover_call(waiting or not matched, paced=True)
 
     async def close(self):
         await self.release_reserve()

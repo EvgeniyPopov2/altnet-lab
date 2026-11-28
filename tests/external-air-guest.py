@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "d257c667bf452ac4b2e808498ae51f985ba5df700491f4394766f8e605db0e2a"
+DIGEST = "943ca5ed448e68c7e94ec50434330dfca37facf32d39e4b109c2598016874b9c"
 
 
 def stage(name):
@@ -113,7 +113,18 @@ def pinned_peer_io(peer):
     return json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--peer-io"))
 
 
-def trace_route(address, peer, restored, workers, old_guards, old_peer_io):
+def media_counters(address):
+    lines=run("ss","-Ht6ine","state","established","( sport = :17911 or dport = :17911 )").splitlines()
+    sockets={}
+    for row,info in zip(lines,lines[1:]):
+        inode=re.search(r"\bino:(\d+)",row)
+        if inode and "["+address+"]" in row:
+            received=re.search(r"\bbytes_received:(\d+)",info)
+            sockets[inode[1]]=int(received[1]) if received else 0
+    return sockets
+
+
+def trace_route(address, peer, restored, workers, old_guards, old_peer_io, old_media):
     results = {}
     finished = threading.Event()
     def sample(label, probe):
@@ -145,10 +156,9 @@ def trace_route(address, peer, restored, workers, old_guards, old_peer_io):
                 return
             time.sleep(.2)
     threading.Thread(target=observe_guard,daemon=True).start()
-    def media_tcp():
-        rows=run("ss","-Ht6ne","state","established","( sport = :17911 or dport = :17911 )")
-        if "["+address+"]" not in rows:
-            raise RuntimeError("Waiting for the media TCP connection")
+    def media_bytes():
+        if not any(n > old_media.get(inode,0) for inode,n in media_counters(address).items()):
+            raise RuntimeError("Waiting for incoming bytes on a media socket")
     def pinned():
         route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
         if not all(route.values()):
@@ -168,7 +178,7 @@ def trace_route(address, peer, restored, workers, old_guards, old_peer_io):
     # Yggdrasil route discovery on behalf of the application.
     for label, probe in (("meshWorkerLaunched", worker_changed),
                          ("pinnedPeerObserved", pinned), ("firstPinnedPeerPayload", inbound_mesh_bytes),
-                         ("mediaTcpEstablished", media_tcp)):
+                         ("mediaPortBytes", media_bytes)):
         threading.Thread(target=sample,args=(label,probe),daemon=True).start()
     return results, finished
 
@@ -243,7 +253,9 @@ def call(cfg):
         original_room=ui("air_room")
         original_worker,=ui("air_workers")
         assert ui("has_capture") and ui("airview")["phase"]=="connected"
+        previous_duplex = None
         def interrupt(suffix,prior_socket,seconds):
+            nonlocal previous_duplex
             offset, clock_error = clock_offset(cfg)
             def route_counts():
                 return json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--counts"))
@@ -257,6 +269,11 @@ def call(cfg):
             before_cut["guardRelays"] = guards["guards"]
             exchange(cfg,"armed"+suffix,True)
             exchange(cfg,"cut"+suffix)
+            assert ui("air_routes")["17911"]["inode"] == prior_socket
+            before_cut.update(route_counts())
+            standby_inodes=set(media_counters(address)) - {prior_socket}
+            if previous_duplex is not None:
+                before_cut["secondsSincePreviousDuplex"]=round(time.monotonic()-previous_duplex,2)
             stage("Interrupting all non-loopback traffic during the established call")
             with runpy.run_path(str(HERE/"external-air-outage.py"))["disconnected"]() as counters:
                 until=time.monotonic()+seconds
@@ -268,13 +285,14 @@ def call(cfg):
                 outage=counters()
                 assert outage["seconds"]>=seconds-.2 and outage["droppedPackets"]["output"]>0 and outage["droppedPackets"]["input"]>0
                 assert ui("airview")["phase"]=="waiting" and not ui("has_capture") and ui("recovery_heard") is None
+                old_media = media_counters(address)
                 old_peer_io = pinned_peer_io(peer)
                 old_guards = guard_counters(guards["inodes"])
             outage.update(detectedAfterSeconds=lost_at,phase=lost["phase"],microphoneReleased=True)
             restore = counters.restoration
             outage["seconds"] = restore["blackoutSeconds"]
             restored_at = restore["mono"]
-            stages, stop_trace = trace_route(address,peer,restored_at,peer_workers,old_guards,old_peer_io)
+            stages, stop_trace = trace_route(address,peer,restored_at,peer_workers,old_guards,old_peer_io,old_media)
             stage("Network restored; waiting for the existing room without user interaction")
             wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"automatic reconnection",120)
             reconnect_seconds=round(time.monotonic()-restored_at,1)
@@ -286,6 +304,7 @@ def call(cfg):
             remote_heard = exchange(cfg,"node1Heard"+suffix)
             pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
                    "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
+            previous_duplex = restored_at + max(pcm.values())
             stop_trace.set()
             after=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--guards"))
             stages["retainedGuardSockets"] = len(set(guards["inodes"]) & set(after["inodes"]))
@@ -300,6 +319,7 @@ def call(cfg):
             stage("Resumed speaker PCM "+json.dumps(dict(seconds=pcm,node1TimingError=error,stages=stages,ui=reconnect_seconds)))
             resumed_rx,resumed_tx,resumed_socket=measure_call(ui,cfg,address,"Resume"+suffix)
             assert prior_socket!=resumed_socket
+            stages.update(mediaStandbysBeforeCut=len(standby_inodes),usedWarmMedia=resumed_socket in standby_inodes)
             stage("Automatic resume: "+json.dumps({"secondsAfterRestore":reconnect_seconds,"signalAtNode1":resumed_tx["Hz880"],
                                                 "signalAtRunner":resumed_rx["Hz440"]}))
             return ({"node1_to_actions":resumed_rx,"actions_to_node1":resumed_tx,
@@ -356,9 +376,12 @@ def call(cfg):
               "pinnedYggdrasilPeer":True,"speakerIndicatorsAtBothEnds":True}
         rounds = (automatic,repeated,third)
         data["tenSecondTarget"] = {"met":sum(row["withinTenSeconds"] for row in rounds),"tested":len(rounds)}
+        reserve_ready = all(row["routeTiming"]["entryBeforeCut"]["pinnedWorkers"]==2
+                            and row["routeTiming"]["entryBeforeCut"]["circuits"]>=2 for row in rounds)
+        data["reserveReadyAtEveryCut"] = reserve_ready
         stage(json.dumps(data))
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf8") as out:
-            print("ten_seconds=" + str(all(row["withinTenSeconds"] for row in rounds)).lower(), file=out)
+            print("ten_seconds=" + str(reserve_ready and all(row["withinTenSeconds"] for row in rounds)).lower(), file=out)
         with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
             print("| Обрыв, с | Звук на node1, с | Звук на Ubuntu, с | В пределах 10 с с учётом погрешности |",file=out)
             print("|---:|---:|---:|:---:|",file=out)

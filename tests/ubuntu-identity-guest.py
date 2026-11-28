@@ -507,20 +507,36 @@ def serve(args, root, stack):
                 assert " dev "+route["interface"]+" " in ips
                 result={"interface":route["interface"],"port":route["port"]}
             elif op == "air_routes":
-                rows=subprocess.check_output(["ss","-6Htnpe","state","established"],text=True)
+                def counters():
+                    lines=subprocess.check_output(["ss","-6Htinpe","state","established"],text=True).splitlines()
+                    sockets={}
+                    for line, info in zip(lines,lines[1:]):
+                        addrs=re.findall(r"\[([0-9a-f:]+)(?:%[\w.-]+)?\](?:%[\w.-]+)?:(\d+)",line)
+                        if len(addrs)!=2 or '"python3"' not in line:continue
+                        ports=[p for _,p in addrs if 17911<=int(p)<17939]
+                        if len(ports)!=1:continue
+                        inode=re.search(r"ino:(\d+)",line).group(1)
+                        count=re.search(r"\bbytes_received:(\d+)",info)
+                        sockets[inode]=(ports[0],addrs[0][0],addrs[1][0],int(count[1]) if count else 0)
+                    return sockets
                 links={}
-                for line in rows.splitlines():
-                    addrs=re.findall(r"\[([0-9a-f:]+)(?:%[\w.-]+)?\](?:%[\w.-]+)?:(\d+)",line)
-                    if len(addrs)!=2 or '"python3"' not in line:continue
-                    ports=[int(p) for addr,p in addrs if 17911<=int(p)<17939]
-                    if len(ports)!=1:continue
-                    local,peer=[a for a,p in addrs]
-                    route=json.loads(subprocess.check_output(["ip","-j","-6","route","get",peer,"from",local]))
-                    assert Path("/sys/class/net",route[0]["dev"],"tun_flags").exists()
-                    links[str(ports[0])]={"inode":re.search(r"ino:(\d+)",line).group(1),"interface":route[0]["dev"]}
+                previous=counters()
+                for _ in range(12):
+                    time.sleep(.25)
+                    current=counters()
+                    live={}
+                    for inode,(port,local,peer,count) in current.items():
+                        if inode in previous and count>previous[inode][3]:
+                            live.setdefault(port,[]).append((inode,local,peer))
+                    if live and set(live)=={v[0] for v in current.values()} and all(len(v)==1 for v in live.values()):
+                        for port,[(inode,local,peer)] in live.items():
+                            route=json.loads(subprocess.check_output(["ip","-j","-6","route","get",peer,"from",local]))
+                            assert Path("/sys/class/net",route[0]["dev"],"tun_flags").exists()
+                            links[port]={"inode":inode,"interface":route[0]["dev"]}
+                        break
+                    previous=current
                 if not links:
-                    safe=[re.sub(r"\[[^\]]+\]","[mesh]",s)[:220] for s in rows.splitlines() if re.search(r":179(?:1[1-9]|2[0-9]|3[0-8])\b",s)]
-                    raise RuntimeError("Проверка сокетов Эфира: "+repr(safe))
+                    raise RuntimeError("Не найден единственный активный голосовой поток на порт.")
                 result=links
             elif op == "air_workers":
                 import os

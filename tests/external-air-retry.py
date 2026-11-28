@@ -5,6 +5,7 @@ import json
 import os
 import select
 import signal
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -73,6 +74,62 @@ class DialTimingTests(unittest.TestCase):
         timing = voice["RoomDial"]()
         timing.last_connect = 1.4
         self.assertEqual(timing.timeout(0,0),4)
+
+
+class StandbyMedia(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        channels = voice["RoomChannels"]
+        negotiated = patch.object(channels, "negotiated", return_value=True)
+        negotiated.start()
+        self.addCleanup(negotiated.stop)
+        self.queues = [asyncio.Queue(), asyncio.Queue()]
+        self.channels = [channels(q.get, server) for q, server in zip(self.queues, (False, True))]
+        for channel in self.channels:
+            self.addAsyncCleanup(channel.close)
+
+    async def pair(self):
+        sockets = socket.socketpair()
+        streams = await asyncio.gather(*(asyncio.open_connection(sock=s) for s in sockets))
+        for _, writer in streams:
+            self.addCleanup(writer.transport.abort)
+        return streams
+
+    async def recovery(self):
+        warm = await self.pair()
+        for channel, queue, stream in zip(self.channels, self.queues, warm):
+            queue.put_nowait(stream)
+            channel.prepare(stream[1])
+            await channel.spare
+        tasks = [asyncio.create_task(channel.acquire()) for channel in self.channels]
+        for task in tasks:
+            self.addCleanup(task.cancel)
+        await asyncio.sleep(0)
+        return warm, tasks
+
+    async def test_either_participant_can_wake_the_same_authenticated_spare(self):
+        for index in (0, 1):
+            warm, tasks = await self.recovery()
+            self.assertFalse(any(t.done() for t in tasks))
+            self.channels[index].wake.set()
+            selected = await asyncio.wait_for(asyncio.gather(*tasks), 2)
+            self.assertEqual(selected, warm)
+            selected[0][1].write(b"audio")
+            self.assertEqual(await selected[1][0].readexactly(5), b"audio")
+
+    async def test_cold_path_wins_while_the_idle_spare_has_no_proof_of_life(self):
+        warm, tasks = await self.recovery()
+        cold = await self.pair()
+        for queue, stream in zip(self.queues, cold):
+            queue.put_nowait(stream)
+        self.assertEqual(await asyncio.wait_for(asyncio.gather(*tasks), 2), cold)
+        self.assertTrue(all(writer.is_closing() for _, writer in warm))
+
+    async def test_leave_while_waiting_closes_spares(self):
+        warm, tasks = await self.recovery()
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self.assertTrue(all(writer.is_closing() for _, writer in warm))
 
 
 class OwnerExit(unittest.TestCase):

@@ -189,6 +189,139 @@ async def routed_stream(route, ctx, pinned, preface=PREFACE, timing=None):
         raise
 
 
+class RoomChannels:
+    """Один тихий запасной TLS-поток на принятого собеседника в комнате."""
+    protocol = "altnet-air-standby/1"
+
+    def __init__(self, dial, server):
+        self.dial = dial
+        self.server = server
+        self.spare = None
+        self.wake = asyncio.Event()
+        self.waiting_since = None
+
+    @classmethod
+    def negotiated(cls, writer):
+        return writer.get_extra_info("ssl_object").selected_alpn_protocol() == cls.protocol
+
+    @staticmethod
+    async def discard(tasks):
+        for task in tasks:
+            task.cancel()
+        for result in await asyncio.gather(*tasks, return_exceptions=True):
+            if isinstance(result, tuple):
+                result[1].transport.abort()
+
+    async def close(self):
+        if self.spare is not None:
+            task, self.spare = self.spare, None
+            await self.discard([task])
+
+    def prepare(self, writer):
+        if self.negotiated(writer):
+            self.spare = asyncio.create_task(self.dial())
+
+    async def signal_route(self, writer):
+        await self.wake.wait()
+        writer.write(b"!" if self.server else b"?")
+        await writer.drain()
+
+    async def propose(self, stream=None):
+        warm = stream is not None
+        reader, writer = stream if warm else await self.dial()
+        signal = None
+        keep = False
+        try:
+            if self.negotiated(writer):
+                if warm:
+                    signal = asyncio.create_task(self.signal_route(writer))
+                if self.server:
+                    command = await reader.readexactly(1) if warm else await asyncio.wait_for(reader.readexactly(1), 8)
+                    if command == b"?":
+                        writer.write(b"!")
+                        await writer.drain()
+                        command = await reader.readexactly(1)
+                    if command != b"C":
+                        raise VoiceError("Неверное подтверждение канала Эфира.")
+                elif warm and await reader.readexactly(1) != b"!":
+                    raise VoiceError("Неверный ответ резервного канала.")
+            keep = True
+            return reader, writer
+        finally:
+            if not keep:
+                writer.transport.abort()
+            if signal:
+                signal.cancel()
+                await asyncio.gather(signal, return_exceptions=True)
+
+    async def acquire(self):
+        # Только соединяющая сторона выбирает победителя. Слушающая принимает
+        # C ровно на выбранном сокете. До A микрофон остаётся закрытым.
+        warm = None
+        if self.spare is not None:
+            if self.spare.done() and not self.spare.cancelled() and self.spare.exception() is None:
+                warm = self.spare.result()
+                self.spare = None
+            else:
+                await self.close()
+        self.wake.clear()
+        self.waiting_since = time.monotonic()
+        async def fresh():
+            while True:
+                try:
+                    return await self.propose()
+                except (ConnectionError, asyncio.IncompleteReadError, asyncio.TimeoutError):
+                    if not warm:
+                        raise
+                    await asyncio.sleep(.35)
+        candidates = {asyncio.create_task(fresh())}
+        if warm:
+            candidates.add(asyncio.create_task(self.propose(warm)))
+        pending = candidates.copy()
+        winner = None
+        writer = None
+        success = False
+        try:
+            while pending:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    try:
+                        reader, writer = task.result()
+                    except (OSError, asyncio.IncompleteReadError, asyncio.TimeoutError):
+                        if pending or any(other is not task and other.exception() is None for other in done):
+                            continue
+                        raise
+                    winner = task
+                    break
+                if winner:
+                    break
+            if self.negotiated(writer):
+                if self.server:
+                    writer.write(b"A")
+                else:
+                    writer.write(b"C")
+                await writer.drain()
+                if not self.server:
+                    async def acknowledged():
+                        for _ in range(3):
+                            answer = await reader.readexactly(1)
+                            if answer == b"A":
+                                return
+                            if answer != b"!":
+                                break
+                        raise VoiceError("Собеседник не подтвердил канал Эфира.")
+                    await asyncio.wait_for(acknowledged(), 5)
+            success = True
+            return reader, writer
+        finally:
+            self.waiting_since = None
+            if writer and not success:
+                writer.transport.abort()
+            await self.discard(candidates - {winner})
+            if warm and (not success or writer is not warm[1]):
+                warm[1].transport.abort()
+
+
 class Opus:
     def __init__(self):
         lib = self.lib = C.CDLL("libopus.so.0")
@@ -447,6 +580,7 @@ class Room:
         self.routes, self.preface = config
         self.members = {}
         self.ready = asyncio.Event()
+        self.channels = set()
         self.session.self_name = self.routes[0][0]["selfName"]
 
     def people(self):
@@ -485,16 +619,33 @@ class Room:
 
     async def link(self, route, context, pin, identity):
         timing = RoomDial()
+        def dial():
+            return routed_stream(route, context, pin, self.preface, timing)
+        channels = RoomChannels(dial, route.get("mode") == "listen")
+        self.channels.add(channels)
+        try:
+            await self.media_loop(route, identity, channels)
+        finally:
+            self.channels.discard(channels)
+            await channels.close()
+
+    def route_received(self, stamp):
+        for channel in self.channels:
+            if channel.waiting_since is not None and stamp > channel.waiting_since:
+                channel.wake.set()
+
+    async def media_loop(self, route, identity, channels):
         while True:
             writer = codec = output = None
             pumps = []
             try:
-                reader, writer = await routed_stream(route, context, pin, self.preface, timing)
+                reader, writer = await channels.acquire()
                 output, codec = Pulse(), Opus()
                 meter, queue = Meter(), asyncio.Queue(maxsize=6)
                 self.members[identity] = (route["peerName"], meter, queue)
                 self.session.phase = "connected"
                 self.ready.set()
+                channels.prepare(writer)
                 pumps = [asyncio.create_task(self.transmit(writer, queue)),
                          asyncio.create_task(self.session.receive(reader, codec, meter, output))]
                 await asyncio.gather(*pumps)
@@ -522,7 +673,9 @@ class Room:
                     self.session.devices.mute()
                     self.session.local.reset()
                     self.session.phase = "waiting"
-            await asyncio.sleep(.7)
+            # После потери живого канала сразу открываем слушатель и резерв.
+            # Быстрые отказы открытия ограничены паузой.
+            await asyncio.sleep(0 if writer else .45)
 
     def extend(self, routes):
         for route in routes:

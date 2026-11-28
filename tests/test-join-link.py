@@ -398,17 +398,13 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
             await routes.recover_call(False,connected=True)
             self.assertIs(routes.current,primary)
             self.assertIs(routes.reserve,spare)
-            self.assertIsNone(routes.promote_after)
             primary.connected.return_value = []
             routes.verify_after = 0
             await routes.recover_call(False,connected=True)
-            self.assertIs(routes.current,primary)
-            self.assertIsNotNone(routes.promote_after)
-            routes.promote_after = routes.verify_after = 0
-            await routes.recover_call(False,connected=True)
             self.assertIs(routes.current,spare)
-            primary.close.assert_awaited_once()
-            self.assertIsNone(routes.reserve)
+            self.assertIs(routes.reserve,primary)
+            primary.recover_call.assert_awaited_with(True, paced=True)
+            primary.close.assert_not_awaited()
 
     async def test_failed_reserve_launch_keeps_current_transport(self):
         routes = api["bootstrap"]["CallRoutes"]()
@@ -436,19 +432,19 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         spare.recover_call = AsyncMock()
         spare.close = AsyncMock()
         routes.engaged = True
-        routes.warm_deadline = time.monotonic() + 30
         await routes.recover_call(False, connected=True)
         spare.close.assert_not_awaited()
-        routes.verify_after = routes.warm_deadline = 0
+        spare.recover_call.assert_awaited_with(True, paced=True)
+        routes.verify_after = 0
         await routes.recover_call(True)
         spare.recover_call.assert_awaited_with(True, paced=True)
         primary.recover_call.assert_awaited_with(False)
         self.assertIs(routes.reserve, spare)
         routes.verify_after = 0
         await routes.recover_call(False, connected=True)
-        spare.close.assert_awaited_once()
-        self.assertIsNone(routes.reserve)
-        self.assertGreater(routes.warm_after, time.monotonic())
+        spare.close.assert_not_awaited()
+        self.assertIs(routes.reserve, spare)
+        spare.recover_call.assert_awaited_with(True, paced=True)
         primary.close.assert_not_awaited()
 
     async def test_room_leave_releases_prepared_reserve(self):

@@ -322,7 +322,9 @@ class Lobby:
             der=base64.b64decode(peer["certificate"])
             route={"interface":self.interface,"source":self.endpoint["address"],"peer":peer["address"],"port":MEDIA_PORT+i,
                    "selfName":self.me["name"],"peerName":peer["name"],"mode":"listen" if server else "connect"}
-            routes.append((route,tls(self.pair,server,[der]),der,peer["id"]))
+            context = tls(self.pair,server,[der])
+            context.set_alpn_protocols([self.voice.RoomChannels.protocol])
+            routes.append((route,context,der,peer["id"]))
         if self.room:
             require(self.session.phase=="connected" and self.session.room)
             self.session.room.extend(routes)
@@ -448,6 +450,8 @@ class Lobby:
         if self.links:
             waiting = bool(self.room and self.room == self.last_connected_room and state["phase"] == "waiting")
             await self.links.transport.recover_call(waiting, connected=bool(self.room and state["phase"] == "connected"))
+            if self.session.room:
+                self.session.room.route_received(self.links.transport.last_incoming())
         inv=next(iter(self.pending.items()),None)
         update=self.sync.next_update() if self.sync else None
         return {"links":await self.links.status() if self.links else {}, "room":self.room,"host":self.host,"roster":[v["id"] for v in self.roster],"state":state,"delivery":self.delivery,
