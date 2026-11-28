@@ -233,7 +233,7 @@ class Transport:
         del self.onion.pending[host]
         return False
 
-    async def recover_call(self, waiting, *, paced=False):
+    async def recover_call(self, waiting, *, paced=False, fresh_circuits=False):
         # A dial to the same authorised onion can complete while Yggdrasil 0.4
         # is between its fixed one-minute attempts. Leave every live path in place
         # until Tor has a usable replacement and there is still no incoming traffic.
@@ -247,9 +247,13 @@ class Transport:
                 return
             host = urlsplit(self.entries[self.call_entry % len(self.entries)]).hostname.encode("ascii")
             self.call_entry += 1
-            dial = self.onion.dial_for_room if paced else self.onion.dial
-            task = (asyncio.create_task(dial(host)) if paced else
-                    asyncio.create_task(asyncio.wait_for(dial(host), 45)))
+            if paced:
+                dial = self.onion.dial_for_room(host)
+            elif fresh_circuits:
+                dial = self.onion.dial_on_new_circuits(host)
+            else:
+                dial = asyncio.wait_for(self.onion.dial(host), 45)
+            task = asyncio.create_task(dial)
             # Let the running worker consume this same dial if its own retry
             # arrives first. A successful hand-off preserves its local peering.
             self.call_shared = host not in self.onion.pending
@@ -445,7 +449,10 @@ class CallRoutes:
             spare, primary, matched = self.reserve, matched, []
         # Если закреплённый пир исчез на обоих путях, используем обе уже
         # разрешённые цепочки. У живого основного пира сохраняем его соединение.
-        await self.current.recover_call(waiting and not primary)
+        if waiting and not primary and not matched:
+            await self.current.recover_call(True, fresh_circuits=True)
+        else:
+            await self.current.recover_call(waiting and not primary)
         if spare.process is None or isinstance(spare.process.returncode, int):
             await self.release_reserve()
             self.warm_after = 0

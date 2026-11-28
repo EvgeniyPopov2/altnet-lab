@@ -189,13 +189,20 @@ class OnionProxy:
         return activation
 
     async def dial_for_room(self, host):
+        standby = self.take_standby(host)
+        if standby is not None:
+            # The primary is already building fresh circuits. On the reserve,
+            # keep the pre-outage rendezvous until the entry replies end to end.
+            return await asyncio.wait_for(standby, self.RECOVERY_WINDOW)
+        return await self.dial_on_new_circuits(host)
+
+    async def dial_on_new_circuits(self, host):
         # Keep a request in flight while a second Tor rendezvous is being built.
         # The normal stream keeps its profile isolation. A replacement gets its
         # own isolation so Tor need not attach it to the stalled rendezvous.
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self.RECOVERY_WINDOW
         pending = [asyncio.create_task(self.dial(host))]
-        standby = self.take_standby(host)
         next_attempt = loop.time() + self.HEDGE_DELAY
         winner = None
 
@@ -208,18 +215,14 @@ class OnionProxy:
         try:
             while loop.time() < deadline:
                 delay = max(0, min(next_attempt, deadline) - loop.time())
-                candidates = pending + ([standby] if standby else [])
-                if candidates:
-                    done, _ = await asyncio.wait(candidates, timeout=delay,
+                if pending:
+                    done, _ = await asyncio.wait(pending, timeout=delay,
                                                  return_when=asyncio.FIRST_COMPLETED)
-                    for task in sorted(done, key=lambda t: t is not standby):
+                    for task in done:
                         if not task.cancelled() and task.exception() is None:
                             winner = task
                             return task.result()
-                        if task is standby:
-                            standby = None
-                        else:
-                            pending.remove(task)
+                        pending.remove(task)
                 elif delay:
                     await asyncio.sleep(delay)
                 if loop.time() >= deadline:
@@ -233,8 +236,6 @@ class OnionProxy:
                     next_attempt = loop.time() + self.ISOLATION_INTERVAL
             raise TimeoutError("Не удалось восстановить цепочку Tor.")
         finally:
-            if standby:
-                pending.append(standby)
             await asyncio.gather(*(release(task) for task in pending if task is not winner))
 
     async def request(self, reader, writer):

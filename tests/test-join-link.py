@@ -460,7 +460,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
             peer.connected = AsyncMock(return_value=[])
             peer.recover_call = AsyncMock()
         await routes.recover_call(True)
-        primary.recover_call.assert_awaited_once_with(True)
+        primary.recover_call.assert_awaited_once_with(True, fresh_circuits=True)
         spare.recover_call.assert_awaited_once_with(True, paced=True)
         primary.connected.return_value = ["active"]
         routes.verify_after = 0
@@ -588,8 +588,9 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
                 await proxy.standby[1]
                 self.assertTrue(upstream.empty())
                 self.assertEqual(gate.parked, 1)
-                proxy.dial = AsyncMock(side_effect=ConnectionError())
+                proxy.dial = AsyncMock(return_value=(Mock(),Mock()))
                 source, client = await asyncio.wait_for(proxy.dial_for_room(host),1)
+                proxy.dial.assert_not_awaited()
                 remote, target = await asyncio.wait_for(upstream.get(),1)
                 self.assertEqual(gate.parked, 0)
                 client.write(data)

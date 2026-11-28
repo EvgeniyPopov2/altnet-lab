@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "379fc3072b7246699a3e59136009a9fbbced6964566f5292c9c454b222d0bd18"
+DIGEST = "4f24dbf5c8209062a389985bd9cfa93b245664b412556494c8ff04ea0358668f"
 
 
 def stage(name):
@@ -333,8 +333,10 @@ def call(cfg):
             previous_duplex = restored_at + max(pcm.values())
             try:
                 output,_=watcher.communicate(timeout=5)
-                stages["preCutStandbyForwarded"]="forwarded" in output.splitlines() if watcher.returncode==0 else None
-            except subprocess.TimeoutExpired:
+                counter=json.loads(output) if watcher.returncode==0 else {}
+                stages["preCutStandbyForwarded"]=counter.get("forwarded")
+                stages["preCutStandbyBytes"]=[counter.get("bytesWritten"),counter.get("bytesRead")]
+            except (ValueError, subprocess.TimeoutExpired):
                 # This read-only observer has its own deadline. Keep both measured
                 # PCM times when optional relay accounting is unavailable.
                 stages["preCutStandbyForwarded"]=None

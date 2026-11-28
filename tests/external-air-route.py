@@ -24,6 +24,8 @@ with socket.socket(socket.AF_UNIX) as sock:
             # count here. Its single-byte G/R exchange is too small to pass.
             control(stream,b"SETEVENTS STREAM_BW")
             print(len(standby_streams),flush=True)
+            traffic={s:[0,0] for s in standby_streams}
+            forwarded=False
             if standby_streams:
                 deadline=time.monotonic()+220
                 while time.monotonic()<deadline:
@@ -37,9 +39,14 @@ with socket.socket(socket.AF_UNIX) as sock:
                         break
                     p=line.split()
                     if len(p)>=5 and p[:2]==[b"650",b"STREAM_BW"] and p[2].decode() in standby_streams:
-                        if int(p[3])>=256 or int(p[4])>=256:
-                            print("forwarded",flush=True)
+                        counts=traffic[p[2].decode()]
+                        counts[0]+=int(p[3])
+                        counts[1]+=int(p[4])
+                        if max(counts)>=256:
+                            forwarded=True
                             break
+            print(json.dumps({"forwarded":forwarded,"bytesWritten":sum(v[0] for v in traffic.values()),
+                              "bytesRead":sum(v[1] for v in traffic.values())}),flush=True)
             sys.exit(0)
         if sys.argv[2:] == ["--guards"]:
             # Сопоставить только первый релей цепочек проверяемого onion.
