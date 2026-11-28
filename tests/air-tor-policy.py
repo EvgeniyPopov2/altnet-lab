@@ -85,6 +85,36 @@ class GuardTunnel(unittest.IsolatedAsyncioTestCase):
                     writer.close()
                     await writer.wait_closed()
 
+    async def test_real_local_guard_can_start_after_tor_requests_a_tunnel(self):
+        listener=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        self.addCleanup(listener.close)
+        listener.bind(("127.0.0.1",0))
+        host,port=listener.getsockname()
+        guard=api["GuardLink"](f"{host}:{port}")
+        await guard.start()
+        self.addAsyncCleanup(guard.close)
+        guard.recovering=True
+        reader,writer=await asyncio.open_connection("127.0.0.1",guard.server.sockets[0].getsockname()[1])
+        try:
+            writer.write(b"CONNECT "+guard.endpoint+b" HTTP/1.0\r\nProxy-Authorization: "+guard.header+b"\r\n\r\n")
+            with self.assertRaises(asyncio.TimeoutError):
+                await asyncio.wait_for(reader.read(1),.08)
+            self.assertEqual(guard.connecting,1)
+            async def echo(r,w):
+                try:
+                    w.write(await r.readexactly(4))
+                    await w.drain()
+                finally:
+                    w.close()
+            listener.listen()
+            async with await asyncio.start_server(echo,sock=listener):
+                self.assertIn(b"200",await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"),3))
+                writer.write(b"live")
+                self.assertEqual(await asyncio.wait_for(reader.readexactly(4),2),b"live")
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
     async def test_retries_only_pending_tor_request_after_outage(self):
         guard=api["GuardLink"]("192.0.2.1:443")
         owner=asyncio.StreamReader()

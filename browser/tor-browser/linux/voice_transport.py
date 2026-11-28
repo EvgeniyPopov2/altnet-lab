@@ -176,6 +176,12 @@ async def routed_stream(route, ctx, pinned, preface=PREFACE, timing=None):
             except BaseException:
                 sock.close()
                 raise
+    return await authenticate_stream(sock,route,ctx,pinned,preface,
+                                     server=server,timing=timing,elapsed=None if server else elapsed)
+
+
+async def authenticate_stream(sock,route,ctx,pinned,preface,*,server,timing=None,elapsed=None):
+    loop=asyncio.get_running_loop()
     writer = None
     try:
         if sock.getsockname()[0] != route["source"] or sock.getpeername()[0] != route["peer"]:
@@ -204,6 +210,74 @@ async def routed_stream(route, ctx, pinned, preface=PREFACE, timing=None):
             writer.transport.abort()
         sock.close()
         raise
+
+
+async def read_room_commit(reader,writer):
+    command=await reader.readexactly(1)
+    if command==b"?":
+        writer.write(b"!")
+        await writer.drain()
+        command=await reader.readexactly(1)
+    if command!=b"C":
+        raise VoiceError("Неверное подтверждение канала Эфира.")
+
+
+async def accept_committed_stream(route,context,pin,preface):
+    """Keep listening while a slow candidate completes TLS and confirms the room."""
+    loop=asyncio.get_running_loop()
+    async def verified(sock):
+        reader,writer=await authenticate_stream(sock,route,context,pin,preface,server=True)
+        try:
+            if RoomChannels.negotiated(writer):
+                await asyncio.wait_for(read_room_commit(reader,writer),8)
+            return reader,writer
+        except BaseException:
+            writer.transport.abort()
+            raise
+
+    with bound_socket(route,True) as listener:
+        listener.listen(4)
+        accepting=None
+        jobs={}
+        try:
+            while True:
+                if accepting is None and len(jobs)<2:
+                    accepting=asyncio.create_task(loop.sock_accept(listener))
+                pending=[*jobs,accepting] if accepting else list(jobs)
+                done,_=await asyncio.wait(pending,return_when=asyncio.FIRST_COMPLETED)
+                completed = [job for job in done if job is not accepting]
+                for job in completed:
+                    if job.exception() is None:
+                        jobs.pop(job)
+                        return job.result()
+                for job in completed:
+                    sock=jobs.pop(job)
+                    try:
+                        job.result()
+                    except (OSError,asyncio.IncompleteReadError,asyncio.TimeoutError) as exc:
+                        sock.close()
+                        if not RoomChannels.recoverable(exc):
+                            raise
+                if accepting in done:
+                    sock,address=accepting.result()
+                    accepting=None
+                    if address[0]==route["peer"]:
+                        jobs[asyncio.create_task(verified(sock))]=sock
+                    else:
+                        sock.close()
+        finally:
+            if accepting:
+                accepting.cancel()
+                outcome,=await asyncio.gather(accepting,return_exceptions=True)
+                if isinstance(outcome,tuple):
+                    outcome[0].close()
+            for job in jobs:
+                job.cancel()
+            for sock,outcome in zip(jobs.values(),await asyncio.gather(*jobs,return_exceptions=True)):
+                if isinstance(outcome,tuple):
+                    outcome[1].transport.abort()
+                else:
+                    sock.close()
 
 
 async def wait_mesh_echo(route):
@@ -246,7 +320,9 @@ class RoomChannels:
     """Один тихий запасной TLS-поток на принятого собеседника в комнате."""
     protocol = "altnet-air-standby/1"
 
-    def __init__(self, dial, server, route=None):
+    def __init__(self, dial, server, route=None, accept_cold=None):
+        self.accept_cold=accept_cold
+        self.ever_connected=False
         self.route = route
         self.retry_after = 0
         self.dial = dial
@@ -309,13 +385,10 @@ class RoomChannels:
                 if warm:
                     signal = asyncio.create_task(self.signal_route(writer))
                 if self.server:
-                    command = await reader.readexactly(1) if warm else await asyncio.wait_for(reader.readexactly(1), 8)
-                    if command == b"?":
-                        writer.write(b"!")
-                        await writer.drain()
-                        command = await reader.readexactly(1)
-                    if command != b"C":
-                        raise VoiceError("Неверное подтверждение канала Эфира.")
+                    if warm:
+                        await read_room_commit(reader,writer)
+                    else:
+                        await asyncio.wait_for(read_room_commit(reader,writer),8)
                 elif warm:
                     # Эхо от mesh-узла запускает пробу. Резерв может победить
                     # только после ответа на самом TLS-соединении.
@@ -346,6 +419,8 @@ class RoomChannels:
         async def fresh():
             while True:
                 try:
+                    if self.accept_cold:
+                        return await self.accept_cold()
                     return await self.propose()
                 except (OSError, asyncio.IncompleteReadError, asyncio.TimeoutError) as exc:
                     if not warm or not self.recoverable(exc):
@@ -360,7 +435,13 @@ class RoomChannels:
                 # when the private mesh worker receives new data.
                 await self.mesh_hint.wait()
             self.wake.set()
-        probe = asyncio.create_task(wake_on_echo()) if warm and self.route else None
+        hedge=self.ever_connected and not self.server and self.route is not None
+        if hedge:
+            async def dial_after_return():
+                await self.wake.wait()
+                return await self.propose()
+            candidates.add(asyncio.create_task(dial_after_return()))
+        probe = asyncio.create_task(wake_on_echo()) if self.route and (warm or hedge) else None
         pending = candidates.copy()
         winner = None
         writer = None
@@ -398,6 +479,7 @@ class RoomChannels:
                         raise VoiceError("Собеседник не подтвердил канал Эфира.")
                     await asyncio.wait_for(acknowledged(), 5)
             success = True
+            self.ever_connected=True
             return reader, writer
         finally:
             self.waiting_since = None
@@ -710,7 +792,9 @@ class Room:
         timing = RoomDial()
         def dial():
             return routed_stream(route, context, pin, self.preface, timing)
-        channels = RoomChannels(dial, route.get("mode") == "listen", route)
+        server=route.get("mode")=="listen"
+        accept=(lambda:accept_committed_stream(route,context,pin,self.preface)) if server else None
+        channels = RoomChannels(dial,server,route,accept)
         self.channels.add(channels)
         try:
             await self.media_loop(route, identity, channels)

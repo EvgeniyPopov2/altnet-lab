@@ -7,6 +7,11 @@ on:
       - 'tests/external-air-*.py'
       - 'tests/ubuntu-*.py'
       - 'tests/tor-native-ui.py'
+      - 'tests/voice-transport.py'
+      - 'tests/test-join-link.py'
+      - 'tests/air-tor-policy.py'
+      - 'browser/tor-browser/linux/*.py'
+      - 'systemd/altnet-air-tor*'
       - 'scripts/install-ubuntu-browser.sh'
 
 permissions:
@@ -30,9 +35,10 @@ jobs:
           checks=$(mktemp -d)
           mkdir -p "$checks/tests" "$checks/browser/tor-browser"
           ln -s /opt/altnet-browser/Browser/altnet-linux "$checks/browser/tor-browser/linux"
-          cp tests/test-join-link.py tests/air-tor-policy.py "$checks/tests/"
+          cp tests/test-join-link.py tests/air-tor-policy.py tests/voice-transport.py "$checks/tests/"
           /usr/bin/python3 -IB "$checks/tests/air-tor-policy.py"
           /usr/bin/python3 -IB "$checks/tests/test-join-link.py"
+          /usr/bin/python3 -IB "$checks/tests/voice-transport.py" VoiceTests.test_room_listener_accepts_while_earlier_tls_or_commit_is_stalled
       - name: Prepare isolated display and audio devices
         run: |
           sudo apt-get -o Acquire::Retries=2 update -qq

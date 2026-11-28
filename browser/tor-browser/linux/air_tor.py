@@ -102,6 +102,7 @@ class GuardLink:
         self.connecting=0
         self.dials=asyncio.Semaphore(2)
         self.recovering=False
+        self.notify=None
 
     async def start(self):
         self.server=await asyncio.start_server(self.handle,"127.0.0.1",0,limit=2048,backlog=8)
@@ -156,6 +157,9 @@ class GuardLink:
                 while data:=await src.read(65536):
                     if src is source:
                         self.links[remote]=time.monotonic()
+                        if self.notify:
+                            callback,self.notify=self.notify,None
+                            callback()
                     dst.write(data)
                     await dst.drain()
             pumps=[asyncio.create_task(forward(source,writer)),asyncio.create_task(forward(reader,remote))]
@@ -219,13 +223,14 @@ def guard_repair(root, reset):
         return any(row.split()[-1:]==[b"CONNECTED"] for row in rows)
 
 
-async def repair(root,guard):
+async def repair(root,guard,notice):
     if guard is not None:
         # Keep a quiet existing OR intact. A stalled OR is retired only when
         # Linux reports actual TCP backoff. Tor then requests another tunnel.
         guard.recovering=True
         try:
             await asyncio.sleep(6)
+            guard.notify=notice
             until=time.monotonic()+100
             prompt=time.monotonic()+4
             while time.monotonic()<until:
@@ -241,6 +246,7 @@ async def repair(root,guard):
                 await asyncio.sleep(.75)
         finally:
             guard.recovering=False
+            guard.notify=None
         return
     # Короткий сбой может пережить старая цепочка. Длинный убирает накопленный
     # TCP backoff только в резервном процессе. Живую новую OR-связь сохраняем.
@@ -368,7 +374,7 @@ async def serve():
                         await asyncio.gather(repairing,return_exceptions=True)
                         repairing=None
                     if message.result()==b"D":
-                        repairing=asyncio.create_task(repair(root,guard))
+                        repairing=asyncio.create_task(repair(root,guard,lambda:writer.write(b"R")))
             finally:
                 loop.remove_reader(sock.fileno())
     finally:

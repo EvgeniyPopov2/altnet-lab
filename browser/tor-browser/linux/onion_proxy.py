@@ -107,6 +107,8 @@ class OnionProxy:
         self.standby_after = 0
         self.supports_standby = False
         self.lease = self.lease_writer = None
+        self.lease_monitor=None
+        self.guard_ready=asyncio.Event()
         self.down = False
         self.clients = set()
         self.last_receive = {}
@@ -167,6 +169,13 @@ class OnionProxy:
             if not re.fullmatch(rb"altnet-air-[0-9a-f]{48}",name):
                 return None
             self.lease_writer = writer
+            async def monitor():
+                try:
+                    while await reader.read(1)==b"R":
+                        self.guard_ready.set()
+                except OSError:
+                    pass
+            self.lease_monitor=asyncio.create_task(monitor())
             return name.decode("ascii"), reader
         except (OSError, asyncio.TimeoutError):
             return None
@@ -176,6 +185,7 @@ class OnionProxy:
 
     def interruption(self, down):
         if self.lease_writer is not None and self.down != down and not self.lease_writer.is_closing():
+            self.guard_ready.clear()
             self.lease_writer.write(b"D" if down else b"U")
             self.down = down
 
@@ -280,11 +290,23 @@ class OnionProxy:
         deadline = loop.time() + self.RECOVERY_WINDOW
         async def connect(isolation=None):
             if confirm:
-                return await self.activate(*await self.park(host,isolation))
+                reader,writer=await self.dial(host,isolation)
+                try:
+                    # The endpoint already supports parking. Request and activate
+                    # the new stream together, still requiring both acknowledgements.
+                    writer.write(STANDBY+b"G")
+                    await writer.drain()
+                    if await reader.readexactly(2)!=b"PR":
+                        raise ConnectionError("Точка входа не подтвердила резерв.")
+                    return reader,writer
+                except BaseException:
+                    writer.close()
+                    raise
             return await self.dial(host,isolation)
         pending = [standby if standby is not None else asyncio.create_task(connect())]
         next_attempt = loop.time() + self.HEDGE_DELAY
         winner = None
+        notice=asyncio.create_task(self.guard_ready.wait()) if self.lease_writer is not None else None
 
         async def release(task):
             task.cancel()
@@ -295,9 +317,15 @@ class OnionProxy:
         try:
             while loop.time() < deadline:
                 delay = max(0, min(next_attempt, deadline) - loop.time())
-                if pending:
-                    done, _ = await asyncio.wait(pending, timeout=delay,
+                if pending or notice:
+                    waiting=[*pending,notice] if notice else pending
+                    done, _ = await asyncio.wait(waiting, timeout=delay,
                                                  return_when=asyncio.FIRST_COMPLETED)
+                    if notice in done:
+                        done.remove(notice)
+                        notice=None
+                        self.guard_ready.clear()
+                        next_attempt=loop.time()
                     for task in done:
                         if not task.cancelled() and task.exception() is None:
                             winner = task
@@ -319,6 +347,9 @@ class OnionProxy:
                     next_attempt = loop.time() + self.ISOLATION_INTERVAL
             raise TimeoutError("Не удалось восстановить цепочку Tor.")
         finally:
+            if notice:
+                notice.cancel()
+                await asyncio.gather(notice,return_exceptions=True)
             await asyncio.gather(*(release(task) for task in pending if task is not winner))
 
     async def request(self, reader, writer):
@@ -394,6 +425,9 @@ class OnionProxy:
         if self.lease is not None:
             self.lease.cancel()
             await asyncio.gather(self.lease,return_exceptions=True)
+        if self.lease_monitor:
+            self.lease_monitor.cancel()
+            await asyncio.gather(self.lease_monitor,return_exceptions=True)
         if self.lease_writer:
             self.lease_writer.close()
         standby = self.standby

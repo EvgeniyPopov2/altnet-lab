@@ -551,6 +551,34 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(cancelled.is_set())
         stream.close.assert_not_called()
 
+    async def test_private_guard_receive_wakes_pending_rendezvous(self):
+        transport, host, stream = self.recovering_transport()
+        proxy = transport.onion
+        proxy.lease_writer = Mock()
+        proxy.HEDGE_DELAY = 30
+        started, cancelled = asyncio.Event(), asyncio.Event()
+        async def dial(destination, isolation=None):
+            self.assertEqual(destination, host)
+            if isolation is None:
+                started.set()
+                try:
+                    await asyncio.Future()
+                finally:
+                    cancelled.set()
+            return object(), stream
+        proxy.dial.side_effect = dial
+        task = asyncio.create_task(proxy.dial_on_new_circuits(host))
+        try:
+            await asyncio.wait_for(started.wait(), 1)
+            proxy.guard_ready.set()
+            _, selected = await asyncio.wait_for(task, 1)
+            self.assertIs(selected, stream)
+            self.assertTrue(cancelled.is_set())
+            self.assertFalse(proxy.guard_ready.is_set())
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
     async def test_independent_reserve_selects_first_confirmed_onion_stream(self):
         for fresh_wins in (False,True):
             with self.subTest(fresh_wins=fresh_wins):
@@ -564,7 +592,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
                 ready=asyncio.Event()
                 for writer in writers:
                     writer.drain=AsyncMock()
-                writers[1].write.side_effect=lambda data: ready.set() if data==b"G" else None
+                writers[1].write.side_effect=lambda data: ready.set() if data.endswith(b"G") else None
                 parked=asyncio.get_running_loop().create_future()
                 parked.set_result((readers[0],writers[0]))
                 proxy.standby=host,parked
