@@ -11,13 +11,13 @@ def check(e,slot,wait,provision,decode,mark):
             assert not e.cmd("has_capture")
             e.cmd("airclick",selector='[data-air-action="accept"]')
         wait(lambda:e.cmd("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"connected")
-        media=e.cmd("air_routes")["17911"]["inode"]
         e.cmd("record")
         wait(lambda:slot("recording"+suffix),bool,"guest recording")
         slot("play"+suffix,True)
         e.cmd("play_duplex")
         wait(lambda:e.cmd("airview"),lambda s:any(p["name"]=="Эфир Стриж" and p["speaking"] for p in s["people"]),"remote speaker",80)
         wait(lambda:e.cmd("marker",hz=880),lambda level:level>700,"remote speech marker on the node1 speaker",65)
+        media=e.cmd("air_routes")["17911"]["inode"]
         heard=e.cmd("measure")
         assert heard["Hz880"]>700 and heard["Hz880"]>5*heard["Hz440"] and heard["samples"]>=16000
         mark("Remote Ubuntu -> node1 "+str(heard))
@@ -56,6 +56,7 @@ def check(e,slot,wait,provision,decode,mark):
         lost=wait(lambda:e.cmd("airview"),lambda s:s["phase"]=="waiting" and len(s["people"])==1
                   and not s["people"][0]["speaking"],"node1 saw the caller go offline",65)
         wait(lambda:e.cmd("has_capture"),lambda active:not active,"node1 released capture during outage",12)
+        assert previous not in e.cmd("air_media_inodes"), "Previous media socket still present at node1 while offline"
         e.cmd("recovery_audio_start")
         mark("node1 observed the interrupted call and released its microphone")
         wait(lambda:e.cmd("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,

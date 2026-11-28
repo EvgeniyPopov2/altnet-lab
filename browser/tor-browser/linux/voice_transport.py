@@ -189,11 +189,44 @@ async def routed_stream(route, ctx, pinned, preface=PREFACE, timing=None):
         raise
 
 
+async def wait_mesh_echo(route):
+    """Подсказка для уже подтверждённого собеседника. Захват звука требует ответа по TLS."""
+    if any(ipaddress.IPv6Address(route[key]) not in NODES for key in ("peer", "source")):
+        return False
+    loop = asyncio.get_running_loop()
+    started = loop.time()
+    try:
+        with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM, socket.IPPROTO_ICMPV6) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, route["interface"].encode("ascii") + b"\0")
+            sock.bind((route["source"], 0))
+            sock.connect((route["peer"], 0))
+            sock.setblocking(False)
+            seq = 0
+            while True:
+                sent = loop.time()
+                seq = (seq + 1) & 65535
+                proof = struct.pack("!H", seq) + secrets.token_bytes(16)
+                try:
+                    await loop.sock_sendall(sock, b"\x80\0\0\0\0\0" + proof)
+                    reply = await asyncio.wait_for(loop.sock_recv(sock, 128), 1)
+                    if reply[:2] == b"\x81\0" and hmac.compare_digest(reply[6:], proof):
+                        return True
+                except (OSError, asyncio.TimeoutError):
+                    pass
+                period = 1.25 if sent - started < 90 else 5
+                await asyncio.sleep(max(.1, period - (loop.time() - sent)))
+    except OSError:
+        # В системах без непривилегированного ICMP продолжают работать TLS и уведомление пира.
+        return False
+
+
 class RoomChannels:
     """Один тихий запасной TLS-поток на принятого собеседника в комнате."""
     protocol = "altnet-air-standby/1"
 
-    def __init__(self, dial, server):
+    def __init__(self, dial, server, route=None):
+        self.route = route
+        self.retry_after = 0
         self.dial = dial
         self.server = server
         self.spare = None
@@ -220,6 +253,17 @@ class RoomChannels:
     def prepare(self, writer):
         if self.negotiated(writer):
             self.spare = asyncio.create_task(self.dial())
+
+    def refresh(self):
+        if not self.spare or not self.spare.done() or time.monotonic() < self.retry_after:
+            return
+        if not self.spare.cancelled() and self.spare.exception() is None:
+            reader, writer = self.spare.result()
+            if not reader.at_eof() and not writer.is_closing():
+                return
+            writer.transport.abort()
+        self.retry_after = time.monotonic() + 3
+        self.spare = asyncio.create_task(self.dial())
 
     async def signal_route(self, writer):
         await self.wake.wait()
@@ -277,6 +321,10 @@ class RoomChannels:
         candidates = {asyncio.create_task(fresh())}
         if warm:
             candidates.add(asyncio.create_task(self.propose(warm)))
+        async def wake_on_echo():
+            if await wait_mesh_echo(self.route):
+                self.wake.set()
+        probe = asyncio.create_task(wake_on_echo()) if warm and self.route else None
         pending = candidates.copy()
         winner = None
         writer = None
@@ -315,6 +363,9 @@ class RoomChannels:
             return reader, writer
         finally:
             self.waiting_since = None
+            if probe:
+                probe.cancel()
+                await asyncio.gather(probe, return_exceptions=True)
             if writer and not success:
                 writer.transport.abort()
             await self.discard(candidates - {winner})
@@ -621,7 +672,7 @@ class Room:
         timing = RoomDial()
         def dial():
             return routed_stream(route, context, pin, self.preface, timing)
-        channels = RoomChannels(dial, route.get("mode") == "listen")
+        channels = RoomChannels(dial, route.get("mode") == "listen", route)
         self.channels.add(channels)
         try:
             await self.media_loop(route, identity, channels)
@@ -631,6 +682,7 @@ class Room:
 
     def route_received(self, stamp):
         for channel in self.channels:
+            channel.refresh()
             if channel.waiting_since is not None and stamp > channel.waiting_since:
                 channel.wake.set()
 

@@ -506,7 +506,7 @@ def serve(args, root, stack):
                 assert any('['+route["peer"]+']' in r and '['+route["source"]+']' in r and '"python3"' in r for r in sockets.splitlines())
                 assert " dev "+route["interface"]+" " in ips
                 result={"interface":route["interface"],"port":route["port"]}
-            elif op == "air_routes":
+            elif op in ("air_routes","air_media_inodes"):
                 def counters():
                     lines=subprocess.check_output(["ss","-6Htinpe","state","established"],text=True).splitlines()
                     sockets={}
@@ -519,25 +519,37 @@ def serve(args, root, stack):
                         count=re.search(r"\bbytes_received:(\d+)",info)
                         sockets[inode]=(ports[0],addrs[0][0],addrs[1][0],int(count[1]) if count else 0)
                     return sockets
-                links={}
-                previous=counters()
-                for _ in range(12):
-                    time.sleep(.25)
-                    current=counters()
-                    live={}
-                    for inode,(port,local,peer,count) in current.items():
-                        if inode in previous and count>previous[inode][3]:
-                            live.setdefault(port,[]).append((inode,local,peer))
-                    if live and set(live)=={v[0] for v in current.values()} and all(len(v)==1 for v in live.values()):
-                        for port,[(inode,local,peer)] in live.items():
-                            route=json.loads(subprocess.check_output(["ip","-j","-6","route","get",peer,"from",local]))
-                            assert Path("/sys/class/net",route[0]["dev"],"tun_flags").exists()
-                            links[port]={"inode":inode,"interface":route[0]["dev"]}
-                        break
-                    previous=current
-                if not links:
-                    raise RuntimeError("Не найден единственный активный голосовой поток на порт.")
-                result=links
+                if op=="air_media_inodes":
+                    result=[k for k,v in counters().items() if v[0]=="17911"]
+                else:
+                    links={}
+                    previous=counters()
+                    streak=0
+                    last_ids=None
+                    for _ in range(20):
+                        time.sleep(.25)
+                        current=counters()
+                        live={}
+                        for inode,(port,local,peer,count) in current.items():
+                            if inode in previous and count>=previous[inode][3]+20:
+                                live.setdefault(port,[]).append((inode,local,peer))
+                        if live and set(live)=={v[0] for v in current.values()} and all(len(v)==1 for v in live.values()):
+                            ids={k:v[0][0] for k,v in live.items()}
+                            streak=streak+1 if ids==last_ids else 1
+                            last_ids=ids
+                            if streak<3:
+                                previous=current
+                                continue
+                            for port,[(inode,local,peer)] in live.items():
+                                route=json.loads(subprocess.check_output(["ip","-j","-6","route","get",peer,"from",local]))
+                                assert Path("/sys/class/net",route[0]["dev"],"tun_flags").exists()
+                                links[port]={"inode":inode,"interface":route[0]["dev"]}
+                            break
+                        streak=0
+                        previous=current
+                    if not links:
+                        raise RuntimeError("Не найден единственный активный голосовой поток на порт.")
+                    result=links
             elif op == "air_workers":
                 import os
                 tag=b"PULSE_SERVER="+os.environ["PULSE_SERVER"].encode()

@@ -124,6 +124,42 @@ class StandbyMedia(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await asyncio.wait_for(asyncio.gather(*tasks), 2), cold)
         self.assertTrue(all(writer.is_closing() for _, writer in warm))
 
+    async def test_dead_idle_spare_is_rebuilt_during_healthy_audio(self):
+        channel = self.channels[0]
+        first, remote = await self.pair()
+        self.queues[0].put_nowait(first)
+        channel.prepare(first[1])
+        await channel.spare
+        remote[1].transport.abort()
+        await asyncio.wait_for(first[0].read(1), 2)
+        replacement, _ = await self.pair()
+        self.queues[0].put_nowait(replacement)
+        channel.refresh()
+        self.assertEqual(await asyncio.wait_for(channel.spare, 2), replacement)
+
+    async def test_echo_alone_does_not_activate_the_microphone(self):
+        channel = self.channels[0]
+        channel.route = {"peer":"200::1", "source":"200::2", "interface":"test"}
+        local, remote = await self.pair()
+        self.queues[0].put_nowait(local)
+        channel.prepare(local[1])
+        await channel.spare
+        async def echo(route):
+            return True
+        with patch.dict(channel.acquire.__globals__,wait_mesh_echo=echo):
+            task = asyncio.create_task(channel.acquire())
+            try:
+                self.assertEqual(await asyncio.wait_for(remote[0].readexactly(1), 2), b"?")
+                self.assertFalse(task.done())
+                remote[1].write(b"!")
+                self.assertEqual(await asyncio.wait_for(remote[0].readexactly(1), 2), b"C")
+                self.assertFalse(task.done())
+                remote[1].write(b"A")
+                self.assertEqual(await asyncio.wait_for(task, 2), local)
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
     async def test_leave_while_waiting_closes_spares(self):
         warm, tasks = await self.recovery()
         for task in tasks:

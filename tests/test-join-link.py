@@ -463,8 +463,10 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         proxy = transport.onion
         cancelled = asyncio.Event()
         stream = Mock()
-        async def dial(destination):
+        async def dial(destination, isolation=None):
             self.assertEqual(destination,host)
+            self.assertEqual(isolation, None if proxy.dial.await_count==1 else proxy.recovery_user)
+            self.assertNotEqual(proxy.user, proxy.recovery_user)
             if proxy.dial.await_count == 1:
                 try:
                     await asyncio.Future()
@@ -483,7 +485,7 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         attempts = 0
         active = 0
         peak = 0
-        async def dial(destination):
+        async def dial(destination, isolation=None):
             nonlocal attempts, active, peak
             self.assertEqual(destination, host)
             attempts += 1

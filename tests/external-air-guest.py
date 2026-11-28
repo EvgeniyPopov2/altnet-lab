@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "943ca5ed448e68c7e94ec50434330dfca37facf32d39e4b109c2598016874b9c"
+DIGEST = "7ae0c43560d447eb774d339c339297b49d26932e299ff1b92f884f21fcd8c1da"
 
 
 def stage(name):
@@ -189,8 +189,6 @@ def measure_call(ui, cfg, address, suffix):
     except RuntimeError:
         stage("Call status "+json.dumps(ui("air_health")))
         raise
-    routes=ui("air_routes")
-    assert "17911" in routes
     assert any(("["+address+"]") in row and ":17911" in row for row in run("ss","-Ht6n","state","established").splitlines())
     ui("record")
     exchange(cfg,"recording"+suffix,True)
@@ -198,6 +196,7 @@ def measure_call(ui, cfg, address, suffix):
     ui("play_duplex")
     wait(lambda:ui("airview"),lambda s:any(p["name"]=="Эфир Маяк" and p["speaking"] for p in s["people"]),"node1 speaking",65)
     wait(lambda:ui("marker",hz=440),lambda level:level>700,"remote speech marker on the runner speaker",65)
+    routes=ui("air_routes")
     measured=ui("measure")
     assert measured["samples"]>=16000 and measured["Hz440"]>700 and measured["Hz440"]>5*measured["Hz880"]
     exchange(cfg,"result"+suffix,measured)
@@ -279,6 +278,7 @@ def call(cfg):
                 until=time.monotonic()+seconds
                 lost=wait(lambda:ui("airview"),lambda s:s["phase"]=="waiting" and len(s["people"])==1 and not s["people"][0]["speaking"],"peer loss",40)
                 wait(lambda:ui("has_capture"),lambda active:not active,"offline microphone release",8)
+                assert prior_socket not in ui("air_media_inodes"), "Previous media socket still present on runner while offline"
                 lost_at=counters()["seconds"]
                 ui("recovery_audio_start")
                 time.sleep(max(0,until-time.monotonic()))

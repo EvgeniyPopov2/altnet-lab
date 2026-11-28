@@ -9,6 +9,7 @@ class OnionProxy:
     def __init__(self, entries):
         self.allowed = {urlsplit(entry).hostname.encode("ascii") for entry in entries}
         self.user = secrets.token_hex(24).encode("ascii")
+        self.recovery_user = secrets.token_hex(24).encode("ascii")
         self.pending = {}
         self.clients = set()
         self.last_receive = {}
@@ -33,13 +34,14 @@ class OnionProxy:
                 return
         raise ConnectionError("Не удалось открыть ни одну точку входа через Tor.")
 
-    async def dial(self, host):
+    async def dial(self, host, isolation=None):
+        user = self.user if isolation is None else isolation
         reader, writer = await asyncio.open_connection("127.0.0.1", 9050)
         try:
             writer.write(b"\x05\x01\x02")
             if await reader.readexactly(2) != b"\x05\x02":
                 raise ConnectionError("Tor не поддерживает изоляцию соединения.")
-            writer.write(b"\x01" + bytes([len(self.user)]) + self.user + b"\x01x")
+            writer.write(b"\x01" + bytes([len(user)]) + user + b"\x01x")
             if await reader.readexactly(2) != b"\x01\x00":
                 raise ConnectionError("Tor отклонил изоляцию соединения.")
             writer.write(b"\x05\x01\x00\x03" + bytes([len(host)]) + host + (17907).to_bytes(2, "big"))
@@ -69,7 +71,9 @@ class OnionProxy:
             while (remaining := deadline - loop.time()) > 0:
                 started = loop.time()
                 try:
-                    return await asyncio.wait_for(self.dial(host), min(budget, remaining))
+                    # Один изолированный сеанс для всех повторов этого резерва.
+                    # Устаревшая цепочка исходного потока может ещё числиться рабочей.
+                    return await asyncio.wait_for(self.dial(host, self.recovery_user), min(budget, remaining))
                 except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError):
                     # Allow rebuilt rendezvous circuits to finish, including late
                     # in the outage. Pace fast refusals throughout the same window.
