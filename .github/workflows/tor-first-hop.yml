@@ -1,0 +1,19 @@
+name: Tor first-hop TCP diagnostics
+on:
+  push:
+    branches: [qa/ubuntu-external-air-20261127]
+    paths: ['.github/workflows/tor-first-hop.yml', 'tests/tor-first-hop-tcp.py']
+permissions:
+  contents: read
+jobs:
+  retransmission:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Compare TCP recovery with one endpoint under client control
+        run: |
+          command -v nft >/dev/null || sudo apt-get -o DPkg::Lock::Timeout=90 install -y nftables
+          sudo unshare --net /usr/bin/python3 -IBu tests/tor-first-hop-tcp.py
