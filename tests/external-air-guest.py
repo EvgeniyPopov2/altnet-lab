@@ -210,7 +210,7 @@ def measure_call(ui, cfg, address, suffix):
     ui("play_duplex")
     wait(lambda:ui("airview"),lambda s:any(p["name"]=="Эфир Маяк" and p["speaking"] for p in s["people"]),"node1 speaking",65)
     wait(lambda:ui("marker",hz=440),lambda level:level>700,"remote speech marker on the runner speaker",65)
-    routes=ui("air_routes")
+    routes=ui("air_routes",peer=address)
     measured=ui("measure")
     assert measured["samples"]>=16000 and measured["Hz440"]>700 and measured["Hz440"]>5*measured["Hz880"]
     exchange(cfg,"result"+suffix,measured)
@@ -236,7 +236,10 @@ def call(cfg):
         def ui(op,**data):
             print(json.dumps(dict(op=op,**data)),file=proc.stdin,flush=True)
             reply=json.loads(proc.stdout.readline())
-            if "ok" not in reply:raise RuntimeError("UI did not complete "+op)
+            if "ok" not in reply:
+                if op == "air_routes" and str(reply.get("error","")).startswith("Не найден единственный активный голосовой поток"):
+                    raise RuntimeError("UI did not complete air_routes: active media socket ambiguous")
+                raise RuntimeError("UI did not complete "+op)
             return reply["ok"]
         assert ui("network_storage")==dict(issuers=[],localMemberships=0,adminConfiguration=False)
         stage("Native browser ready; requesting a new invitation from node1")
@@ -286,7 +289,7 @@ def call(cfg):
             before_cut["guardRelays"] = guards["guards"]
             exchange(cfg,"armed"+suffix,True)
             exchange(cfg,"cut"+suffix)
-            assert ui("air_routes")["17911"]["inode"] == prior_socket
+            assert ui("air_routes",peer=address)["17911"]["inode"] == prior_socket
             before_cut.update(route_counts())
             standby_inodes=set(media_counters(address)) - {prior_socket}
             if previous_duplex is not None:

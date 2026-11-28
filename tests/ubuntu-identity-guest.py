@@ -513,6 +513,9 @@ def serve(args, root, stack):
                     for line, info in zip(lines,lines[1:]):
                         addrs=re.findall(r"\[([0-9a-f:]+)(?:%[\w.-]+)?\](?:%[\w.-]+)?:(\d+)",line)
                         if len(addrs)!=2 or '"python3"' not in line:continue
+                        if "peer" in cmd and (addrs[1][0]!=cmd["peer"] or
+                                not any(port=="17911" for _,port in addrs)):
+                            continue
                         ports=[p for _,p in addrs if 17911<=int(p)<17939]
                         if len(ports)!=1:continue
                         inode=re.search(r"ino:(\d+)",line).group(1)
@@ -526,18 +529,21 @@ def serve(args, root, stack):
                     previous=counters()
                     streak=0
                     last_ids=None
-                    for _ in range(20):
-                        time.sleep(.25)
+                    for _ in range(24):
+                        time.sleep(.5)
                         current=counters()
                         live={}
                         for inode,(port,local,peer,count) in current.items():
-                            if inode in previous and count>=previous[inode][3]+20:
+                            # A TLS standby can acknowledge a control byte in a
+                            # 20+ byte record. The media stream carries continuous
+                            # framed Opus or silence while these endpoints are joined.
+                            if inode in previous and count>=previous[inode][3]+180:
                                 live.setdefault(port,[]).append((inode,local,peer))
                         if live and set(live)=={v[0] for v in current.values()} and all(len(v)==1 for v in live.values()):
                             ids={k:v[0][0] for k,v in live.items()}
                             streak=streak+1 if ids==last_ids else 1
                             last_ids=ids
-                            if streak<3:
+                            if streak<2:
                                 previous=current
                                 continue
                             for port,[(inode,local,peer)] in live.items():

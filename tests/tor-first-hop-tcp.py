@@ -58,9 +58,16 @@ async def trial(duration, cap):
                     sock.setsockopt(socket.IPPROTO_TCP, *option)
                 tasks.extend((asyncio.create_task(flow.transmit()), asyncio.create_task(flow.receive())))
         await asyncio.sleep(2)
-        rules = "add table inet test\nadd chain inet test out { type filter hook output priority -250; }\nadd rule inet test out oifname lo counter drop\n"
+        rules = "add table inet test\nadd chain inet test ingress { type filter hook input priority -250; }\nadd rule inet test ingress iifname lo counter drop\n"
         subprocess.run(["nft","-f","-"],input=rules,text=True,check=True)
         await asyncio.sleep(duration)
+        stats = json.loads(subprocess.check_output(["nft","-j","list","table","inet","test"]))
+        dropped = next(e["counter"]["packets"] for row in stats["nftables"] if "rule" in row
+                       for e in row["rule"]["expr"] if "counter" in e)
+        assert dropped > 0
+        info = {k:[f.writer.get_extra_info("socket").getsockopt(socket.IPPROTO_TCP, socket.TCP_INFO, 104)
+                   for f in pair] for k,pair in peers.items()}
+        backoff = {k:[sample[4] for sample in pair] for k,pair in info.items()}
         subprocess.run(["nft","delete","table","inet","test"],check=True)
         restored = time.monotonic()
         for pair in peers.values():
@@ -69,7 +76,7 @@ async def trial(duration, cap):
         events = [asyncio.create_task(flow.heard.wait()) for pair in peers.values() for flow in pair]
         tasks.extend(events)
         await asyncio.wait(events,timeout=80)
-        print(json.dumps({"cutSeconds":duration, "freshPayloadSeconds":{
+        print(json.dumps({"cutSeconds":duration, "droppedPackets":dropped,"backoff":backoff,"freshPayloadSeconds":{
             k:{"toClient":p[0].elapsed,"fromClient":p[1].elapsed} for k,p in peers.items()}}),flush=True)
     finally:
         for task in tasks:
