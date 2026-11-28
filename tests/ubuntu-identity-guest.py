@@ -472,6 +472,8 @@ def serve(args, root, stack):
                 result = True
             elif op == "recovery_heard":
                 result = recovery.heard
+            elif op == "recovery_peer_heard":
+                result = recovery.peer_heard
             elif op == "recovery_audio_stop":
                 recovery.close()
                 recovery = None

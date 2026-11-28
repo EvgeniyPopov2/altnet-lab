@@ -59,32 +59,42 @@ class RecoveryAudio:
     def __init__(self, stack, name):
         import threading
         self.heard = None
+        self.peer_heard = None
         own, other = (625, 1075) if name == "node1" else (1075, 625)
         rate, size = 16000, 640
         args = ["--raw", "--rate=16000", "--channels=1", "--format=s16le", "--latency-msec=25"]
         self.monitor = child(stack, ["parec", "--device=speakers.monitor", *args], stdout=subprocess.PIPE)
         self.player = child(stack, ["pacat", "--device=mic", *args], stdin=subprocess.PIPE)
-        signal = array.array("h", (round(5000*math.sin(2*math.pi*own*i/rate)) for i in range(size))).tobytes()
+        def tone(hz):
+            return array.array("h",(round(5000*math.sin(2*math.pi*hz*i/rate)) for i in range(size))).tobytes()
+        signals=[tone(own),tone(own+150)]
         def feed():
             try:
                 while self.player.poll() is None:
-                    self.player.stdin.write(signal)
+                    self.player.stdin.write(signals[self.heard is not None])
                     self.player.stdin.flush()
             except (OSError, ValueError):
                 pass
         def listen():
             def basis(hz):
                 return [(math.cos(2*math.pi*hz*i/rate), math.sin(2*math.pi*hz*i/rate)) for i in range(size)]
-            target, local = basis(other), basis(own)
+            target,ack=basis(other),basis(other+150)
+            local,local_ack=basis(own),basis(own+150)
             def amplitude(pcm, wave):
                 return 2 * math.hypot(sum(p*c for p,(c,s) in zip(pcm,wave)),
                                       sum(p*s for p,(c,s) in zip(pcm,wave))) / size
             hits = 0
+            acknowledgements=0
             while len(block := self.monitor.stdout.read(size*2)) == size*2:
                 end = time.time()
                 pcm = array.array("h", block)
-                level = amplitude(pcm, target)
-                if level > 700 and level > 5*amplitude(pcm, local):
+                acknowledged=amplitude(pcm,ack)
+                level=max(amplitude(pcm,target),acknowledged)
+                threshold=max(700,5*max(amplitude(pcm,local),amplitude(pcm,local_ack)))
+                acknowledgements=acknowledgements+1 if acknowledged>threshold else 0
+                if acknowledgements==3 and self.peer_heard is None:
+                    self.peer_heard=end
+                if level > threshold:
                     if hits == 0:
                         first = end
                     hits += 1

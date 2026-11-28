@@ -1,5 +1,6 @@
 """Отдельный Tor для одного уже открытого onion-пира. Владение привязано к Unix-соединению."""
 import asyncio
+import base64
 from contextlib import contextmanager
 import ipaddress
 import os
@@ -88,6 +89,111 @@ def policy(stream, host):
     raise ValueError("Нет разрешённого входного узла")
 
 
+class GuardLink:
+    """Forward the private Tor's encrypted OR connection to its one approved guard."""
+    def __init__(self, endpoint):
+        address,port=endpoint.rsplit(":",1)
+        self.endpoint=endpoint.encode("ascii")
+        self.target=(str(ipaddress.IPv4Address(address)),int(port))
+        self.auth="air:"+secrets.token_hex(24)
+        self.header=b"Basic "+base64.b64encode(self.auth.encode("ascii"))
+        self.handlers=set()
+        self.links={}
+        self.connecting=0
+        self.dials=asyncio.Semaphore(2)
+        self.recovering=False
+
+    async def start(self):
+        self.server=await asyncio.start_server(self.handle,"127.0.0.1",0,limit=2048,backlog=8)
+        port=self.server.sockets[0].getsockname()[1]
+        return [f"HTTPSProxy 127.0.0.1:{port}",f"HTTPSProxyAuthenticator {self.auth}"]
+
+    async def connect(self,reader):
+        self.connecting+=1
+        try:
+            deadline=time.monotonic()+45
+            attempt=0
+            async with self.dials:
+                while not reader.at_eof() and time.monotonic()<deadline:
+                    attempt+=1
+                    timeout=10 if not self.recovering else (5 if attempt%4==0 else 1.75)
+                    started=time.monotonic()
+                    try:
+                        return await asyncio.wait_for(asyncio.open_connection(
+                            *self.target,family=socket.AF_INET),timeout)
+                    except (OSError,asyncio.TimeoutError):
+                        if not self.recovering:
+                            raise
+                        # Limit repeated refusals as well as dropped SYNs.
+                        pause=min(4,attempt) if time.monotonic()-started<.25 else .35
+                        await asyncio.sleep(pause)
+            raise ConnectionError("Guard connection expired")
+        finally:
+            self.connecting-=1
+
+    async def handle(self,reader,writer):
+        current=asyncio.current_task()
+        remote=None
+        pumps=[]
+        try:
+            if len(self.handlers)>=6:
+                return
+            self.handlers.add(current)
+            headers=await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"),3)
+            request,*lines=headers.split(b"\r\n")
+            if request not in [b"CONNECT "+self.endpoint+b" HTTP/1."+v for v in (b"0",b"1")]:
+                return
+            auth=[value.strip() for row in lines
+                  for key,sep,value in [row.partition(b":")]
+                  if sep and key.lower()==b"proxy-authorization"]
+            if len(auth)!=1 or not secrets.compare_digest(auth[0],self.header):
+                return
+            source,remote=await self.connect(reader)
+            self.links[remote]=time.monotonic()
+            writer.write(b"HTTP/1.0 200 Connection established\r\n\r\n")
+            await writer.drain()
+            async def forward(src,dst):
+                while data:=await src.read(65536):
+                    if src is source:
+                        self.links[remote]=time.monotonic()
+                    dst.write(data)
+                    await dst.drain()
+            pumps=[asyncio.create_task(forward(source,writer)),asyncio.create_task(forward(reader,remote))]
+            await asyncio.wait(pumps,return_when=asyncio.FIRST_COMPLETED)
+        except (OSError,asyncio.TimeoutError,asyncio.IncompleteReadError,asyncio.LimitOverrunError):
+            pass
+        finally:
+            self.handlers.discard(current)
+            if remote:
+                self.links.pop(remote,None)
+                remote.transport.abort()
+            writer.close()
+            for pump in pumps:
+                pump.cancel()
+            await asyncio.gather(*pumps,return_exceptions=True)
+
+    def retire_stalled(self):
+        for remote,received in tuple(self.links.items()):
+            if time.monotonic()-received<6:
+                continue
+            try:
+                info=remote.get_extra_info("socket").getsockopt(socket.IPPROTO_TCP,socket.TCP_INFO,32)
+            except OSError:
+                continue
+            # Linux UAPI tcp_info.tcpi_backoff: a live but quiet socket is
+            # valuable. Drop a private OR only when its kernel is backing off.
+            if len(info)>=8 and info[4]>=3:
+                remote.transport.abort()
+
+    async def close(self):
+        self.server.close()
+        await self.server.wait_closed()
+        tasks=list(self.handlers)
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks,return_exceptions=True)
+
+
 def prepare(root, options):
     data=root/"data"
     data.mkdir(mode=0o700)
@@ -113,7 +219,29 @@ def guard_repair(root, reset):
         return any(row.split()[-1:]==[b"CONNECTED"] for row in rows)
 
 
-async def repair(root):
+async def repair(root,guard):
+    if guard is not None:
+        # Keep a quiet existing OR intact. A stalled OR is retired only when
+        # Linux reports actual TCP backoff. Tor then requests another tunnel.
+        guard.recovering=True
+        try:
+            await asyncio.sleep(6)
+            until=time.monotonic()+100
+            prompt=time.monotonic()+4
+            while time.monotonic()<until:
+                guard.retire_stalled()
+                if guard.links or guard.connecting:
+                    prompt=time.monotonic()+4
+                elif time.monotonic()>=prompt:
+                    try:
+                        await asyncio.to_thread(guard_repair,root,True)
+                    except (OSError,RuntimeError):
+                        pass
+                    prompt=time.monotonic()+7
+                await asyncio.sleep(.75)
+        finally:
+            guard.recovering=False
+        return
     # Короткий сбой может пережить старая цепочка. Длинный убирает накопленный
     # TCP backoff только в резервном процессе. Живую новую OR-связь сохраняем.
     await asyncio.sleep(12)
@@ -191,7 +319,7 @@ async def serve():
     uid=struct.unpack("3i",master.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))[1]
     master.setblocking(False)
     reader,writer=await asyncio.open_unix_connection(sock=master,limit=256)
-    child=server=repairing=None
+    child=server=repairing=guard=None
     clients=set()
     waits=[]
     loop=asyncio.get_running_loop()
@@ -203,6 +331,13 @@ async def serve():
         with controller(SYSTEM) as (sock,stream):
             command(stream,b"SETEVENTS CONF_CHANGED")
             options=policy(stream,host.decode("ascii"))
+            if not options[0].startswith("UseBridges"):
+                line=next(o for o in options if o.startswith("ReachableAddresses "))
+                match=re.fullmatch(r"ReachableAddresses accept ([0-9.]+:[0-9]+), reject \*:\*",line)
+                if not match:
+                    raise ValueError("Invalid guard policy")
+                guard=GuardLink(match[1])
+                options.extend(await guard.start())
             prepare(root,options)
             event("bridge policy accepted" if options[0].startswith("UseBridges") else "guard policy accepted")
             revoked=loop.create_future()
@@ -233,7 +368,7 @@ async def serve():
                         await asyncio.gather(repairing,return_exceptions=True)
                         repairing=None
                     if message.result()==b"D":
-                        repairing=asyncio.create_task(repair(root))
+                        repairing=asyncio.create_task(repair(root,guard))
             finally:
                 loop.remove_reader(sock.fileno())
     finally:
@@ -244,6 +379,8 @@ async def serve():
         for t in pending:
             t.cancel()
         await asyncio.gather(*pending,return_exceptions=True)
+        if guard and hasattr(guard,"server"):
+            await guard.close()
         if child and child.returncode is None:
             child.terminate()
             try:

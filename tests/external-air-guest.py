@@ -19,7 +19,7 @@ from urllib.request import urlopen
 HERE = Path(__file__).resolve().parent
 BROWSER = "/opt/altnet-browser/altnet-browser"
 LINUX = Path(BROWSER).parent / "Browser/altnet-linux"
-DIGEST = "73b538f40a54905c5467de577113c389b49acd7d96ee1a3dd0e76db0cce9a28d"
+DIGEST = "402ce51fec0ff5f8d8b602f2dde01ebc338359370b9c69127f281c83317ac2c0"
 
 
 def stage(name):
@@ -64,14 +64,24 @@ def exchange(cfg, slot, value=None, timeout=180):
     assert re.fullmatch(r"[a-z2-7]{56}\.onion",cfg["onion"]) and re.fullmatch(r"[A-Za-z0-9_-]{40,50}",cfg["token"])
     # Передаём заголовок и адрес только на stdin curl. Никаких приглашений в журнале Actions.
     opts = 'url = "http://'+cfg["onion"]+'/'+slot+'"\nheader = "Authorization: Bearer '+cfg["token"]+'"\n'
-    cmd = ["curl","-q","--noproxy","","--socks5-hostname","127.0.0.1:9050","--max-time","15","--silent","--fail","--config","-"]
+    port=cfg.get("control_port",9050)
+    cmd = ["curl","-q","--noproxy","","--socks5-hostname",f"127.0.0.1:{port}","--silent","--fail","--config","-"]
     if value is not None:
         opts += "data = "+json.dumps(json.dumps(value,separators=(",",":")))+"\n"
     until=time.monotonic()+timeout
+    failures=0
     while time.monotonic()<until:
-        reply=subprocess.run(cmd,input=opts,text=True,capture_output=True)
+        isolation=cfg.setdefault("control_isolation",secrets.token_hex(12))
+        reply=subprocess.run([*cmd,"--max-time",str(25 if failures%3==2 else 15)],
+                             input=opts+'proxy-user = "'+isolation+':x"\n',text=True,capture_output=True)
         if reply.returncode==0 and reply.stdout:
             return json.loads(reply.stdout)
+        if reply.returncode:
+            failures+=1
+            cfg["control_isolation"]=secrets.token_hex(12)
+            if failures%2==0 and "coordinator" in cfg:
+                cfg["coordinator"].stdin.write("R")
+                cfg["coordinator"].stdin.flush()
         time.sleep(2)
     raise RuntimeError("Timed out at "+slot)
 
@@ -132,7 +142,7 @@ def media_counters(address):
     return sockets
 
 
-def trace_route(address, peer, restored, workers, old_guards, old_peer_io, old_media):
+def trace_route(address, peer, restored, workers, old_guards, old_peer_io, old_media, markers):
     results = {}
     finished = threading.Event()
     def sample(label, probe):
@@ -144,6 +154,16 @@ def trace_route(address, peer, restored, workers, old_guards, old_peer_io, old_m
                 return
             except (OSError, RuntimeError, subprocess.SubprocessError):
                 finished.wait(.4)
+    def observe_media():
+        previous=set()
+        timeline=results["authenticatedMediaChanges"]=[]
+        while not finished.is_set() and len(timeline)<25:
+            current={path.name for path in markers.iterdir() if path.name.isdecimal()}
+            if previous!=current:
+                timeline.append({"seconds":round(time.monotonic()-restored,2),"active":len(current)})
+                previous=current
+            finished.wait(.15)
+    threading.Thread(target=observe_media,daemon=True).start()
     def observe_guard():
         start = time.monotonic()
         results["guardSocketsObserved"]=len(old_guards)
@@ -175,8 +195,13 @@ def trace_route(address, peer, restored, workers, old_guards, old_peer_io, old_m
         if not any(n > old_media.get(inode,0) for inode,n in media_counters(address).items()):
             raise RuntimeError("Waiting for incoming bytes on a media socket")
     def pinned():
-        route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
-        if not all(route.values()):
+        counts=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer,"--counts"))
+        elapsed=round(time.monotonic()-restored,2)
+        if counts["privateOrConnections"]:
+            results.setdefault("privateOrListed",elapsed)
+        if counts["privateGuardTunnels"]:
+            results.setdefault("privateGuardTunnelObserved",elapsed)
+        if not counts["streams"] or not counts["pinnedWorkers"]:
             raise RuntimeError("Waiting for the pinned peer")
     def inbound_mesh_bytes():
         elapsed = time.monotonic() - restored
@@ -267,6 +292,18 @@ def call(cfg):
         evidence=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
         assert evidence==dict(torStream=True,rendezvous=True,pinnedYggdrasilPeer=True)
         stage("Admitted by node1; signed invitation, Tor rendezvous and live Yggdrasil peer verified")
+        coordinator=subprocess.Popen(["sudo","-n","-u","debian-tor","/usr/bin/python3","-IBu","-c",
+                          (HERE/"external-air-control.py").read_text()],stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                          stderr=subprocess.DEVNULL,text=True)
+        def stop_coordinator():
+            coordinator.stdin.close()
+            coordinator.wait(timeout=12)
+        stack.callback(stop_coordinator)
+        coordinator.stdin.write(urlparse(peer).hostname+"\n")
+        coordinator.stdin.flush()
+        cfg["control_port"]=int(coordinator.stdout.readline())
+        assert 0<cfg["control_port"]<=65535 and cfg["control_port"]!=9050
+        cfg["coordinator"]=coordinator
         ui("airclick",selector="[data-network-call]")
         first_rx,first_tx,first_socket=measure_call(ui,cfg,address,"")
         original_room=ui("air_room")
@@ -285,7 +322,7 @@ def call(cfg):
             before_cut=route_counts()
             if not suffix:
                 try:
-                    before_cut=wait(route_counts, lambda v:v["pinnedWorkers"]==2 and v["independentTor"],
+                    before_cut=wait(route_counts, lambda v:v["pinnedWorkers"]==2 and v["independentTor"] and v["privateGuardTunnels"]>=1,
                                     "two independent authenticated Tor processes", 140)
                 except RuntimeError:
                     stage("Reserve readiness " + json.dumps(route_counts()))
@@ -327,7 +364,7 @@ def call(cfg):
             restore = counters.restoration
             outage["seconds"] = restore["blackoutSeconds"]
             restored_at = restore["mono"]
-            stages, stop_trace = trace_route(address,peer,restored_at,peer_workers,old_guards,old_peer_io,old_media)
+            stages, stop_trace = trace_route(address,peer,restored_at,peer_workers,old_guards,old_peer_io,old_media,Path(tmp)/"audio/active-media")
             stage("Network restored; waiting for the existing room without user interaction")
             wait(lambda:ui("airview"),lambda s:s["phase"]=="connected" and len(s["people"])==2,"automatic reconnection",120)
             reconnect_seconds=round(time.monotonic()-restored_at,1)
@@ -336,6 +373,12 @@ def call(cfg):
             route=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
             assert route==dict(torStream=True,rendezvous=True,pinnedYggdrasilPeer=True)
             local_heard = wait(lambda:ui("recovery_heard"),bool,"resumed PCM on runner",60)
+            acknowledged = wait(lambda:ui("recovery_peer_heard"),bool,"node1 audio acknowledgement at runner",60)
+            stage("Duplex proved in the audio channel "+json.dumps({
+                "runnerFirstPCM":round(local_heard-restore["epoch"],2),
+                "node1ClockAtRestore":round(restore["epoch"]+offset,4),
+                "clockError":round(clock_error+restore["uncertainty"]+.05,2),
+                "remoteAudioAcknowledgement":round(acknowledged-restore["epoch"],2)}))
             remote_heard = exchange(cfg,"node1Heard"+suffix)
             pcm = {"node1_to_actions":round(local_heard-restore["epoch"],2),
                    "actions_to_node1":round(remote_heard-offset-restore["epoch"],2)}
@@ -425,7 +468,8 @@ def call(cfg):
         rounds = (automatic,repeated,third)
         data["tenSecondTarget"] = {"met":sum(row["withinTenSeconds"] for row in rounds),"tested":len(rounds)}
         reserve_ready = all(row["routeTiming"]["entryBeforeCut"]["pinnedWorkers"]==2
-                            and row["routeTiming"]["entryBeforeCut"]["independentTor"] for row in rounds)
+                            and row["routeTiming"]["entryBeforeCut"]["independentTor"]
+                            and row["routeTiming"]["entryBeforeCut"]["privateGuardTunnels"]>=1 for row in rounds)
         data["reserveReadyAtEveryCut"] = reserve_ready
         stage(json.dumps(data))
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf8") as out:

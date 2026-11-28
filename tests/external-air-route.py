@@ -68,14 +68,30 @@ def sample(root,watch=False):
                     elif fields[:1]==["a"] and len(fields)==2:
                         endpoints.add(fields[1])
             listing=subprocess.check_output(["ss","-Htnep","state","established"],text=True)
-            sockets=[int(m[1]) for row in listing.splitlines() if len(row.split())>=4 and row.split()[3] in endpoints
-                     and ('("tor",pid='+pid+',') in row and (m:=re.search(r"\bino:(\d+)",row))]
+            endpoints_by_process=pid
+            proxied=False
+            rows=[(row.split(),row) for row in listing.splitlines() if len(row.split())>=4]
+            if root!=pathlib.Path("/run/tor") and pid.isdigit():
+                proxy=control(stream,b"GETCONF HTTPSProxy").decode().splitlines()[0]
+                port=re.fullmatch(r"HTTPSProxy=(127\.0\.0\.1:\d+)",proxy)
+                if port:
+                    parent=re.search(r"^PPid:\s*(\d+)",pathlib.Path("/proc",pid,"status").read_text(),re.M)[1]
+                    cmd=pathlib.Path("/proc",parent,"cmdline").read_bytes().strip(b"\0").split(b"\0")
+                    tor_ends={fields[2] for fields,row in rows if fields[3].replace("[::ffff:127.0.0.1]", "127.0.0.1")==port[1] and ('("tor",pid='+pid+',') in row}
+                    pair=any(fields[2].replace("[::ffff:127.0.0.1]", "127.0.0.1")==port[1] and fields[3] in tor_ends and ('pid='+parent+',') in row for fields,row in rows)
+                    if cmd[-1:]==[b"/opt/altnet-browser/Browser/altnet-linux/air_tor.py"] and pair:
+                        endpoints_by_process=parent
+                        proxied=True
+                    else:
+                        endpoints=set()
+            sockets=[int(m[1]) for fields,row in rows if fields[3] in endpoints
+                     and ('pid='+endpoints_by_process+',') in row and (m:=re.search(r"\bino:(\d+)",row))]
             bootstrap=control(stream,b"GETINFO status/bootstrap-phase")
             progress=re.search(rb"\bPROGRESS=(\d+)\b",bootstrap)
             guards_up=control(stream,b"GETINFO orconn-status")
             return dict(pid=pid,guards=guards,inodes=sockets,streams=sum(1 for l in streams if len(p:=l.split())>=4 and p[1]=="SUCCEEDED" and p[3]==authority),
                         circuits=len(ids),standbys=len(standby_streams),rend=rendezvous,
-                        progress=int(progress[1]) if progress else 0,
+                        proxiedGuard=proxied,progress=int(progress[1]) if progress else 0,
                         orConnected=sum(row.split()[-1:]==[b"CONNECTED"] for row in guards_up.splitlines()))
 peer_io = {}
 for path in {row.split()[-1] for row in pathlib.Path("/proc/net/unix").read_text().splitlines()}:
@@ -135,7 +151,7 @@ elif sys.argv[2:]==["--counts"]:
     print(json.dumps(dict(streams=sum(m["streams"] for m in storage),circuits=sum(m["circuits"] for m in storage),
                           pinnedWorkers=len(peer_io),standbyOnionStreams=sum(m["standbys"] for m in storage),
                           independentTor=bool(independent),torProcesses=len(connected),guardRelays=len(guards),
-                          privateInstances=len(others),privateBootstrap=max((m["progress"] for m in private),default=0),
+                          privateGuardTunnels=sum(1 for m in private if m["proxiedGuard"] and m["inodes"]),privateInstances=len(others),privateBootstrap=max((m["progress"] for m in private),default=0),
                           privateOrConnections=sum(m["orConnected"] for m in private))))
 else:
     print(json.dumps(dict(torStream=bool(storage),rendezvous=bool(storage),pinnedYggdrasilPeer=bool(peer_io))))

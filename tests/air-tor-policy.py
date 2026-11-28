@@ -5,8 +5,9 @@ from pathlib import Path
 import runpy
 import socket
 import tempfile
+import time
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 
 api=runpy.run_path(str(Path(__file__).resolve().parents[1]/"browser/tor-browser/linux/air_tor.py"))
@@ -50,6 +51,65 @@ class Policy(unittest.TestCase):
         line="Bridge obfs4 192.0.2.4:443 "+A+" cert=YWJjZA== iat-mode=0"
         rows=self.select("UseBridges 1\nClientTransportPlugin obfs4 exec /usr/bin/obfs4proxy\n"+line)
         self.assertEqual(rows,["UseBridges 1","ClientTransportPlugin obfs4 exec /usr/bin/obfs4proxy",line])
+
+
+class GuardTunnel(unittest.IsolatedAsyncioTestCase):
+    async def test_exact_destination_and_authorization_before_outbound_tcp(self):
+        async def echo(reader, writer):
+            try:
+                writer.write(await reader.readexactly(4))
+                await writer.drain()
+            finally:
+                writer.close()
+        async with await asyncio.start_server(echo,"127.0.0.1",0) as target:
+            endpoint=f"127.0.0.1:{target.sockets[0].getsockname()[1]}"
+            guard=api["GuardLink"](endpoint)
+            await guard.start()
+            self.addAsyncCleanup(guard.close)
+            guard.connect=AsyncMock(wraps=guard.connect)
+            port=guard.server.sockets[0].getsockname()[1]
+            for host,auth,ok in [(guard.endpoint,b"wrong",False),(b"192.0.2.1:443",guard.header,False),
+                                 (guard.endpoint,guard.header,True)]:
+                reader,writer=await asyncio.open_connection("127.0.0.1",port)
+                try:
+                    writer.write(b"CONNECT "+host+b" HTTP/1.0\r\nProxy-Authorization: "+auth+b"\r\n\r\n")
+                    if ok:
+                        self.assertIn(b"200",await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"),2))
+                        writer.write(b"test")
+                        self.assertEqual(await asyncio.wait_for(reader.readexactly(4),2),b"test")
+                        guard.connect.assert_awaited_once()
+                    else:
+                        self.assertEqual(await asyncio.wait_for(reader.read(),2),b"")
+                        guard.connect.assert_not_awaited()
+                finally:
+                    writer.close()
+                    await writer.wait_closed()
+
+    async def test_retries_only_pending_tor_request_after_outage(self):
+        guard=api["GuardLink"]("192.0.2.1:443")
+        owner=asyncio.StreamReader()
+        pair=(Mock(),Mock())
+        dial=AsyncMock(side_effect=[ConnectionRefusedError(),pair])
+        guard.recovering=True
+        with patch.object(asyncio,"open_connection",dial),patch.object(asyncio,"sleep",AsyncMock()):
+            self.assertEqual(await guard.connect(owner),pair)
+            self.assertEqual(dial.await_count,2)
+            self.assertTrue(all(c.args==guard.target for c in dial.await_args_list))
+            owner.feed_eof()
+            with self.assertRaises(ConnectionError):
+                await guard.connect(owner)
+            self.assertEqual(dial.await_count,2)
+            self.assertEqual(guard.connecting,0)
+
+    def test_retirement_requires_silence_and_kernel_backoff(self):
+        guard=api["GuardLink"]("192.0.2.1:443")
+        for ago,backoff,expected in [(20,4,True),(0,5,False),(20,0,False)]:
+            with self.subTest(ago=ago,backoff=backoff):
+                writer=Mock()
+                writer.get_extra_info.return_value.getsockopt.return_value=bytes([0,0,0,0,backoff])+bytes(27)
+                guard.links={writer:time.monotonic()-ago}
+                guard.retire_stalled()
+                self.assertEqual(writer.transport.abort.called,expected)
 
 
 class RelayLease(unittest.IsolatedAsyncioTestCase):

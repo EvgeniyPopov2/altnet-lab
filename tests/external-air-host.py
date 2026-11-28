@@ -63,7 +63,8 @@ def check(e,slot,wait,provision,decode,mark):
         wait(lambda:e.cmd("has_capture"),bool,"node1 microphone resumed",10)
         heard = wait(lambda:e.cmd("recovery_heard"),bool,"resumed PCM on node1",60)
         slot("node1Heard"+suffix,heard)
-        wait(lambda:slot("heardBoth"+suffix),bool,"resumed PCM on both endpoints",120)
+        mark("Node1 speaker timestamp "+str((suffix or "First", heard)))
+        wait(lambda:slot("heardBoth"+suffix),bool,"resumed PCM on both endpoints",320)
         e.cmd("recovery_audio_stop")
         resumed=audio_round("Resume"+suffix,accept=False)
         assert resumed[2]!=previous
