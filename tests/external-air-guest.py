@@ -366,6 +366,9 @@ def call(cfg):
         repeated, repeated_outage, second_socket = interrupt("Again",resumed_socket,54)
         third, third_outage, third_socket = interrupt("Third",second_socket,66)
         assert len({first_socket,resumed_socket,second_socket,third_socket}) == 4
+        stage("Existing room recovery results "+json.dumps([
+            {"blackout":fault["seconds"], "duplex":row["firstSpeakerPCM"], "withinTenSeconds":row["withinTenSeconds"]}
+            for row,fault in ((automatic,outage),(repeated,repeated_outage),(third,third_outage))]))
         stage("Duplex audio resumed in the same room; verifying separate restart/redial scenario")
         exchange(cfg,"restored",True)
         ui("restart")
@@ -395,6 +398,7 @@ def call(cfg):
             ui("airclick",selector='[data-air-contact="'+saved_id+'"]')
         assert ui("airview")["selected"]==[saved_id]
         assert not ui("has_capture")
+        exchange(cfg,"readyToRedial",True)
         ui("airclick",selector='[data-air-action="create"]')
         measured,verdict,new_socket=measure_call(ui,cfg,address,"2")
         assert len({new_socket,third_socket,second_socket,resumed_socket,first_socket})==5

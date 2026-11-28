@@ -11,7 +11,7 @@ import sys
 import threading
 import time
 
-INCOMING = {"ready", "claim", "recording", "result", "left", "armed", "restored", "recording2", "result2", "recordingResume", "resultResume", "heardBoth"}
+INCOMING = {"ready", "claim", "recording", "result", "left", "armed", "restored", "readyToRedial", "recording2", "result2", "recordingResume", "resultResume", "heardBoth"}
 OUTGOING = {"invite", "play", "done", "cut", "redial", "play2", "done2", "playResume", "doneResume", "clock", "node1Heard"}
 INCOMING.update(name+suffix for suffix in ("Again","Third") for name in ("armed","heardBoth","recordingResume","resultResume"))
 OUTGOING.update(name+suffix for suffix in ("Again","Third") for name in ("cut","node1Heard","playResume","doneResume"))

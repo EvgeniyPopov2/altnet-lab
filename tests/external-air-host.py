@@ -84,6 +84,7 @@ def check(e,slot,wait,provision,decode,mark):
     wait(lambda:e.cmd("contact_labels"),lambda v:set(v)==set(saved),"node1 trusted contact after restart")
     wait(lambda:e.cmd("has_capture"),lambda active:not active,"capture released after restart",6)
     slot("redial",True)
+    wait(lambda:slot("readyToRedial"),bool,"guest restored its saved route and signalling service",570)
     mark("Both clients are using their saved contact for the second call")
     repeated=audio_round("2",accept=True)
     assert len({initial[2],resumed[2],second[2],third[2],repeated[2]})==5
