@@ -255,7 +255,9 @@ def call(cfg):
         ui("open_join",pending=True)
         claim=wait(lambda:ui("link_state"),lambda s:bool(s.get("code")),"guest confirmation",180)
         exchange(cfg,"claim",claim["code"])
-        wait(lambda:ui("link_state"),lambda s:s.get("joined"),"host approval",300)
+        # The host can spend up to 420 s receiving the initial signed request
+        # through a cold onion service. Approval must still be received here.
+        wait(lambda:ui("link_state"),lambda s:s.get("joined"),"host approval",540)
         membership=ui("network_storage")
         assert membership["localMemberships"]==1
         evidence=json.loads(run("sudo","-n","/usr/bin/python3","-IB",str(HERE/"external-air-route.py"),peer))
